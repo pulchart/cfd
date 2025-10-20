@@ -1,5 +1,6 @@
-; compactflash.device driver V1.32
+; compactflash.device driver V1.33
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
+; Small bugfix by Paul Carter on 1/1/2017
 ; This file is part of cfd, a free storage device driver for Amiga.
 ;
 ; This driver is free software; you can redistribute it and/or
@@ -16,11 +17,11 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-;compactflash.device v1.32
-;TJ. 14.11.2009
+;compactflash.device v1.33
+;TJ. 01.01.2017
 
 FILE_VERSION	= 1
-FILE_REVISION	= 32
+FILE_REVISION	= 33
 
 ;--- from exec.library -------------------------------------
 
@@ -597,7 +598,7 @@ s_name:
 	dc.b	`compactflash.device`,0
 	dc.b	`$VER: `
 s_idstring:
-	dc.b	`compactflash.device 1.32 (14.11.2009)`,LF,0
+	dc.b	`compactflash.device 1.33 (01.01.2017)`,LF,0
 	dc.b	`© Torsten Jager`,0
 CardName:
 	dc.b	`card.resource`,0
@@ -1688,10 +1689,10 @@ _gs_tab:
 
 _DEBUG	macro
 	moveq.l	#\1,d0
-	bsr.w	_Debug
+	bsr.w	_Debug2
 	endm
 
-_Debug:
+_Debug2:
 ;	movem.l	d0-d1/a0-a1,-(sp)
 ;	move.l	#$02000000,a1
 ;	move.l	d0,(a1)+
@@ -1704,6 +1705,12 @@ _Debug:
 
 ;	movem.l	(sp)+,d0-d1/a0-a1
 ;	rts
+
+LedOn:	bclr	#1,$bfe001
+	rts
+
+LedOff:	bset	#1,$bfe001
+	rts
 
 Wait40:
 	lea	CFU_TimeReq(a3),a1
@@ -1899,7 +1906,7 @@ _t_do:
 
 ;- - examine and register new card  - - - - - - - - - - - -
 
-_t_identify:
+_t_identify:	
 	clr.w	CFU_CardReady(a3)
 	lea	CFU_CardHandle(a3),a2
 	move.l	a2,a1
@@ -1937,12 +1944,16 @@ _t_ir1:
 	CALLCARD CardResetCard
 _t_ir2:
 	addq.w	#1,CFU_Debug(a3)
-	moveq.l	#30,d2
+	moveq.l	#60,d2
 _t_i1:
 	subq.w	#1,d2
 	bmi.s	_t_i2			;Timeout
 
+	;bsr.w	LedOff	; debug led
+
 	bsr.w	Wait40			;..or go on waiting
+	bsr.w	Wait40
+	bsr.w	Wait40
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.w	_t_ibreak
@@ -2038,6 +2049,7 @@ _t_ifuncid:
 
 	cmp.b	#1,(a0)			;Interface = ATA
 	bne.w	_t_ibreak
+
 _t_icfg:
 	addq.w	#1,CFU_Debug(a3)
 	moveq.l	#CARD_VOLTAGE_5V,d0
@@ -2128,12 +2140,13 @@ _t_iswap:
 	bne.s	_t_ibreak
 	bra.s	_t_inodisk		;ATA removable media???
 _t_itest:
+	
 	bsr.w	RWTest			;find a working transfer mode
 	addq.w	#1,CFU_Debug(a3)
 	bsr.w	_GetIDEID		;read ATA Konfiguration block
 	move.l	d0,d2
 	beq.s	_t_inodisk
-
+	
 	btst	#6,CFU_ConfigBlock+167(a3)
 	beq.s	_t_i6
 
@@ -2820,8 +2833,15 @@ _idec_end:
 
 ;--- read drive Konfiguration ------------------------------
 
+_gid_num_retrys:
+	dc.l	0
+
 _GetIDEID:
 	movem.l	d2-d5/a2,-(sp)
+
+	move.l	#32,_gid_num_retrys	; num retrys, needed (at least for me)
+					; to get sd cards working in an sd->cf adapter
+
 	moveq.l	#1,d0
 	move.w	d0,CFU_MultiSize(a3)
 	moveq.l	#512>>4,d0
@@ -2833,6 +2853,7 @@ _GetIDEID:
 	clr.l	TR_Seconds(a1)
 	move.l	#500000,TR_Micros(a1)
 	CALLEXEC SendIO			; prepare Timeout
+_gid_retry:
 	bsr.w	_IDEStart
 	move.w	#$e0ec,d5		;LBA, drive #0, IDENTIFY DEVICE
 	moveq.l	#0,d3			;the read mode
@@ -2843,7 +2864,7 @@ _gid_command:
 	bsr.w	_IDECmd
 	tst.w	d0
 	beq.w	_gid_error
-
+	
 	bsr.w	WaitReady
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
@@ -2852,7 +2873,9 @@ _gid_command:
 	moveq.l	#$29,d0			;DF, DRQ, ERR
 	and.b	CFU_IDEStatus(a3),d0
 	subq.b	#8,d0			;DRQ
-	bne.s	_gid_break
+	bne	_gid_check_retry
+
+	;bsr.w	LedOn	; debugled
 
 	lea	CFU_ConfigBlock(a3),a2
 	moveq.l	#512>>8,d0
@@ -2883,7 +2906,7 @@ _gid_done:
 	beq.s	_gid_switch
 
 	add.w	#$0101,d3		;try different read mode
-	bra.s	_gid_command
+	bra.w	_gid_command
 _gid_switch:
 	bsr.w	_IDEStop
 	move.w	#$0404,d3
@@ -2943,6 +2966,15 @@ _gid_a1:
 _gid_end:
 	bsr.w	_IDEStop
 	move.l	d2,d0
+	movem.l	(sp)+,d2-d5/a2
+	rts
+_gid_check_retry
+	move.l	_gid_num_retrys,d0
+	sub.l	#1,d0
+	move.l	d0,_gid_num_retrys
+	tst.l	d0
+	bne.w	_gid_retry
+
 	movem.l	(sp)+,d2-d5/a2
 	rts
 
@@ -3757,15 +3789,17 @@ _imm_error:
 
 ;--- start disk --------------------------------------------
 
-_SpinUp:
+_SpinUp:	
 	bsr.w	_IDEStart
 	move.l	CFU_IDEAddr(a3),a0
 	move.l	#A_Pb,a1
 	tst.b	(a1)
 	nop
+	bsr.w	Wait40
 _su_wait:
 	tst.b	(a1)
 	nop
+	bsr.w	Wait40
 	move.b	7(a0),d0
 	bmi.s	_su_wait		;BSY
 
