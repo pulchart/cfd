@@ -1,3 +1,4 @@
+;APS00000000000000000000000000000000000000000000000000000000000000000000000000000000
 ; compactflash.device driver V1.33
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
 ; Small bugfix by Paul Carter on 1/1/2017
@@ -17,11 +18,15 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+;compactflash.device v1.32
+;TJ. 14.11.2009
 ;compactflash.device v1.33
-;TJ. 01.01.2017
+;TJ. 14.11.2017
+;compactflash.device v1.34 (wip)
+;JP. 20.10.2025
 
 FILE_VERSION	= 1
-FILE_REVISION	= 33
+FILE_REVISION	= 34
 
 ;--- from exec.library -------------------------------------
 
@@ -598,7 +603,7 @@ s_name:
 	dc.b	`compactflash.device`,0
 	dc.b	`$VER: `
 s_idstring:
-	dc.b	`compactflash.device 1.33 (01.01.2017)`,LF,0
+	dc.b	`compactflash.device 1.34 (20.10.2025)`,LF,0
 	dc.b	`© Torsten Jager`,0
 CardName:
 	dc.b	`card.resource`,0
@@ -1718,6 +1723,13 @@ Wait40:
 	moveq.l	#0,d0
 	move.l	d0,TR_Seconds(a1)
 	move.l	#40000,TR_Micros(a1)	;wait 40 ms
+	JMPEXEC DoIO
+Wait1:
+	lea	CFU_TimeReq(a3),a1
+	move.w	#TR_ADDREQUEST,IO_Command(a1)
+	moveq.l	#0,d0
+	move.l	d0,TR_Seconds(a1)
+	move.l	#100,TR_Micros(a1)	;wait 0.1 ms
 	JMPEXEC DoIO
 
 UnitCode:
@@ -2887,8 +2899,7 @@ _gid_command:
 	tst.b	(a1)
 	nop
 _gid_wait:
-	tst.b	(a1)
-	nop
+	bsr.w	Wait1
 	move.b	14(a0),d0
 	bpl.s	_gid_done
 

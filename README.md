@@ -1,8 +1,9 @@
 # compactflash.device
 AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA 
 
-*Author*: Torsten Jager (t.jager@gmx.de); v1.32 (18.11.2009)
-*Patched by*:  Paul Carter (); 1.33 (1.1.2017)
+* *Author*: Torsten Jager (t.jager@gmx.de); v1.32 (18.11.2009)
+* *Patched by*:  Paul Carter (); 1.33 (1.1.2017)
+* *Patched by*:  Jaroslav Pulchart (jaroslav.pulchart@gmail.com); 1.34 (20.10.2025)
 
 # Purpose
 
@@ -98,16 +99,22 @@ If some trouble occurs, like cards not recognized by cfd, please:
 ```
 cfddebug ram:cfdlog
 ```
-* send ro `t.jager@gmx.de (Torsten Jager)` the binary file just created (about 4 kbytes). I promise there are no passwords and such in it.
-
-In case there is another PCMCIA driver (eg. a network card driver) blocking the card socket, try setting the CF0 mountlist entry "Flags" to
+send ro `t.jager@gmx.de (Torsten Jager)` the binary file just created (about 4 kbytes). I promise there are no passwords and such in it.
+* In case there is another PCMCIA driver (eg. a network card driver) blocking the card socket, try setting the CF0 mountlist entry "Flags" to
 ```
 Flags = 1    /* enable "cfd first" hack */
 ```
 Damaged or simply not quite officially standardized cards may sometimes cooperate using
 ```
 Flags = 2    /* skip invalid PCMCIA signature */
+* `Work in progress`: please ensure the IO request is limited to use single sector per IO for >4GB CF units:
 ```
+MaxTransfer = 0x200
+```
+this influence IO performance (drop by ~50%) bit it is relieable.
+
+NOTE: be CAREFULL the MaxTransfer over 0x200 (>1*512B) cause IO unrealibilty. The IO read reqest is going to repeat last 32b from first sector instead reading next one.
+
 
 # History
 * v1.01    02/2002    First experiments.
@@ -142,5 +149,6 @@ Flags = 2    /* skip invalid PCMCIA signature */
 * v1.31    11/2009    Fixed bug in "memory mapped" mode. Further optimizations.
 * v1.32    11/2009    Added more detailled error messages. 04/2014    Removed "dd" as it is part of "fat95". Finally made this open source.
 * v1.33    1/2017     Makes init routie more reliable.  Cards that previously would, Not work might now start to work.  Tested with a variety of SD cards in an SD to CF adapter and now all SD cards initialise properly and work reliably.  Cheap storage now available for all Succesfully tested 32gb SD cards with fat95 v3.18. See ADAPTER2.JPG for the type of adapter used.
+* v1.34    10/2025    Work In Progress: make >4GB compact flash cards usable. (1. woraround "get ide id", 2, limit multisector reads to single sector IO issue)
 
 Have Fun!
