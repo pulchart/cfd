@@ -1,4 +1,4 @@
-/* compactflash.device $VER: 1.34 (20.10.2025) */
+/* compactflash.device $VER: 1.34 (22.10.2025) */
 FileSystem = l:fat95
 Device = compactflash.device
 Unit = 0
@@ -15,4 +15,4 @@ Stacksize = 4096
 Priority = 5
 GlobVec = -1
 DosType = 0x46415401
-MaxTransfer = 0x200
+/* MaxTransfer = 0x200 */

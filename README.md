@@ -149,6 +149,6 @@ NOTE: be CAREFULL the MaxTransfer over 0x200 (>1*512B) cause IO unrealibilty. Th
 * v1.31    11/2009    Fixed bug in "memory mapped" mode. Further optimizations.
 * v1.32    11/2009    Added more detailled error messages. 04/2014    Removed "dd" as it is part of "fat95". Finally made this open source.
 * v1.33    1/2017     Makes init routie more reliable.  Cards that previously would, Not work might now start to work.  Tested with a variety of SD cards in an SD to CF adapter and now all SD cards initialise properly and work reliably.  Cheap storage now available for all Succesfully tested 32gb SD cards with fat95 v3.18. See ADAPTER2.JPG for the type of adapter used.
-* v1.34    10/2025    Work In Progress: make >4GB compact flash cards usable. (1. woraround "get ide id", 2, limit multisector reads to single sector IO issue)
+* v1.34    10/2025    make >4GB compact flash cards usable (1. workaround "get ide id", 2. limit multisector IOs)
 
 Have Fun!

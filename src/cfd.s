@@ -22,8 +22,8 @@
 ;TJ. 14.11.2009
 ;compactflash.device v1.33
 ;TJ. 14.11.2017
-;compactflash.device v1.34 (wip)
-;JP. 20.10.2025
+;compactflash.device v1.34
+;JP. 22.10.2025
 
 FILE_VERSION	= 1
 FILE_REVISION	= 34
@@ -603,7 +603,7 @@ s_name:
 	dc.b	`compactflash.device`,0
 	dc.b	`$VER: `
 s_idstring:
-	dc.b	`compactflash.device 1.34 (20.10.2025)`,LF,0
+	dc.b	`compactflash.device 1.34 (22.10.2025)`,LF,0
 	dc.b	`© Torsten Jager`,0
 CardName:
 	dc.b	`card.resource`,0
@@ -3019,8 +3019,8 @@ _rb_0:
 	tst.l	CFU_DriveSize(a3)
 	beq.w	_rb_nodisk
 
-	moveq.l	#1,d4
-	lsl.l	#8,d4
+	moveq.l	#0,d4
+	move.w	CFU_MultiSize(a3),d4
 	cmp.l	d4,d3
 	bcc.s	_rb_1
 
@@ -3524,8 +3524,8 @@ _wb_swath:
 	move.l	d3,CFU_Count(a3)
 	move.l	a2,CFU_Buffer(a3)
 _wb_try:
-	moveq.l	#1,d4
-	lsl.l	#8,d4
+	moveq.l	#0,d4
+	move.w	CFU_MultiSize(a3),d4
 	cmp.l	d4,d3
 	bcc.s	_wb_1
 
