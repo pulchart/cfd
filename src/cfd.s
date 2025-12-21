@@ -1,6 +1,5 @@
-; compactflash.device driver V1.33
+; compactflash.device driver V1.34
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
-; Small bugfix by Paul Carter on 1/1/2017
 ; This file is part of cfd, a free storage device driver for Amiga.
 ;
 ; This driver is free software; you can redistribute it and/or
@@ -17,11 +16,15 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+;compactflash.device v1.32
+;TJ. 14.11.2009
 ;compactflash.device v1.33
-;TJ. 01.01.2017
+; Small bugfix by Paul Carter on 1/1/2017
+;compactflash.device v1.34
+; Improved >4GB CF compatibility by Jaroslav Pulchart (22.10.2025)
 
 FILE_VERSION	= 1
-FILE_REVISION	= 33
+FILE_REVISION	= 34
 
 ;--- from exec.library -------------------------------------
 
@@ -598,7 +601,7 @@ s_name:
 	dc.b	`compactflash.device`,0
 	dc.b	`$VER: `
 s_idstring:
-	dc.b	`compactflash.device 1.33 (01.01.2017)`,LF,0
+	dc.b	`compactflash.device 1.34 (22.10.2025)`,LF,0
 	dc.b	`© Torsten Jager`,0
 CardName:
 	dc.b	`card.resource`,0
@@ -1718,6 +1721,13 @@ Wait40:
 	moveq.l	#0,d0
 	move.l	d0,TR_Seconds(a1)
 	move.l	#40000,TR_Micros(a1)	;wait 40 ms
+	JMPEXEC DoIO
+Wait1:
+	lea	CFU_TimeReq(a3),a1
+	move.w	#TR_ADDREQUEST,IO_Command(a1)
+	moveq.l	#0,d0
+	move.l	d0,TR_Seconds(a1)
+	move.l	#100,TR_Micros(a1)	;wait 0.1 ms
 	JMPEXEC DoIO
 
 UnitCode:
@@ -2887,8 +2897,7 @@ _gid_command:
 	tst.b	(a1)
 	nop
 _gid_wait:
-	tst.b	(a1)
-	nop
+	bsr.w	Wait1
 	move.b	14(a0),d0
 	bpl.s	_gid_done
 
@@ -3008,8 +3017,8 @@ _rb_0:
 	tst.l	CFU_DriveSize(a3)
 	beq.w	_rb_nodisk
 
-	moveq.l	#1,d4
-	lsl.l	#8,d4
+	moveq.l	#0,d4
+	move.w	CFU_MultiSize(a3),d4
 	cmp.l	d4,d3
 	bcc.s	_rb_1
 
@@ -3513,8 +3522,8 @@ _wb_swath:
 	move.l	d3,CFU_Count(a3)
 	move.l	a2,CFU_Buffer(a3)
 _wb_try:
-	moveq.l	#1,d4
-	lsl.l	#8,d4
+	moveq.l	#0,d4
+	move.w	CFU_MultiSize(a3),d4
 	cmp.l	d4,d3
 	bcc.s	_wb_1
 
