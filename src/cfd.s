@@ -1,7 +1,5 @@
-;APS00000000000000000000000000000000000000000000000000000000000000000000000000000000
-; compactflash.device driver V1.33
+; compactflash.device driver V1.34
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
-; Small bugfix by Paul Carter on 1/1/2017
 ; This file is part of cfd, a free storage device driver for Amiga.
 ;
 ; This driver is free software; you can redistribute it and/or
@@ -21,9 +19,9 @@
 ;compactflash.device v1.32
 ;TJ. 14.11.2009
 ;compactflash.device v1.33
-;TJ. 14.11.2017
+; Small bugfix by Paul Carter on 1/1/2017
 ;compactflash.device v1.34
-;JP. 22.10.2025
+; Improved >4GB CF compatibility by Jaroslav Pulchart (22.10.2025)
 
 FILE_VERSION	= 1
 FILE_REVISION	= 34
