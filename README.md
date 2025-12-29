@@ -1,154 +1,184 @@
 # compactflash.device
-AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA 
 
-* *Author*: Torsten Jager (t.jager@gmx.de); v1.32 (18.11.2009)
-* *Patched by*:  Paul Carter (); 1.33 (1.1.2017)
-* *Patched by*:  Jaroslav Pulchart (jaroslav.pulchart@gmail.com); 1.34 (20.10.2025)
+AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA
 
-# Purpose
+**Fork** of the original driver by Torsten Jager, with improvements for >4GB cards.
+
+| Version | Author | Date |
+|---------|--------|------|
+| v1.32 | Torsten Jager | 18.11.2009 |
+| v1.33 | Paul Carter | 1.1.2017 |
+| v1.34 | Jaroslav Pulchart | 22.10.2025 |
+
+## Download
+
+* **Aminet**: [driver/media/cfd134](https://aminet.net/package/driver/media/cfd134)
+* **GitHub**: [Releases](https://github.com/pulchart/cfd/releases)
+
+## What's New in v1.34
+
+* Made >4GB CompactFlash cards usable
+  - Workaround for "get IDE ID" on large capacity cards
+  - Limited multi-sector IOs for reliability on >4GB cards
+* Tested with AmigaOS 3.2.3
+
+## Purpose
 
 Read and write your digital photos, mp3 files etc. directly from CompactFlash cards as used by many mobile devices.
 
-The OS supplied "carddisk.device" appeared to be unable to understand CF cards. I already had bought that adapter card, so I decided to write a suitable alternative myself.
+The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
 
-# New
+## System Requirements
 
-Finally I put this under LGPL :-)) Not plain GPL because an Amiga device driver is primarily used by the non-free OS to extend its functionality. Thus bundling the 2
-should be possible. The preassembled binaries serve to make plain users life easier but you may rebuild them yourself now with AsmOne or something like that.
-
-Added transfer mode autoconfiguration. Major API rework and optimizations for use in kickstart ROMs. Added more detailled error messages.
-
-# A word on hardware
-
-you will need a special adapter card labelled "CompactFlash to PCMCIA", to "PC Card" or to "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side.
-
-There are two types of such adapters sold in good computer stores, for "CF Type 1" and "CF type 2" cards. The only two differences: "CF Type 2" adapters can also cope with thicker CF cards, like those expensive "MicroDrive"
-harddisks; and b) they cost more. Mine is a "CF Type 1" which I got for EUR 10 (but I also saw the same model for the double price...).
-
-* Some testing results:
-```
-16Mbyte card (Hitachi): 1.0 Mb/s read, 600 kb/s write.
-64Mbyte card (PQI): 1.4 Mb/s read, 1.0 Mb/s write.
-128 Mbyte card (Samsung): 2.1 Mb/s read, 1.4 Mb/s write.
-2Gbyte card (Sandisk): 2.1 Mb/s read, 1.7 Mb/s write.
-4Gbyte card (Kingston): 2.2 Mb/s read, 1.9 Mb/s write.
-```
-
-* Good news everyone
-
-I got positive testing reports from CompactFlash, IBM MicroDrive, Sony MemoryStick and - taadaa! - SmartMedia adapter :^)) It may be required to re-insert the adapter after plugging the
-memory card into it. Only for CompactFlash and MicroDrive, the plugging order is irrelevant.
-
-
-# Another word on hardware
-
-Commodore back then introduced the Amiga PCMCIA port before (!) the official PCMCIA standard was released. As a consequence, it is not fully compatible. Your results may vary on your actual hardware combination, including memory card, adapter, Amiga model, its chipset revision, and accelerator board model. In any case, your adapter MUST support old 16bit PC-CARD mode. Models who are 32bit CARDBUS only won`t work.
-
-In conjunction with aminet/disk/misc/fat95.lha v3.09+, cfd can now use CF card`s built-in erase function if available. Erase is performed by the card implicitely on writes, but some cards remember the erased state and do faster write cycles afterwards. See also the fat95/english/readme.too file on that purpose.
-
-Besides the usual AmigaOS error codes, there are some additional ones:
-```
-  73        Miscellanous Error
-  96        Invalid Command
-  97        Invalid CHS Address (Head or Sector number wrong)
-  111        Invalid LBA Address (too large)
-  117, 118    Supply or generated voltage out of tolerance
-  81        Uncorrectable checksum
-  88        Corrected read error
-  69, 112-116, 119, 126    Self test or diagnosis failed
-  80, 84    Sector ID not found
-  122        Spare sectors exhausted
-  95        Data transfer error, command aborted
-  76, 120, 123, 124, 127 Media format corrupt
-  67        Write or erase failed
-  98        Command needs more supply power than currently allowed
-  103        Media is write protected
-```
-
-# WARNING
-
-"CompactFlash" is (TM) by CompactFlash Association ;-)
-
-
-# System requirements
-
-* AMIGA 1200 or 600, OS 2.0+
-* "CompactFlash to PCMCIA/ATA" adapter card, see adapter.jpg for an example
+* Amiga 1200 or 600
+* AmigaOS 2.0+ (tested with 3.2.3)
+* "CompactFlash to PCMCIA/ATA" adapter card (see adapter.jpg)
 * fat95 file system (disk/misc/fat95.lha)
 
-# Installation
-```
-Copy cfd/devs/compactflash.device to DEVS:
-```
-Have fat95 installed on your system. Mount the drive by double-clicking cfd/devs/CF0.
+## Installation
 
-If you run OS 3.5+: 
 ```
-Copy cfd/def_CF0.info sys:prefs/env-archive/sys
-Copy cfd/def_CF0.info env:sys
+Copy devs/compactflash.device to DEVS:
 ```
 
-# Problems
+Have fat95 installed on your system. Mount the drive by double-clicking `devs/CF0`.
 
-If some trouble occurs, like cards not recognized by cfd, please:
-* report exact hardware type.
-* mount CF0: if not already done.
-* insert that very card.
-* wait at least 1 second (yes, honestly).
-* take cfd/c/cfddebug and type into a shell
+For OS 3.5+:
 ```
-cfddebug ram:cfdlog
+Copy def_CF0.info sys:prefs/env-archive/sys
+Copy def_CF0.info env:sys
 ```
-send ro `t.jager@gmx.de (Torsten Jager)` the binary file just created (about 4 kbytes). I promise there are no passwords and such in it.
-* In case there is another PCMCIA driver (eg. a network card driver) blocking the card socket, try setting the CF0 mountlist entry "Flags" to
+
+## Hardware Notes
+
+You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side.
+
+There are two types of such adapters:
+* **CF Type 1** - for standard thickness CF cards
+* **CF Type 2** - also supports thicker cards like MicroDrive (costs more)
+
+### Compatibility
+
+Positive testing reports from:
+* CompactFlash
+* IBM MicroDrive
+* Sony MemoryStick (with adapter)
+* SmartMedia (with adapter)
+
+It may be required to re-insert the adapter after plugging the memory card into it. Only for CompactFlash and MicroDrive, the plugging order is irrelevant.
+
+### Speed Test Results
+
+Retaken from readme of version 1.32/1.33:
+
+| Card | Read | Write |
+|------|------|-------|
+| 16MB Hitachi | 1.0 MB/s | 600 KB/s |
+| 64MB PQI | 1.4 MB/s | 1.0 MB/s |
+| 128MB Samsung | 2.1 MB/s | 1.4 MB/s |
+| 2GB Sandisk | 2.1 MB/s | 1.7 MB/s |
+| 4GB Kingston | 2.2 MB/s | 1.9 MB/s |
+
+### Important Notes
+
+Commodore introduced the Amiga PCMCIA port before the official PCMCIA standard was released. As a consequence, it is not fully compatible. Your results may vary depending on your hardware combination. Your adapter **MUST** support old 16bit PC-CARD mode. 32bit CARDBUS-only adapters won't work.
+
+In conjunction with fat95 v3.09+, cfd can use CF card's built-in erase function if available.
+
+## Workarounds
+
+### PCMCIA conflicts with other drivers
 ```
 Flags = 1    /* enable "cfd first" hack */
 ```
-Damaged or simply not quite officially standardized cards may sometimes cooperate using
+
+### Cards without valid PCMCIA signature
 ```
 Flags = 2    /* skip invalid PCMCIA signature */
-* `Work in progress`: please ensure the IO request is limited to use single sector per IO for >4GB CF units:
 ```
-MaxTransfer = 0x200
-```
-this influence IO performance (drop by ~50%) bit it is relieable.
-
-NOTE: be CAREFULL the MaxTransfer over 0x200 (>1*512B) cause IO unrealibilty. The IO read reqest is going to repeat last 32b from first sector instead reading next one.
 
 
-# History
-* v1.01    02/2002    First experiments.
-* v1.02    03/2002    Minimal exec command set to work with filesystems.
-* v1.03    03/2002    Added auto-repeat for faulty CF cards. 
-* v1.04    03/2002    Removed numerous bugs. Added quiet shutdown if non-CF cards are inserted.
-* v1.05    03/2002    Added TD64 and SCSI emulation support.
-* v1.06    03/2002    Card interface moved to PCMCIA I/O address space.
-* v1.07    04/2002    Added debug tool and disk icon.
-* v1.08    04/2002    Changed interrupt handling. Made read access a bit faster.
-* v1.09    05/2002    Added "cfd first" hack. Added SCSI 6 byte read/write commands.
-* v1.10    05/2002    Added PCMCIA status change handling.
-* v1.11    06/2002    Fixed SCSI "Inquiry" command emulation. Set card programming voltage to 5VDC.
-* v1.12    06/2002    Added slowed down transfer mode. Added PCMCIA speed check tool.
-* v1.13    06/2002    Removed slowdown again, didn't fix the problem. Added "double read" and "double write" workarounds. Added read/write check tool.
-* v1.14    07/2002    Removed "double write" kludge again (was unnecessary). Added ready check befor command issueing.
-* v1.15    08/2002    Added ATAPI support.
-* v1.16    08/2002    Added transfer mode testing module. Set word access as default.
-* v1.17    08/2002    Added transfer mode autosense. Disabled card´s address decoder.
-* v1.18    09/2002    Added "forced card socket activation" hack.
-* v1.19    10/2002    New option: accept cards without valid signature.
-* v1.20    10/2002    Fixed ATAPI bug. Added spinup from standby mode.
-* v1.21    04/2003    Fixed "multiple mode" bug. Added "write multiple" support. Added PCMCIA soft reset. Added CFA_ERASE support.
-* v1.22    05/2003    Added alternative card socket resetting code.
-* v1.23    06/2003    Added IDE interrupt enabling.
-* v1.24    10/2003    Trying to add support for a certain CDROM adapter, who unfortunately turned out to be CARDBUS.
-* v1.25    07/2004    Added interrupt watchdog, avoiding occasional "lock-ups".
-* v1.27    02/2009    Added fast interrupt support for Kingston and similar cards.
-* v1.28    04/2009    First attempt to make cfd ROMable.
-* v1.29    11/2009    Added transfer mode autoconfiguration. New "dd" version including speed gauge and performance test.
-* v1.30    11/2009    Major API rework and optimizations for use in kickstart ROMs.
-* v1.31    11/2009    Fixed bug in "memory mapped" mode. Further optimizations.
-* v1.32    11/2009    Added more detailled error messages. 04/2014    Removed "dd" as it is part of "fat95". Finally made this open source.
-* v1.33    1/2017     Makes init routie more reliable.  Cards that previously would, Not work might now start to work.  Tested with a variety of SD cards in an SD to CF adapter and now all SD cards initialise properly and work reliably.  Cheap storage now available for all Succesfully tested 32gb SD cards with fat95 v3.18. See ADAPTER2.JPG for the type of adapter used.
-* v1.34    10/2025    make >4GB compact flash cards usable (1. workaround "get ide id", 2. limit multisector IOs)
+## Error Codes
+
+Besides the usual AmigaOS error codes, there are some additional ones:
+
+| Code | Description |
+|------|-------------|
+| 67 | Write or erase failed |
+| 73 | Miscellaneous Error |
+| 76, 120, 123, 124, 127 | Media format corrupt |
+| 80, 84 | Sector ID not found |
+| 81 | Uncorrectable checksum |
+| 88 | Corrected read error |
+| 95 | Data transfer error, command aborted |
+| 96 | Invalid Command |
+| 97 | Invalid CHS Address |
+| 98 | Command needs more power than allowed |
+| 103 | Media is write protected |
+| 111 | Invalid LBA Address (too large) |
+| 69, 112-116, 119, 126 | Self test or diagnosis failed |
+| 117, 118 | Voltage out of tolerance |
+| 122 | Spare sectors exhausted |
+
+## Troubleshooting
+
+Report issues at: https://github.com/pulchart/cfd/issues
+
+If cards are not recognized:
+1. Mount CF0: if not already done
+2. Insert the card
+3. Wait at least 1 second
+4. Run: `cfddebug ram:cfdlog`
+5. Report the log file along with your hardware details
+
+*Note: cfddebug log processing was valid for original maintainer and previous releases.*
+
+## History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1.34 | 10/2025 | >4GB CF card support (Jaroslav Pulchart) |
+| v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
+| v1.32 | 11/2009 | Error messages, open source release (Torsten Jager) |
+| v1.31 | 11/2009 | Fixed "memory mapped" mode bug |
+| v1.30 | 11/2009 | Major API rework for kickstart ROMs |
+| v1.29 | 11/2009 | Transfer mode autoconfiguration |
+| v1.28 | 04/2009 | First ROMable attempt |
+| v1.27 | 02/2009 | Fast interrupt support for Kingston cards |
+| v1.25 | 07/2004 | Interrupt watchdog |
+| v1.24 | 10/2003 | CARDBUS investigation |
+| v1.23 | 06/2003 | IDE interrupt enabling |
+| v1.22 | 05/2003 | Alternative card socket reset |
+| v1.21 | 04/2003 | Write multiple, PCMCIA soft reset, CFA_ERASE |
+| v1.20 | 10/2002 | ATAPI fix, spinup from standby |
+| v1.19 | 10/2002 | Accept cards without valid signature |
+| v1.18 | 09/2002 | Forced card socket activation |
+| v1.17 | 08/2002 | Transfer mode autosense |
+| v1.16 | 08/2002 | Transfer mode testing, word access default |
+| v1.15 | 08/2002 | ATAPI support |
+| v1.14 | 07/2002 | Ready check before commands |
+| v1.13 | 06/2002 | Double read workaround |
+| v1.12 | 06/2002 | Slowed transfer mode, PCMCIA speed tool |
+| v1.11 | 06/2002 | SCSI Inquiry fix, 5VDC programming voltage |
+| v1.10 | 05/2002 | PCMCIA status change handling |
+| v1.09 | 05/2002 | "cfd first" hack, SCSI 6-byte commands |
+| v1.08 | 04/2002 | Interrupt handling, faster reads |
+| v1.07 | 04/2002 | Debug tool and disk icon |
+| v1.06 | 03/2002 | PCMCIA I/O address space |
+| v1.05 | 03/2002 | TD64 and SCSI emulation |
+| v1.04 | 03/2002 | Bug fixes, quiet shutdown |
+| v1.03 | 03/2002 | Auto-repeat for faulty cards |
+| v1.02 | 03/2002 | Minimal exec command set |
+| v1.01 | 02/2002 | First experiments |
+
+## License
+
+GNU Lesser General Public License v2.1
+
+## Trademark
+
+"CompactFlash" is (TM) by CompactFlash Association
+
+---
 
 Have Fun!

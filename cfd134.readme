@@ -3,7 +3,6 @@ Uploader:     jaroslav.pulchart@gmail.com (Jaroslav Pulchart)
 Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by Torsten Jager and Paul Carter
 Type:         driver/media
 Version:      1.34
-Replaces:     driver/media/CFD133.lha
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA adapter
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
@@ -24,7 +23,6 @@ FEATURES
 * Supports CompactFlash, MicroDrive, and various adapters (SD, MemoryStick, SmartMedia)
 * TD64 and SCSI emulation support
 * Works with fat95 filesystem for FAT32 support
-* Supports cards up to 4GB reliably 
 * Transfer speeds up to 2.2 MB/s read, 1.9 MB/s write (with MaxTransfer > 0x200 if reliable and working CF firmware)
 
 REQUIREMENTS
