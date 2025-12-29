@@ -1,4 +1,4 @@
-; compactflash.device driver V1.34
+; compactflash.device driver V1.35
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
 ; This file is part of cfd, a free storage device driver for Amiga.
 ;
@@ -22,9 +22,17 @@
 ; Small bugfix by Paul Carter on 1/1/2017
 ;compactflash.device v1.34
 ; Improved >4GB CF compatibility by Jaroslav Pulchart (22.10.2025)
+;compactflash.device v1.35
+; Serial debug output via Flags=8, refactored debug code (Jaroslav Pulchart)
 
 FILE_VERSION	= 1
-FILE_REVISION	= 34
+FILE_REVISION	= 35
+
+;--- Conditional compilation ---
+; Define DEBUG symbol to include serial debug support
+; Set via assembler command line: -DDEBUG=1
+; Or uncomment the next line:
+;DEBUG	= 1
 
 ;--- from exec.library -------------------------------------
 
@@ -87,6 +95,7 @@ OpenLibrary	= -552
 CopyMem		= -624
 CacheClearE	= -642
 CacheControl	= -648
+RawPutChar	= -516
 
 ;struct ExecBase
 EXB_MemList	= 322
@@ -528,7 +537,12 @@ CFU_MemPtr	= 224
 CFU_AttrPtr	= 228
 CFU_IOPtr	= 232
 CFU_MultiSize	= 236
-CFU_OpenFlags	= 238
+CFU_OpenFlags	= 238			;mount Flags field
+					;bit 0: "cfd first" hack
+					;bit 1: skip PCMCIA signature
+					;bit 2: compatibility mode
+					;bit 3: serial debug output
+CFUF_SERIALDEBUG = 8			;Flags = 8 enables serial debug
 CFU_DTSize	= 240			;struct DeviceTData
 CFU_DTSpeed	= 244
 CFU_DTType	= 248
@@ -570,8 +584,9 @@ CFU_TimePort	= 916
 CFU_KillSig	= 952
 CFU_KillTask	= 956
 CFU_CacheFlags	= 960
+CFU_MultiSizeRW	= 964			;multi size for read/write (or static override)
 
-CFU_Sizeof	= 964
+CFU_Sizeof	= 966
 
 
 ;CFU_Flags
@@ -598,15 +613,103 @@ s_resident:
 	dc.l	s_inittable
 
 s_name:
-	dc.b	`compactflash.device`,0
-	dc.b	`$VER: `
+	dc.b	"compactflash.device",0
+	dc.b	"$VER: "
 s_idstring:
-	dc.b	`compactflash.device 1.34 (22.10.2025)`,LF,0
-	dc.b	`© Torsten Jager`,0
+	dc.b	"compactflash.device 1.35 (31.12.2025)",LF,0
+	dc.b	"ï¿½ Torsten Jager",0
 CardName:
-	dc.b	`card.resource`,0
+	dc.b	"card.resource",0
 TimerName:
-	dc.b	`timer.device`,0
+	dc.b	"timer.device",0
+
+;--- Debug message strings (used when Flags = 8) ---
+	ifd	DEBUG
+dbg_card_insert:
+	dc.b	"[CFD] Card inserted",13,10,0
+dbg_card_remove:
+	dc.b	"[CFD] Card removed",13,10,0
+dbg_identify:
+	dc.b	"[CFD] Identifying card...",13,10,0
+dbg_identify_ok:
+	dc.b	"[CFD] Card identified OK",13,10,0
+dbg_identify_fail:
+	dc.b	"[CFD] Card identify FAILED",13,10,0
+dbg_reset:
+	dc.b	"[CFD] Reset",13,10,0
+dbg_config:
+	dc.b	"[CFD] Configuring HBA",13,10,0
+dbg_tuple:
+	dc.b	"[CFD] Reading tuples",13,10,0
+dbg_voltage:
+	dc.b	"[CFD] Setting voltage",13,10,0
+dbg_rwtest:
+	dc.b	"[CFD] RW test",13,10,0
+dbg_getid:
+	dc.b	"[CFD] Getting IDE ID",13,10,0
+dbg_spinup:
+	dc.b	"[CFD] Spinup",13,10,0
+dbg_multimode:
+	dc.b	"[CFD] Init multi mode",13,10,0
+dbg_notify:
+	dc.b	"[CFD] Notify clients",13,10,0
+dbg_done:
+	dc.b	"[CFD] ..done",13,10,0
+dbg_model:
+	dc.b	"[CFD] Model: ",0
+dbg_serial:
+	dc.b	"[CFD] Serial: ",0
+dbg_firmware:
+	dc.b	"[CFD] FW: ",0
+dbg_ideerr:
+	dc.b	"[CFD] IDE err=",0
+dbg_space:
+	dc.b	" ",0
+dbg_identify_dump:
+	dc.b	"[CFD] IDENTIFY:",13,10,0
+dbg_identify_raw:
+	dc.b	"[CFD] IDENTIFY (raw):",13,10,0
+dbg_id_maxmulti:
+	dc.b	"  Max Multi (W47):      ",0
+dbg_id_caps:
+	dc.b	"  Capabilities (W49):   ",0
+dbg_id_multisect:
+	dc.b	"  Multi Setting (W59):  ",0
+dbg_id_lba:
+	dc.b	"  LBA Sectors (W60-61): ",0
+dbg_id_dma:
+	dc.b	"  DMA Modes (W63):      ",0
+dbg_id_pio:
+	dc.b	"  PIO Modes (W64):      ",0
+dbg_id_udma:
+	dc.b	"  UDMA Modes (W88):     ",0
+dbg_transfer:
+	dc.b	"[CFD] Transfer: ",0
+dbg_word:
+	dc.b	"WORD",13,10,0
+dbg_byte:
+	dc.b	"BYTE",13,10,0
+dbg_voltage5v:
+	dc.b	"[CFD] Voltage: 5V",13,10,0
+dbg_tupleconfig:
+	dc.b	"[CFD] Tuple CISTPL_CONFIG found",13,10,0
+dbg_tuplenone:
+	dc.b	"[CFD] No tuples found",13,10,0
+dbg_idestatus:
+	dc.b	"[CFD] IDE status=",0
+dbg_multimax:
+	dc.b	"[CFD] ..card supports max multi: ",0
+dbg_multiset:
+	dc.b	"[CFD] ..setting multi mode to: ",0
+dbg_multiok:
+	dc.b	"[CFD] ..OK",13,10,0
+dbg_multifail:
+	dc.b	"[CFD] ..FAILED (using 1)",13,10,0
+dbg_multinosup:
+	dc.b	"[CFD] ..not supported",13,10,0
+dbg_multisizerw:
+	dc.b	"[CFD] ..override multi size: ",0
+	endc
 	even
 
 s_inittable:
@@ -871,7 +974,7 @@ bio_commands:
 	dc.w	TD_GETGEOMETRY
 	dc.w	HD_SCSICMD
 	dc.w	NSCMD_DEVICEQUERY
-	dc.w	`TJ`
+	dc.w	"TJ"
 	dc.w	NSCMD_TD_READ64
 	dc.w	NSCMD_TD_WRITE64
 	dc.w	0
@@ -1453,7 +1556,7 @@ _iq_name:
 	cmp.w	#18,d1
 	bcs.s	_iq_nnext
 
-	cmp.b	#` `,d0
+	cmp.b	#" ",d0
 	bne.s	_iq_nnext
 
 	subq.l	#1,a0			;pad vendor
@@ -1688,32 +1791,403 @@ _gs_tab:
 	dc.b	2, $3a, 0,   0, 0, 0	;no disk
 	dc.b	5, $21, 0, $c0, 0, 2	;invalid block #
 
-;*** Test **************************************************
+;*** Serial Debug *******************************************
+;
+; Serial debug output via RawPutChar (directly to serial port)
+; Enable with mount Flags = 8
+;
+; Usage:
+;   DBGMSG <string_label>    - output string if debug enabled
+;   DBGCHR <char>            - output single char if debug enabled
+;   DBGNUM                   - output d0.l as hex if debug enabled
+;
 
-_DEBUG	macro
-	moveq.l	#\1,d0
-	bsr.w	_Debug2
+	ifd	DEBUG
+DBGMSG	macro
+	lea	\1(pc),a0
+	bsr.w	_DebugStr
 	endm
 
-_Debug2:
-;	movem.l	d0-d1/a0-a1,-(sp)
-;	move.l	#$02000000,a1
-;	move.l	d0,(a1)+
-;	move.l	a3,a0
-;	move.w	#CFU_Sizeof/4,d0
-;_d_loop:
-;	move.l	(a0)+,(a1)+
-;	subq.w	#1,d0
-;	bgt.s	_d_loop
+DBGCHR	macro
+	moveq.l	#\1,d0
+	bsr.w	_DebugChar
+	endm
 
-;	movem.l	(sp)+,d0-d1/a0-a1
-;	rts
+DBGNUM	macro
+	bsr.w	_DebugHex
+	endm
+	else
+DBGMSG	macro
+	endm
+DBGCHR	macro
+	endm
+DBGNUM	macro
+	endm
+	endc
 
-LedOn:	bclr	#1,$bfe001
+	ifd	DEBUG
+;--- _DebugChar: output single char in d0 if debug enabled ---
+; d0 = character to output
+; a3 = unit, a4 = device
+; preserves all registers
+_DebugChar:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dc_end
+	movem.l	d0-d1/a0-a1/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	jsr	RawPutChar(a6)
+	movem.l	(sp)+,d0-d1/a0-a1/a6
+_dc_end:
 	rts
 
-LedOff:	bset	#1,$bfe001
+;--- _DebugStr: output null-terminated string ---
+; a0 = pointer to string
+; a3 = unit, a4 = device
+; preserves all registers
+_DebugStr:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_ds_end
+	movem.l	d0-d1/a0-a1/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+_ds_loop:
+	moveq.l	#0,d0
+	move.b	(a0)+,d0
+	beq.s	_ds_done
+	jsr	RawPutChar(a6)
+	bra.s	_ds_loop
+_ds_done:
+	movem.l	(sp)+,d0-d1/a0-a1/a6
+_ds_end:
 	rts
+
+;--- _DebugHex: output d0.l as 8-digit hex ---
+; d0 = value to output
+; a3 = unit, a4 = device
+; preserves all registers
+_DebugHex:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dh_end
+	movem.l	d0-d3/a0-a1/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	move.l	d0,d2
+	moveq.l	#7,d3			;8 digits
+_dh_loop:
+	rol.l	#4,d2
+	moveq.l	#$0f,d0
+	and.l	d2,d0
+	cmp.b	#10,d0
+	bcs.s	_dh_digit
+	addq.b	#'A'-'0'-10,d0
+_dh_digit:
+	add.b	#'0',d0
+	jsr	RawPutChar(a6)
+	dbra	d3,_dh_loop
+	movem.l	(sp)+,d0-d3/a0-a1/a6
+_dh_end:
+	rts
+
+;--- _DebugNewline: output CR+LF ---
+_DebugNewline:
+	moveq.l	#13,d0
+	bsr.s	_DebugChar
+	moveq.l	#10,d0
+	bra.s	_DebugChar
+
+;--- _DebugATAStr: output ATA string ---
+; a0 = pointer to ATA string
+; d1 = length in bytes
+; Note: uses d2 for loop counter since RawPutChar clobbers d0-d1
+; Spaces are shown as dots for visibility
+_DebugATAStr:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_das_end
+	movem.l	d0-d2/a0-a1/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	subq.w	#1,d1
+	move.w	d1,d2			;use d2 as loop counter (RawPutChar clobbers d1)
+_das_loop:
+	moveq.l	#0,d0
+	move.b	(a0)+,d0		;read byte in normal order
+	beq.s	_das_skip
+	cmp.b	#' ',d0
+	bcs.s	_das_skip		;skip if < space
+	bne.s	_das_print		;print if > space
+	moveq.l	#'.',d0			;replace space with dot
+_das_print:
+	jsr	RawPutChar(a6)
+_das_skip:
+	dbra	d2,_das_loop		;d2 is safe from RawPutChar
+	movem.l	(sp)+,d0-d2/a0-a1/a6
+_das_end:
+	rts
+
+;--- _DebugCardInfo: output card identification ---
+; Call after successful _GetIDEID
+_DebugCardInfo:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dci_end
+	movem.l	d0-d1/a0,-(sp)
+	
+	;Model name (words 27-46, offset 54, 40 bytes)
+	DBGMSG	dbg_model
+	lea	CFU_ConfigBlock+54(a3),a0
+	moveq.l	#40,d1
+	bsr.w	_DebugATAStr
+	bsr.w	_DebugNewline
+	
+	;Serial number (words 10-19, offset 20, 20 bytes)
+	DBGMSG	dbg_serial
+	lea	CFU_ConfigBlock+20(a3),a0
+	moveq.l	#20,d1
+	bsr.w	_DebugATAStr
+	bsr.w	_DebugNewline
+	
+	;Firmware (words 23-26, offset 46, 8 bytes)
+	DBGMSG	dbg_firmware
+	lea	CFU_ConfigBlock+46(a3),a0
+	moveq.l	#8,d1
+	bsr.w	_DebugATAStr
+	bsr.w	_DebugNewline
+	
+	movem.l	(sp)+,d0-d1/a0
+_dci_end:
+	rts
+
+;--- _DebugHexDump: dump IDENTIFY structure (512 bytes) ---
+; Outputs 32 lines of 16 bytes each with offset
+_DebugHexDump:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.w	_dhd_end
+	movem.l	d0-d4/a0-a1/a6,-(sp)
+	
+	DBGMSG	dbg_identify_raw
+	
+	move.l	CFD_ExecBase(a4),a6
+	lea	CFU_ConfigBlock(a3),a0
+	moveq.l	#0,d3			;word counter (0,8,16,...248)
+	moveq.l	#31,d4			;32 lines (0-31)
+	
+_dhd_line:
+	;print word offset (W0, W8, W16... W248)
+	moveq.l	#'W',d0
+	jsr	RawPutChar(a6)
+	move.w	d3,d0
+	bsr.w	_DebugDecimal		;output decimal number
+	moveq.l	#':',d0
+	jsr	RawPutChar(a6)
+	moveq.l	#' ',d0
+	jsr	RawPutChar(a6)
+	
+	;print 8 words per line
+	moveq.l	#7,d2
+_dhd_word:
+	move.w	(a0)+,d0
+	bsr.w	_DebugHexWord
+	moveq.l	#' ',d0
+	jsr	RawPutChar(a6)
+	dbra	d2,_dhd_word
+	addq.w	#8,d3			;next line starts at word+8
+	
+	;newline
+	moveq.l	#13,d0
+	jsr	RawPutChar(a6)
+	moveq.l	#10,d0
+	jsr	RawPutChar(a6)
+	
+	dbra	d4,_dhd_line
+	
+	movem.l	(sp)+,d0-d4/a0-a1/a6
+_dhd_end:
+	rts
+
+;--- _DebugHexByte: output d0.b as 2-digit hex ---
+_DebugHexByte:
+	movem.l	d0-d2,-(sp)
+	move.b	d0,d2
+	lsr.b	#4,d0
+	bsr.s	_dhb_digit
+	move.b	d2,d0
+	and.b	#$0f,d0
+	bsr.s	_dhb_digit
+	movem.l	(sp)+,d0-d2
+	rts
+_dhb_digit:
+	cmp.b	#10,d0
+	bcs.s	_dhb_09
+	add.b	#'A'-10,d0
+	jmp	RawPutChar(a6)
+_dhb_09:
+	add.b	#'0',d0
+	jmp	RawPutChar(a6)
+
+;--- _DebugIdentifyFields: show labeled IDENTIFY fields ---
+; Note: uses a2 for config block pointer (DBGMSG clobbers a0)
+_DebugIdentifyFields:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.w	_dif_end
+	movem.l	d0/a0/a2/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	lea	CFU_ConfigBlock(a3),a2
+	
+	DBGMSG	dbg_identify_dump
+	
+	;Word 47: Max multi-sector
+	DBGMSG	dbg_id_maxmulti
+	move.w	94(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	;Word 49: Capabilities
+	DBGMSG	dbg_id_caps
+	move.w	98(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	;Word 59: Multi-sector setting
+	DBGMSG	dbg_id_multisect
+	move.w	118(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	;Words 60-61: LBA capacity (swap words for display)
+	DBGMSG	dbg_id_lba
+	move.w	122(a2),d0		;Word 61 (high)
+	bsr.w	_DebugHexWord
+	move.w	120(a2),d0		;Word 60 (low)
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	;Word 63: Multiword DMA
+	DBGMSG	dbg_id_dma
+	move.w	126(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	;Word 64: PIO modes
+	DBGMSG	dbg_id_pio
+	move.w	128(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	;Word 88: Ultra DMA
+	DBGMSG	dbg_id_udma
+	move.w	176(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	
+	movem.l	(sp)+,d0/a0/a2/a6
+_dif_end:
+	rts
+
+;--- _DebugHexWord: output d0.w as 4-digit hex ---
+_DebugHexWord:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dhw_end
+	movem.l	d0-d1/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	move.w	d0,d1
+	lsr.w	#8,d0
+	bsr.w	_DebugHexByte
+	move.w	d1,d0
+	bsr.w	_DebugHexByte
+	movem.l	(sp)+,d0-d1/a6
+_dhw_end:
+	rts
+
+;--- _DebugTransferMode: show transfer mode (WORD/BYTE) ---
+_DebugTransferMode:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dtm_end
+	DBGMSG	dbg_transfer
+	tst.b	CFU_WriteMode(a3)
+	bne.s	_dtm_byte
+	DBGMSG	dbg_word
+	bra.s	_dtm_end
+_dtm_byte:
+	DBGMSG	dbg_byte
+_dtm_end:
+	rts
+
+;--- _DebugDecimal: output d0.w as decimal (0-255) ---
+; Uses stack to preserve values across RawPutChar calls
+_DebugDecimal:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dd_end
+	movem.l	d0-d3/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	moveq.l	#0,d2
+	move.w	d0,d2			;d2 = value (preserved)
+	moveq.l	#0,d3			;d3 = leading zero flag
+	
+	;hundreds digit
+	moveq.l	#0,d0
+_dd_h_loop:
+	cmp.w	#100,d2
+	bcs.s	_dd_h_done
+	sub.w	#100,d2
+	addq.w	#1,d0
+	bra.s	_dd_h_loop
+_dd_h_done:
+	tst.w	d0
+	beq.s	_dd_tens
+	add.b	#'0',d0
+	move.w	d2,-(sp)		;save d2
+	jsr	RawPutChar(a6)
+	move.w	(sp)+,d2		;restore d2
+	moveq.l	#1,d3			;set leading flag
+	
+_dd_tens:
+	;tens digit
+	moveq.l	#0,d0
+_dd_t_loop:
+	cmp.w	#10,d2
+	bcs.s	_dd_t_done
+	sub.w	#10,d2
+	addq.w	#1,d0
+	bra.s	_dd_t_loop
+_dd_t_done:
+	tst.w	d0
+	bne.s	_dd_t_print
+	tst.w	d3
+	beq.s	_dd_ones		;skip leading zero
+_dd_t_print:
+	add.b	#'0',d0
+	move.w	d2,-(sp)		;save d2
+	jsr	RawPutChar(a6)
+	move.w	(sp)+,d2		;restore d2
+	
+_dd_ones:
+	;ones digit (always print)
+	move.w	d2,d0
+	add.b	#'0',d0
+	jsr	RawPutChar(a6)
+	
+	movem.l	(sp)+,d0-d3/a6
+_dd_end:
+	rts
+
+;--- _DebugIDEStatus: show IDE status and error registers ---
+; d0 = status register value
+_DebugIDEStatus:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dis_end
+	movem.l	d0-d1/a0,-(sp)
+	move.l	d0,d1			;save status
+	DBGMSG	dbg_idestatus
+	move.l	d1,d0
+	bsr.w	_DebugHex
+	bsr.w	_DebugNewline
+	DBGMSG	dbg_ideerr
+	;Read error register
+	move.l	CFU_IDEAddr(a3),a0
+	moveq.l	#0,d0
+	move.b	2(a0),d0		;error register at offset 2
+	bsr.w	_DebugHex
+	bsr.w	_DebugNewline
+	movem.l	(sp)+,d0-d1/a0
+_dis_end:
+	rts
+	endc
 
 Wait40:
 	lea	CFU_TimeReq(a3),a1
@@ -1917,6 +2391,7 @@ _t_do:
 ;- - examine and register new card  - - - - - - - - - - - -
 
 _t_identify:	
+	DBGMSG	dbg_card_insert
 	clr.w	CFU_CardReady(a3)
 	lea	CFU_CardHandle(a3),a2
 	move.l	a2,a1
@@ -1924,7 +2399,7 @@ _t_identify:
 	and.b	#CARD_STATUSF_CCDET,d0
 	beq.w	_t_ibreak		;false alert
 
-	clr.w	CFU_Debug(a3)
+	DBGMSG	dbg_identify
 	clr.b	CFU_ActiveHacks(a3)
 	clr.l	CFU_ReadErrors(a3)
 	clr.l	CFU_WriteErrors(a3)
@@ -1953,7 +2428,7 @@ _t_ir1:
 	move.l	a2,a1
 	CALLCARD CardResetCard
 _t_ir2:
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_reset
 	moveq.l	#60,d2
 _t_i1:
 	subq.w	#1,d2
@@ -1973,9 +2448,9 @@ _t_i1:
 	and.b	#CARD_STATUSF_BSY,d0
 	bne.s	_t_i1			;card ready after resetting..
 _t_i2:
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_config
 	bsr.w	ConfigureHBA
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_done
 	and.b	#$df,CFU_EventFlags(a3)	;Interrupt ON
 	moveq.l	#600>>3,d1
 	lsl.l	#3,d1
@@ -1997,7 +2472,7 @@ _t_i2:
 	cmp.l	#$800,CFU_DTSize(a3)
 	bcc.s	_t_ifuncid
 
-	add.w	#16,CFU_Debug(a3)
+	DBGMSG	dbg_tuple
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#127,d0
@@ -2023,7 +2498,6 @@ _t_i2:
 	beq.w	_t_iblind
 	bra.s	_t_icfg
 _t_ifuncid:
-	addq.w	#1,CFU_Debug(a3)
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#$21,d1			;CISTPL_FUNCID
@@ -2040,7 +2514,6 @@ _t_ifuncid:
 	cmp.b	#4,(a0)			;"fixed disk"
 	bne.w	_t_ibreak
 
-	addq.w	#1,CFU_Debug(a3)
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#$22,d1			;CISTPL_FUNCEXT
@@ -2061,20 +2534,26 @@ _t_ifuncid:
 	bne.w	_t_ibreak
 
 _t_icfg:
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_voltage
 	moveq.l	#CARD_VOLTAGE_5V,d0
 	move.l	a2,a1
 	CALLCARD CardProgramVoltage
+	DBGMSG	dbg_voltage5v
 
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_tuple
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#$1a,d1			;CISTPL_CONFIG
 	moveq.l	#127,d0
 	CALLSAME CopyTuple
 	tst.w	d0
-	beq.w	_t_ibreak
-
+	beq.s	_t_notuple
+	DBGMSG	dbg_tupleconfig
+	bra.s	_t_gottuple
+_t_notuple:
+	DBGMSG	dbg_tuplenone
+	bra.w	_t_ibreak
+_t_gottuple:
 	lea	CFU_ConfigBlock(a3),a0
 	addq.l	#1,a0
 	cmp.b	#4,(a0)+
@@ -2108,7 +2587,6 @@ _t_faddr:
 	cmp.l	#$00020000,d2
 	bcc.w	_t_ibreak		;address out of range
 
-	addq.w	#1,CFU_Debug(a3)
 	move.l	CFU_AttrPtr(a3),a2
 	add.l	d2,a2
 	move.l	a2,CFU_ConfigAddr(a3)
@@ -2143,31 +2621,46 @@ _t_iswap:
 	beq.w	_t_ibreak
 
 	bsr.w	BusyWait
+	move.l	d0,d1			;save status
 	and.b	#$a0,d0			;BSY, DWF
 	beq.s	_t_itest
 
+	ifd	DEBUG
+	move.l	d1,d0
+	bsr.w	_DebugIDEStatus		;show status when error
+	endc
 	btst	#0,CFU_ActiveHacks(a3)
-	bne.s	_t_ibreak
-	bra.s	_t_inodisk		;ATA removable media???
+	bne.w	_t_ibreak
+	bra.w	_t_inodisk		;ATA removable media???
 _t_itest:
-	
+	DBGMSG	dbg_rwtest
 	bsr.w	RWTest			;find a working transfer mode
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_done
+	ifd	DEBUG
+	bsr.w	_DebugTransferMode	;show which transfer mode
+	endc
+	DBGMSG	dbg_getid
 	bsr.w	_GetIDEID		;read ATA Konfiguration block
+	DBGMSG	dbg_done
 	move.l	d0,d2
 	beq.s	_t_inodisk
+	ifd	DEBUG
+	bsr.w	_DebugCardInfo		;show card details
+	bsr.w	_DebugIdentifyFields	;show labeled IDENTIFY fields
+	bsr.w	_DebugHexDump		;dump full IDENTIFY structure
+	endc
 	
 	btst	#6,CFU_ConfigBlock+167(a3)
 	beq.s	_t_i6
 
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_spinup
 	bsr.w	_SpinUp			;try waking up the drive..
+	DBGMSG	dbg_done
 	moveq.l	#0,d2
 _t_i6:
 	btst	#2,CFU_ConfigBlock+1(a3)
 	beq.s	_t_i7
 
-	addq.w	#2,CFU_Debug(a3)
 	moveq.l	#0,d0
 	moveq.l	#1,d1
 	lea	CFU_ConfigBlock(a3),a1
@@ -2184,8 +2677,9 @@ _t_i8:
 	subq.w	#1,d2
 	bne.s	_t_iatapi
 
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_multimode
 	bsr.w	_InitMultipleMode
+	DBGMSG	dbg_done
 	bra.s	_t_iok
 _t_iatapi:
 	bsr.w	ATAPIPoll		;start monitoring media removals
@@ -2193,12 +2687,13 @@ _t_iatapi:
 _t_inodisk:
 	clr.l	CFU_DriveSize(a3)
 _t_iok:
-	addq.w	#1,CFU_Debug(a3)
+	DBGMSG	dbg_identify_ok
+	DBGMSG	dbg_notify
 	bsr.w	NotifyClients
-	addq.w	#1,CFU_Debug(a3)
 	bra.w	_t_check
 
 _t_ibreak:
+	DBGMSG	dbg_identify_fail
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
 	moveq.l	#0,d0
 	move.l	a2,a1
@@ -2227,6 +2722,7 @@ _t_shutdown:
 	beq.w	_t_check
 
 _t_disown:
+	DBGMSG	dbg_card_remove
 	clr.l	CFU_DriveSize(a3)
 	clr.w	CFU_PLength(a3)
 	bsr.w	NotifyClients
@@ -2271,9 +2767,9 @@ _t_end:
 	JMPEXEC RemTask
 
 _t_fcstr1:
-	dc.b	`FREECOM`,0
+	dc.b	"FREECOM",0
 _t_fcstr2:
-	dc.b	`PCCARD-IDE`,0
+	dc.b	"PCCARD-IDE",0
 	even
 
 ;--- check for text patterns inside tuples -----------------
@@ -2894,8 +3390,6 @@ _gid_command:
 	move.l	CFU_IDEAddr(a3),a0
 	move.l	#A_Pb,a1
 	moveq.l	#120,d1
-	tst.b	(a1)
-	nop
 _gid_wait:
 	bsr.w	Wait1
 	move.b	14(a0),d0
@@ -2977,7 +3471,7 @@ _gid_end:
 	move.l	d2,d0
 	movem.l	(sp)+,d2-d5/a2
 	rts
-_gid_check_retry
+_gid_check_retry:
 	move.l	_gid_num_retrys,d0
 	sub.l	#1,d0
 	move.l	d0,_gid_num_retrys
@@ -3018,7 +3512,7 @@ _rb_0:
 	beq.w	_rb_nodisk
 
 	moveq.l	#0,d4
-	move.w	CFU_MultiSize(a3),d4
+	move.w	CFU_MultiSizeRW(a3),d4
 	cmp.l	d4,d3
 	bcc.s	_rb_1
 
@@ -3523,7 +4017,7 @@ _wb_swath:
 	move.l	a2,CFU_Buffer(a3)
 _wb_try:
 	moveq.l	#0,d4
-	move.w	CFU_MultiSize(a3),d4
+	move.w	CFU_MultiSizeRW(a3),d4
 	cmp.l	d4,d3
 	bcc.s	_wb_1
 
@@ -3762,9 +4256,27 @@ _wb_serror:
 
 _InitMultipleMode:
 	bsr.w	_IDEStart
-	move.b	CFU_ConfigBlock+95(a3),d1
-	ble.s	_imm_error		;not supported
+	moveq.l	#0,d1
+	move.b	CFU_ConfigBlock+95(a3),d1	;word 47 bits 15:8 = MaxMulti count
+	ifd	DEBUG
+	move.l	d1,-(sp)
+	DBGMSG	dbg_multimax
+	move.l	(sp),d0
+	bsr.w	_DebugDecimal
+	bsr.w	_DebugNewline
+	move.l	(sp)+,d1
+	endc
+	tst.b	d1
+	beq.w	_imm_nosup		;0 = not supported
 
+	ifd	DEBUG
+	move.l	d1,-(sp)
+	DBGMSG	dbg_multiset
+	move.l	(sp),d0
+	bsr.w	_DebugDecimal
+	bsr.w	_DebugNewline
+	move.l	(sp)+,d1
+	endc
 	lea	CFU_IDESet+2(a3),a0
 	lsl.w	#8,d1
 	move.w	d1,(a0)+
@@ -3773,7 +4285,7 @@ _InitMultipleMode:
 	move.w	#$e0c6,(a0)		;"SET MULTIPLE MODE"
 	bsr.w	_IDECmd
 	tst.w	d0
-	beq.s	_imm_error
+	beq.w	_imm_error
 
 	bsr.w	WaitReady
 	moveq.l	#3,d1
@@ -3784,15 +4296,45 @@ _InitMultipleMode:
 	and.b	CFU_IDEStatus(a3),d1
 	bne.s	_imm_error		;error or unsupported
 
+	DBGMSG	dbg_multiok
+
+	bsr.w	_IDEStop
 	moveq.l	#0,d0
-	move.b	CFU_ConfigBlock+95(a3),d0
+	move.b	CFU_ConfigBlock+95(a3),d0	;word 47 bits 15:8 = MaxMulti count
 _imm_end:
 	move.w	d0,CFU_MultiSize(a3)
-	bsr.w	_IDEStop
 	move.w	CFU_MultiSize(a3),d0
+	;Set CFU_MultiSizeRW: static override (256) if flag 16, else same as d0
+	btst	#4,CFU_OpenFlags+1(a3)		;flag 16 = v1.33 mode?
+	beq.s	_imm_rw_normal
+	move.w	#256,CFU_MultiSizeRW(a3)	;static override
+	bra.s	_imm_rw_debug
+_imm_rw_normal:
+	move.w	d0,CFU_MultiSizeRW(a3)		;same as CFU_MultiSize
+_imm_rw_debug:
+	ifd	DEBUG
+	move.l	d0,-(sp)
+	DBGMSG	dbg_multisizerw
+	moveq.l	#0,d0
+	move.w	CFU_MultiSizeRW(a3),d0
+	bsr.w	_DebugDecimal
+	bsr.w	_DebugNewline
+	move.l	(sp)+,d0
+	endc
 	rts
 
+_imm_nosup:
+	DBGMSG	dbg_multinosup
+	moveq.l	#1,d0			;default to single blocks
+	bra.s	_imm_end
+
 _imm_error:
+	ifd	DEBUG
+	moveq.l	#0,d0
+	move.b	CFU_IDEStatus(a3),d0
+	bsr.w	_DebugIDEStatus		;show what went wrong
+	endc
+	DBGMSG	dbg_multifail
 	moveq.l	#1,d0			;default to single blocks
 	bra.s	_imm_end
 
@@ -4242,5 +4784,5 @@ lg2_loop:
 
 s_codeend:
 
-;*** das war`s!!!! *****************************************
+;*** that's it!!!! *****************************************
 	end

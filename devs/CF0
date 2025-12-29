@@ -1,4 +1,13 @@
-/* compactflash.device $VER: 1.34 (22.10.2025) */
+/* compactflash.device $VER: 1.35 (31.12.2025) */
+/*
+ * Flags options (can be combined):
+ *   0 = default
+ *   1 = "cfd first" hack (for PCMCIA conflicts)
+ *   2 = skip invalid PCMCIA signature
+ *   4 = compatibility mode
+ *   8 = enable serial debug output (v1.35+)
+ *  16 = enforce multi mode and issue 256 sector sized IOs (v1.35+)
+ */
 FileSystem = l:fat95
 Device = compactflash.device
 Unit = 0
