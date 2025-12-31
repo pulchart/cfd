@@ -3,7 +3,7 @@ Uploader:     jaroslav.pulchart@gmail.com (Jaroslav Pulchart)
 Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by Torsten Jager and Paul Carter
 Type:         driver/media
 Version:      @VERSION_DOT@
-Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA adapter
+Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
@@ -22,13 +22,7 @@ CHANGES IN @VERSION_DOT@ (@DATE@)
   - Can improve performance on capable cards (1MB/s -> 2MB/s)
   - Warning: May cause data corruption on unsupported cards
 * Simplified SD-to-CF adapter support
-  - Cleaner retry mechanism for IDENTIFY command
-
-CHANGES IN 1.34 (22.10.2025)
-============================
-* Made >4GB CompactFlash cards usable
-  - Workaround for "get IDE ID" on large capacity cards
-  - Limited multi-sector IOs for reliability on >4GB cards
+  - Cleaner retry mechanism for IDENTIFY command introduced in v1.33
 
 FEATURES
 ========
@@ -37,28 +31,30 @@ FEATURES
 * Works with fat95 filesystem for FAT32 support
 * Serial debug output for troubleshooting (Flags = 8)
 * Transfer speeds up to 2.2 MB/s read, 1.9 MB/s write
+  (in multi-sector mode if firmware supports it or with Flags = 16 override)
 
 REQUIREMENTS
 ============
-* Amiga 600 or 1200 with PCMCIA slot
+* Amiga 600 or 1200 with PCMCIA slot (A1200 tested)
 * AmigaOS 2.0 or higher (3.2.3 tested)
-* "CompactFlash to PCMCIA/ATA" adapter card
+* "CompactFlash to PCMCIA/ATA" adapter card (see images/cf-pcmcia-adapter.jpg)
+  or SD-to-CF adapter (see images/sd-cf-adapter.jpg)
 * fat95 filesystem (disk/misc/fat95.lha) recommended
 
 INSTALLATION
 ============
 Two versions of the driver are included:
 
-  compactflash.device         @DEBUG_SIZE@ bytes  Full version with serial debug
-  compactflash.device.nodebug @NODEBUG_SIZE@ bytes  Smaller version, no debug code
+  compactflash.device         @DEBUG_SIZE@ bytes  Driver with debug to serial console flag support
+  compactflash.device.small @NODEBUG_SIZE@ bytes  Driver without debug to serial console support
 
 Choose based on your needs:
 - Use the full version if you need serial debug output (Flags = 8)
-- Use nodebug for minimal memory footprint (rename to compactflash.device)
+- Use small for minimal memory footprint (rename to compactflash.device)
 
 Steps:
 1. Copy devs/compactflash.device to DEVS:
-   (or copy compactflash.device.nodebug as DEVS:compactflash.device)
+   (or copy compactflash.device.small as DEVS:compactflash.device)
 2. Have fat95 installed on your system
 3. Mount the drive by double-clicking devs/CF0
 
@@ -70,11 +66,11 @@ MOUNT FLAGS
 Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
 
   Flags = 0    /* default */
-  Flags = 1    /* "cfd first" hack for PCMCIA conflicts */
-  Flags = 2    /* skip invalid PCMCIA signature */
-  Flags = 4    /* compatibility mode */
-  Flags = 8    /* enable serial debug output (v1.35+) */
-  Flags = 16   /* enforce multi mode: 256 sectors per IO (v1.35+) */
+  Flags = 1    /* "cfd first" hack for PCMCIA conflicts with other drivers */
+  Flags = 2    /* skip invalid PCMCIA signature for non-standard cards */
+  Flags = 4    /* use CardResource API instead of direct chipset access */
+  Flags = 8    /* output init messages to serial port at 9600 baud (v1.35+ full build) */
+  Flags = 16   /* force 256 sector transfers regardless of card capability (v1.35+) */
 
 SERIAL DEBUG EXAMPLE
 ====================
@@ -112,31 +108,7 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
   W24: 3131 3034 3037 5453 3447 4346 3133 3320 
   W32: 2020 2020 2020 2020 2020 2020 2020 2020 
   W40: 2020 2020 2020 2020 2020 2020 2020 8001 
-  W48: 0000 0200 0000 0200 0000 0003 1E59 0010 
-  W56: 003F 7E70 0077 0100 7E70 0077 0000 0000 
-  W64: 0003 0000 0000 0078 0078 0000 0000 0000 
-  W72: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W80: 0000 0000 702A 500C 4000 0000 0004 4000 
-  W88: 0000 0001 0000 0000 FFFE 0040 0000 0000 
-  W96: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W104: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W112: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W120: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W128: 0001 0000 0000 0000 0000 0000 0000 0000 
-  W136: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W144: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W152: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W160: 81F4 0000 0000 0000 891B 0000 0000 0000 
-  W168: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W176: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W184: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W192: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W200: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W208: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W216: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W224: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W232: 0000 0000 0000 0000 0000 0000 0000 0000 
-  W240: 0000 0000 0000 0000 0000 0000 0000 0000 
+  ...
   W248: 0000 0000 0000 0000 0000 0000 0000 0000 
   [CFD] Init multi mode
   [CFD] ..card supports max multi: 1
@@ -157,7 +129,7 @@ earlier versions.
 WARNING: Verify your card is capable before using for real data!
 Set the flag and read any text file from CF card. The content should
 not contain repeating 32-byte pattern after first 512 bytes.
-See images/multimode.issue.jpg for example of broken output.
+See images/multimode-issue.jpg for example of broken output.
 
 Can be combined with MaxTransfer to limit sectors per IO:
   Flags = 16
@@ -178,7 +150,7 @@ Licensed under GNU LGPL v2.1
 
 HISTORY
 =======
-see README.md for complete history
+see https://github.com/pulchart/cfd/blob/master/README.md for complete history
 
 CHECKSUMS
 =========
@@ -186,7 +158,7 @@ compactflash.device (full, @DEBUG_SIZE@ bytes):
   MD5:    @DEBUG_MD5@
   SHA256: @DEBUG_SHA256@
 
-compactflash.device.nodebug (no debug, @NODEBUG_SIZE@ bytes):
+compactflash.device.small (no debug, @NODEBUG_SIZE@ bytes):
   MD5:    @NODEBUG_MD5@
   SHA256: @NODEBUG_SHA256@
 
@@ -195,11 +167,12 @@ CONTENTS
 cfd/c/pcmciacheck     - PCMCIA check utility
 cfd/c/pcmciaspeed     - Speed test utility
 cfd/devs/CF0          - Mountlist entry (with flags documentation)
-cfd/devs/compactflash.device        - Driver with serial debug support
-cfd/devs/compactflash.device.nodebug - Driver without debug (smaller)
+cfd/devs/compactflash.device       - Driver with debug to serial console flag support
+cfd/devs/compactflash.device.small - Driver without debug to serial console support
 cfd/src/              - Full assembler source code
-cfd/images/adapter*.jpg - Example adapter photos
-cfd/images/multimode.issue.jpg - read issue when multi mode is not working and enforced by flag
+cfd/images/cf-pcmcia-adapter.jpg - CF-to-PCMCIA adapter photo
+cfd/images/sd-cf-adapter.jpg     - SD-to-CF adapter photo
+cfd/images/multimode-issue.jpg - Example of broken output with unsupported enforce multi mode
 cfd/LICENSE           - GNU LGPL v2.1
 cfd/README.md         - Full documentation
 

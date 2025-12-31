@@ -23,7 +23,7 @@ OUTDIR = devs
 # Files
 SOURCE = $(SRCDIR)/cfd.s
 TARGET_DEBUG = $(OUTDIR)/compactflash.device
-TARGET_SMALL = $(OUTDIR)/compactflash.device.nodebug
+TARGET_SMALL = $(OUTDIR)/compactflash.device.small
 
 # Release files
 RELEASE_NAME = cfd$(VERSION_NODOT)
@@ -107,15 +107,16 @@ release: $(TARGET_DEBUG) $(TARGET_SMALL) $(README_NAME) check-lha
 	@cp LICENSE "$(STAGING)/cfd/"
 	@# Images (optional)
 	@mkdir -p "$(STAGING)/cfd/images"
-	@cp images/adapter.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
-	@cp images/adapter2.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
-	@cp images/multimode.issue.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
+	@cp images/cf-pcmcia-adapter.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
+	@cp images/sd-cf-adapter.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
+	@cp images/multimode-issue.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
 	@# Amiga icon files
 	@cp c.info "$(STAGING)/cfd/" 2>/dev/null || true
 	@cp devs.info "$(STAGING)/cfd/" 2>/dev/null || true
-	@cp images/adapter.jpg.info "$(STAGING)/cfd/images/" 2>/dev/null || true
-	@cp images/adapter2.jpg.info "$(STAGING)/cfd/images/" 2>/dev/null || true
-	@cp images/multimode.issue.jpg.info "$(STAGING)/cfd/images/" 2>/dev/null || true
+	@cp images.info "$(STAGING)/cfd/images.info" 2>/dev/null || true
+	@cp images/cf-pcmcia-adapter.jpg.info "$(STAGING)/cfd/images/" 2>/dev/null || true
+	@cp images/sd-cf-adapter.jpg.info "$(STAGING)/cfd/images/" 2>/dev/null || true
+	@cp images/multimode-issue.jpg.info "$(STAGING)/cfd/images/" 2>/dev/null || true
 	@cp def_CF0.info "$(STAGING)/cfd/" 2>/dev/null || true
 	@echo "Creating LHA archive..."
 	@cd "$(STAGING)" && $(LHA) c "$(ARCHIVE_NAME)" cfd

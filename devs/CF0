@@ -2,11 +2,11 @@
 /*
  * Flags options (can be combined):
  *   0 = default
- *   1 = "cfd first" hack (for PCMCIA conflicts)
- *   2 = skip invalid PCMCIA signature
- *   4 = compatibility mode
- *   8 = enable serial debug output (v1.35+)
- *  16 = enforce multi mode and issue 256 sector sized IOs (v1.35+)
+ *   1 = "cfd first" hack for PCMCIA conflicts with other drivers
+ *   2 = skip invalid PCMCIA signature for non-standard cards
+ *   4 = use CardResource API instead of direct chipset access
+ *   8 = output init messages to serial port at 9600 baud (v1.35+ full build)
+ *  16 = force 256 sector transfers regardless of card capability (v1.35+)
  */
 FileSystem = l:fat95
 Device = compactflash.device

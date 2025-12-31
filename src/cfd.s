@@ -542,6 +542,7 @@ CFU_OpenFlags	= 238			;mount Flags field
 					;bit 1: skip PCMCIA signature
 					;bit 2: compatibility mode
 					;bit 3: serial debug output
+					;bit 4: enforce multi mode (256 sectors)
 CFUF_SERIALDEBUG = 8			;Flags = 8 enables serial debug
 CFU_DTSize	= 240			;struct DeviceTData
 CFU_DTSpeed	= 244
@@ -4297,8 +4298,8 @@ _InitMultipleMode:
 _imm_end:
 	move.w	d0,CFU_MultiSize(a3)
 	move.w	CFU_MultiSize(a3),d0
-	;Set CFU_MultiSizeRW: static override (256) if flag 16, else same as d0
-	btst	#4,CFU_OpenFlags+1(a3)		;flag 16 = v1.33 mode?
+	;Set CFU_MultiSizeRW: static 256 if flag 16 (enforce multi mode), else use card's value
+	btst	#4,CFU_OpenFlags+1(a3)		;flag 16 = enforce multi mode?
 	beq.s	_imm_rw_normal
 	move.w	#256,CFU_MultiSizeRW(a3)	;static override
 	bra.s	_imm_rw_debug

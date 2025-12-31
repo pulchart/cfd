@@ -13,8 +13,17 @@ AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA
 
 ## Download
 
-* **Aminet (v1.34)**: [driver/media/cfd134](https://aminet.net/package/driver/media/cfd134)
 * **GitHub**: [Releases](https://github.com/pulchart/cfd/releases)
+* **Aminet (v1.35)**: [driver/media/cfd135](https://aminet.net/driver/media/cfd135.lha)
+* **Aminet (v1.34)**: [driver/media/cfd134](https://aminet.net/driver/media/cfd134.lha)
+* **Aminet (v1.33)**: [driver/media/CFD133](https://aminet.net/driver/media/CFD133.lha)
+* **Aminet (v1.32)**: [driver/media/cfd](https://aminet.net/driver/media/cfd.lha)
+
+## Purpose
+
+Read and write your digital photos, mp3 files etc. directly from CompactFlash cards as used by many mobile devices.
+
+The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
 
 ## What's New in v1.35
 
@@ -24,26 +33,19 @@ AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA
 * **Enforce multi mode** - set `Flags = 16` to force 256 sector reads/writes per IO request, even if card firmware does not support it
   - Can improve performance on capable cards (1MB/s → 2MB/s)
   - **Warning:** May cause data corruption on unsupported cards - see Enforce Multi Mode section below
-* **Simplified SD-to-CF adapter support** - cleaner retry mechanism for IDENTIFY command
+* **Simplified SD-to-CF adapter support** - cleaner retry mechanism for IDENTIFY command introduced in v1.33
 
 ## What's New in v1.34
 
-* Made >4GB CompactFlash cards usable
+* Improved compatibility with >4GB CF cards
   - Workaround for "get IDE ID" on large capacity cards
-  - Limited multi-sector IOs for reliability on >4GB cards
-* Tested with AmigaOS 3.2.3
-
-## Purpose
-
-Read and write your digital photos, mp3 files etc. directly from CompactFlash cards as used by many mobile devices.
-
-The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
+  - Multi-sector IO uses firmware reported value to improve compatibility
 
 ## System Requirements
 
-* Amiga 1200 or 600
+* Amiga 1200 or 600 (A1200 tested)
 * AmigaOS 2.0+ (tested with 3.2.3)
-* "CompactFlash to PCMCIA/ATA" adapter card (see images/adapter.jpg)
+* CF-to-PCMCIA adapter or SD-to-CF adapter (see [Hardware Notes](#hardware-notes))
 * fat95 file system (disk/misc/fat95.lha)
 
 ## Installation
@@ -52,8 +54,8 @@ Two versions of the driver are provided:
 
 | File | Size | Description |
 |------|------|-------------|
-| `compactflash.device` | ~10.5 KB | Full version with serial debug support |
-| `compactflash.device.nodebug` | ~8.3 KB | Smaller version without debug code |
+| `compactflash.device` | ~10.3 KB | Driver with debug to serial console flag support |
+| `compactflash.device.small` | ~8.3 KB | Driver without debug to serial console support |
 
 Choose the version you need:
 - Use the **full version** if you need serial debug output (`Flags = 8`)
@@ -62,7 +64,7 @@ Choose the version you need:
 ```
 Copy devs/compactflash.device to DEVS:
 ```
-(or `compactflash.device.nodebug`, renamed to `compactflash.device`)
+(or `compactflash.device.small`, renamed to `compactflash.device`)
 
 Have fat95 installed on your system. Mount the drive by double-clicking `devs/CF0`.
 
@@ -74,25 +76,17 @@ Copy def_CF0.info env:sys
 
 ## Hardware Notes
 
-You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side.
+You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side (see `images/cf-pcmcia-adapter.jpg`).
 
 There are two types of such adapters:
 * **CF Type 1** - for standard thickness CF cards
 * **CF Type 2** - also supports thicker cards like MicroDrive (costs more)
 
-### Compatibility
+Alternatively, you can use an SD-to-CF adapter with SD cards (see `images/sd-cf-adapter.jpg`).
 
-Positive testing reports from:
-* CompactFlash
-* IBM MicroDrive
-* Sony MemoryStick (with adapter)
-* SmartMedia (with adapter)
+Tested with CompactFlash cards (16MB, 4GB, 8GB, 16GB, 32GB, 64GB) and SD cards via SD-to-CF adapter (SanDisk, Samsung MicroSD).
 
-It may be required to re-insert the adapter after plugging the memory card into it. Only for CompactFlash and MicroDrive, the plugging order is irrelevant.
-
-### Important Notes
-
-Commodore introduced the Amiga PCMCIA port before the official PCMCIA standard was released. As a consequence, it is not fully compatible. Your results may vary depending on your hardware combination. Your adapter **MUST** support old 16bit PC-CARD mode. 32bit CARDBUS-only adapters won't work.
+**Note:** Commodore introduced the Amiga PCMCIA port before the official PCMCIA standard was released. Your results may vary depending on your hardware combination. Your adapter **MUST** support old 16bit PC-CARD mode. 32bit CARDBUS-only adapters won't work.
 
 In conjunction with fat95 v3.09+, cfd can use CF card's built-in erase function if available.
 
@@ -102,11 +96,11 @@ Set in CF0 mountlist. Flags can be combined (e.g., `Flags = 9` for cfd first + s
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| cfd first | 1 | Enable "cfd first" hack for PCMCIA conflicts |
-| skip signature | 2 | Skip invalid PCMCIA signature check |
-| compatibility | 4 | Compatibility mode |
-| serial debug | 8 | Enable serial debug output (v1.35+) |
-| enforce multi mode | 16 | Issues 256 sector read/write for each IO (v1.35+) |
+| `cfd first` | 1 | Enable "cfd first" hack for PCMCIA conflicts with other drivers |
+| `skip signature` | 2 | Skip invalid PCMCIA signature check for non-standard cards |
+| `compatibility` | 4 | Use CardResource OS API instead of direct chipset access |
+| `serial debug` | 8 | Output initialization messages to serial port at 9600 baud (v1.35+ full build) |
+| `enforce multi mode` | 16 | Force 256 sector transfers regardless of card's reported capability (v1.35+) |
 
 ### Example: Enable serial debug
 ```
@@ -146,31 +140,7 @@ W16: 4143 3037 3030 4337 0002 0002 0004 3230
 W24: 3131 3034 3037 5453 3447 4346 3133 3320 
 W32: 2020 2020 2020 2020 2020 2020 2020 2020 
 W40: 2020 2020 2020 2020 2020 2020 2020 8001 
-W48: 0000 0200 0000 0200 0000 0003 1E59 0010 
-W56: 003F 7E70 0077 0100 7E70 0077 0000 0000 
-W64: 0003 0000 0000 0078 0078 0000 0000 0000 
-W72: 0000 0000 0000 0000 0000 0000 0000 0000 
-W80: 0000 0000 702A 500C 4000 0000 0004 4000 
-W88: 0000 0001 0000 0000 FFFE 0040 0000 0000 
-W96: 0000 0000 0000 0000 0000 0000 0000 0000 
-W104: 0000 0000 0000 0000 0000 0000 0000 0000 
-W112: 0000 0000 0000 0000 0000 0000 0000 0000 
-W120: 0000 0000 0000 0000 0000 0000 0000 0000 
-W128: 0001 0000 0000 0000 0000 0000 0000 0000 
-W136: 0000 0000 0000 0000 0000 0000 0000 0000 
-W144: 0000 0000 0000 0000 0000 0000 0000 0000 
-W152: 0000 0000 0000 0000 0000 0000 0000 0000 
-W160: 81F4 0000 0000 0000 891B 0000 0000 0000 
-W168: 0000 0000 0000 0000 0000 0000 0000 0000 
-W176: 0000 0000 0000 0000 0000 0000 0000 0000 
-W184: 0000 0000 0000 0000 0000 0000 0000 0000 
-W192: 0000 0000 0000 0000 0000 0000 0000 0000 
-W200: 0000 0000 0000 0000 0000 0000 0000 0000 
-W208: 0000 0000 0000 0000 0000 0000 0000 0000 
-W216: 0000 0000 0000 0000 0000 0000 0000 0000 
-W224: 0000 0000 0000 0000 0000 0000 0000 0000 
-W232: 0000 0000 0000 0000 0000 0000 0000 0000 
-W240: 0000 0000 0000 0000 0000 0000 0000 0000 
+...
 W248: 0000 0000 0000 0000 0000 0000 0000 0000 
 [CFD] Init multi mode
 [CFD] ..card supports max multi: 1
@@ -187,7 +157,7 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 
 Read and Write IO path will use 256 sectors for single IO regardless of what the card supports in Multiple Sector Mode if this flag is set (same behaviour as v1.33). The IO sector count can be limited by `MaxTransfer` (0x200 = 1 sector per IO) value in CF0 file.
 
-**Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:readme.txt`). The content should not contain repeating 32-byte pattern after first 512 bytes. See `images/multimode.issue.jpg` for an example of what broken output looks like on unsupported cards.
+**Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:cfd.s`). The content should not contain repeating 32-byte pattern after first 512 bytes. See `images/multimode-issue.jpg` for an example of what broken output looks like on unsupported cards.
 
 ```
 Flags = 16
@@ -257,18 +227,17 @@ Report issues at: https://github.com/pulchart/cfd/issues
 If cards are not recognized:
 1. Set `Flags = 8` in CF0 mountlist to enable serial debug
 2. Connect serial cable and monitor (9600 baud)
-3. Mount CF0: if not already done
+3. Mount CF0:
 4. Insert the card
-5. Wait at least 1 second
-6. Check serial output for `[CFD]` messages
-7. Report the serial log along with your hardware details
+5. Check serial output for `[CFD]` messages
+6. Report the serial log along with your hardware details
 
 ## History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.35 | 12/2025 | Debug via serial line, enforce multi mode, SD-to-CF fix (Jaroslav Pulchart) |
-| v1.34 | 10/2025 | >4GB CF card support (Jaroslav Pulchart) |
+| v1.35 | 12/2025 | Serial debug output, enforce multi mode flag, SD-to-CF adapter fix. Full/small build variants (Jaroslav Pulchart) |
+| v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
 | v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
 | v1.32 | 11/2009 | Error messages, open source release (Torsten Jager) |
 | v1.31 | 11/2009 | Fixed "memory mapped" mode bug |
@@ -316,7 +285,7 @@ If cards are not recognized:
 make
 
 # Build only full version
-make debug
+make full
 
 # Build only small version (no debug)
 make small
@@ -334,18 +303,11 @@ make release
 |--------|-------------|
 | `make` | Build both full and small versions |
 | `make full` | Build full version only |
-| `make small` | Build nodebug version only |
+| `make small` | Build small version only |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |
 | `make clean` | Remove built device files |
 | `make distclean` | Remove all generated files |
-
-### Output Files
-
-| File | Description |
-|------|-------------|
-| `devs/compactflash.device` | With serial debug support (`Flags = 8`) |
-| `devs/compactflash.device.nodebug` | Minimal, no debug code |
 
 ### Cross-Compilation
 
