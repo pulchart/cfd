@@ -2437,8 +2437,6 @@ _t_i1:
 	;bsr.w	LedOff	; debug led
 
 	bsr.w	Wait40			;..or go on waiting
-	bsr.w	Wait40
-	bsr.w	Wait40
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.w	_t_ibreak
@@ -3339,14 +3337,14 @@ _idec_end:
 
 ;--- read drive Konfiguration ------------------------------
 
-_gid_num_retrys:
-	dc.l	0
-
 _GetIDEID:
-	movem.l	d2-d5/a2,-(sp)
+	movem.l	d2-d6/a2,-(sp)
 
-	move.l	#32,_gid_num_retrys	; num retrys, needed (at least for me)
-					; to get sd cards working in an sd->cf adapter
+	;--- SD-to-CF adapter retry logic ---
+	; Some SD-to-CF adapters are slow to respond to IDENTIFY command.
+	; If DRQ is not set after _IDECmd, retry up to 32 times with delay.
+	; See _gid_check_retry for the retry branch.
+	moveq.l	#32,d6			;retry count for slow adapters
 
 	moveq.l	#1,d0
 	move.w	d0,CFU_MultiSize(a3)
@@ -3379,9 +3377,7 @@ _gid_command:
 	moveq.l	#$29,d0			;DF, DRQ, ERR
 	and.b	CFU_IDEStatus(a3),d0
 	subq.b	#8,d0			;DRQ
-	bne	_gid_check_retry
-
-	;bsr.w	LedOn	; debugled
+	bne.w	_gid_check_retry	;retry for slow adapters
 
 	lea	CFU_ConfigBlock(a3),a2
 	moveq.l	#512>>8,d0
@@ -3466,19 +3462,16 @@ _gid_atapi:
 _gid_a1:
 	move.w	d1,CFU_PLength(a3)	;set ATAPI command length
 	moveq.l	#2,d2			;ATAPI OK
+_gid_check_retry:
+	subq.l	#1,d6
+	beq.s	_gid_end		;no more retries
+	bsr.w	Wait40			;delay before retry
+	bra.w	_gid_retry
+
 _gid_end:
 	bsr.w	_IDEStop
 	move.l	d2,d0
-	movem.l	(sp)+,d2-d5/a2
-	rts
-_gid_check_retry:
-	move.l	_gid_num_retrys,d0
-	sub.l	#1,d0
-	move.l	d0,_gid_num_retrys
-	tst.l	d0
-	bne.w	_gid_retry
-
-	movem.l	(sp)+,d2-d5/a2
+	movem.l	(sp)+,d2-d6/a2
 	rts
 
 ;--- read Blocks -------------------------------------------
@@ -4346,11 +4339,9 @@ _SpinUp:
 	move.l	#A_Pb,a1
 	tst.b	(a1)
 	nop
-	bsr.w	Wait40
 _su_wait:
 	tst.b	(a1)
 	nop
-	bsr.w	Wait40
 	move.b	7(a0),d0
 	bmi.s	_su_wait		;BSY
 

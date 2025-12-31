@@ -21,6 +21,8 @@ CHANGES IN @VERSION_DOT@ (@DATE@)
   - Forces 256 sector reads/writes per IO request
   - Can improve performance on capable cards (1MB/s -> 2MB/s)
   - Warning: May cause data corruption on unsupported cards
+* Simplified SD-to-CF adapter support
+  - Cleaner retry mechanism for IDENTIFY command
 
 CHANGES IN 1.34 (22.10.2025)
 ============================
@@ -176,12 +178,7 @@ Licensed under GNU LGPL v2.1
 
 HISTORY
 =======
-v@VERSION_DOT@ @DATE_SHORT@ - Serial debug output replaces cfddebug (Jaroslav Pulchart)
-v1.34 10/2025 - >4GB CF card support (Jaroslav Pulchart)
-v1.33  1/2017 - Init reliability fix (Paul Carter)  
-v1.32 11/2009 - Error messages, open source release (Torsten Jager)
-...
-(see README.md for complete history back to v1.01 from 2002)
+see README.md for complete history
 
 CHECKSUMS
 =========

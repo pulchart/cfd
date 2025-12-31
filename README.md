@@ -21,9 +21,10 @@ AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA
 * **Serial debug output** - set `Flags = 8` to enable debug messages via serial port
   - Shows card insert/remove, identification, size, and MultiSize
   - Replaces cfddebug tool with readable text-based serial output
-* **enforce multi mode** - set `Flags = 16` to force 256 sector reads/writes per IO request, even if card firmware does not support it
+* **Enforce multi mode** - set `Flags = 16` to force 256 sector reads/writes per IO request, even if card firmware does not support it
   - Can improve performance on capable cards (1MB/s → 2MB/s)
   - **Warning:** May cause data corruption on unsupported cards - see Enforce Multi Mode section below
+* **Simplified SD-to-CF adapter support** - cleaner retry mechanism for IDENTIFY command
 
 ## What's New in v1.34
 
@@ -266,7 +267,7 @@ If cards are not recognized:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.35 | 12/2025 | Serial debug output replaces cfddebug (Jaroslav Pulchart) |
+| v1.35 | 12/2025 | Debug via serial line, enforce multi mode, SD-to-CF fix (Jaroslav Pulchart) |
 | v1.34 | 10/2025 | >4GB CF card support (Jaroslav Pulchart) |
 | v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
 | v1.32 | 11/2009 | Error messages, open source release (Torsten Jager) |
