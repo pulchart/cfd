@@ -1,4 +1,4 @@
-; compactflash.device driver V1.35
+; compactflash.device driver V1.36
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
 ; This file is part of cfd, a free storage device driver for Amiga.
 ;
@@ -16,17 +16,8 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-;compactflash.device v1.32
-;TJ. 14.11.2009
-;compactflash.device v1.33
-; Small bugfix by Paul Carter on 1/1/2017
-;compactflash.device v1.34
-; Improved >4GB CF compatibility by Jaroslav Pulchart (22.10.2025)
-;compactflash.device v1.35
-; Serial debug output via Flags=8, refactored debug code (Jaroslav Pulchart)
-
 FILE_VERSION	= 1
-FILE_REVISION	= 35
+FILE_REVISION	= 36
 
 ;--- Conditional compilation ---
 ; Define DEBUG symbol to include serial debug support
@@ -617,7 +608,7 @@ s_name:
 	dc.b	"compactflash.device",0
 	dc.b	"$VER: "
 s_idstring:
-	dc.b	"compactflash.device 1.35 (31.12.2025)",LF,0
+	dc.b	"compactflash.device 1.36 (01.01.2026)",LF,0
 	dc.b	"� Torsten Jager",0
 CardName:
 	dc.b	"card.resource",0

@@ -4,25 +4,15 @@ Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by 
 Type:         driver/media
 Version:      @VERSION_DOT@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
+Replaces:     driver/media/cfd134.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
-compactflash.device V@VERSION_DOT@ - PCMCIA CompactFlash driver for Amiga 600/1200
-
-Fork of driver/media/CFD133.lha with serial debug and >4GB card support.
+compactflash.device V@VERSION_DOT@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
 CHANGES IN @VERSION_DOT@ (@DATE@)
 ============================
-* Serial debug output via Flags = 8
-  - Connect serial cable (9600 baud) to see debug messages
-  - Shows card insert/remove, identification, size, MultiSize
-  - Replaces cfddebug tool with readable text-based serial output
-* Enforce multi mode via Flags = 16
-  - Forces 256 sector reads/writes per IO request
-  - Can improve performance on capable cards (1MB/s -> 2MB/s)
-  - Warning: May cause data corruption on unsupported cards
-* Simplified SD-to-CF adapter support
-  - Cleaner retry mechanism for IDENTIFY command introduced in v1.33
+* TBD
 
 FEATURES
 ========
@@ -45,8 +35,8 @@ INSTALLATION
 ============
 Two versions of the driver are included:
 
-  compactflash.device         @DEBUG_SIZE@ bytes  Driver with debug to serial console flag support
-  compactflash.device.small @NODEBUG_SIZE@ bytes  Driver without debug to serial console support
+  compactflash.device         @FULL_SIZE@ bytes  Driver with debug to serial console flag support
+  compactflash.device.small @SMALL_SIZE@ bytes  Driver without debug to serial console support
 
 Choose based on your needs:
 - Use the full version if you need serial debug output (Flags = 8)
@@ -154,13 +144,13 @@ see https://github.com/pulchart/cfd/blob/master/README.md for complete history
 
 CHECKSUMS
 =========
-compactflash.device (full, @DEBUG_SIZE@ bytes):
-  MD5:    @DEBUG_MD5@
-  SHA256: @DEBUG_SHA256@
+compactflash.device (full, @FULL_SIZE@ bytes):
+  MD5:    @FULL_MD5@
+  SHA256: @FULL_SHA256@
 
-compactflash.device.small (no debug, @NODEBUG_SIZE@ bytes):
-  MD5:    @NODEBUG_MD5@
-  SHA256: @NODEBUG_SHA256@
+compactflash.device.small (no debug, @SMALL_SIZE@ bytes):
+  MD5:    @SMALL_MD5@
+  SHA256: @SMALL_SHA256@
 
 CONTENTS
 ========
@@ -176,7 +166,4 @@ cfd/images/multimode-issue.jpg - Example of broken output with unsupported enfor
 cfd/LICENSE           - GNU LGPL v2.1
 cfd/README.md         - Full documentation
 
-Have Fun!
-
 "CompactFlash" is (TM) by CompactFlash Association
-

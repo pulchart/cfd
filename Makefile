@@ -2,9 +2,9 @@
 # Cross-compilation for Amiga using vasm
 
 # Version (update these for new releases)
-VERSION = 1.35
-DATE = 31.12.2025
-DATE_SHORT = 12/2025
+VERSION = 1.36
+DATE = 01.01.2026
+DATE_SHORT = 01/2026
 
 # Derived version (remove dot for filenames)
 VERSION_NODOT = $(subst .,,$(VERSION))
@@ -22,7 +22,7 @@ OUTDIR = devs
 
 # Files
 SOURCE = $(SRCDIR)/cfd.s
-TARGET_DEBUG = $(OUTDIR)/compactflash.device
+TARGET_FULL = $(OUTDIR)/compactflash.device
 TARGET_SMALL = $(OUTDIR)/compactflash.device.small
 
 # Release files
@@ -36,20 +36,20 @@ README_TEMPLATE = cfd.readme.in
 # ============================================================
 
 # Default target - build both versions
-all: $(TARGET_DEBUG) $(TARGET_SMALL)
+all: $(TARGET_FULL) $(TARGET_SMALL)
 
 # Full version (with serial debug capability)
-$(TARGET_DEBUG): $(SOURCE)
+$(TARGET_FULL): $(SOURCE)
 	$(VASM) $(VASMFLAGS) -DDEBUG=1 -o $@ $<
 	@echo "Built: $@ ($$(stat -c%s $@) bytes) [full]"
 
 # Small version (no debug code/strings)
 $(TARGET_SMALL): $(SOURCE)
 	$(VASM) $(VASMFLAGS) -o $@ $<
-	@echo "Built: $@ ($$(stat -c%s $@) bytes) [no debug]"
+	@echo "Built: $@ ($$(stat -c%s $@) bytes) [small]"
 
 # Build only full version
-full: $(TARGET_DEBUG)
+full: $(TARGET_FULL)
 
 # Build only small version
 small: $(TARGET_SMALL)
@@ -59,24 +59,24 @@ small: $(TARGET_SMALL)
 # ============================================================
 
 # Generate readme from template
-$(README_NAME): $(README_TEMPLATE) $(TARGET_DEBUG) $(TARGET_SMALL)
+$(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL)
 	@echo "Generating $(README_NAME) from template..."
-	$(eval DEBUG_SIZE := $(shell stat -c%s $(TARGET_DEBUG)))
-	$(eval DEBUG_MD5 := $(shell md5sum $(TARGET_DEBUG) | cut -d' ' -f1))
-	$(eval DEBUG_SHA256 := $(shell sha256sum $(TARGET_DEBUG) | cut -d' ' -f1))
-	$(eval NODEBUG_SIZE := $(shell stat -c%s $(TARGET_SMALL)))
-	$(eval NODEBUG_MD5 := $(shell md5sum $(TARGET_SMALL) | cut -d' ' -f1))
-	$(eval NODEBUG_SHA256 := $(shell sha256sum $(TARGET_SMALL) | cut -d' ' -f1))
+	$(eval FULL_SIZE := $(shell stat -c%s $(TARGET_FULL)))
+	$(eval FULL_MD5 := $(shell md5sum $(TARGET_FULL) | cut -d' ' -f1))
+	$(eval FULL_SHA256 := $(shell sha256sum $(TARGET_FULL) | cut -d' ' -f1))
+	$(eval SMALL_SIZE := $(shell stat -c%s $(TARGET_SMALL)))
+	$(eval SMALL_MD5 := $(shell md5sum $(TARGET_SMALL) | cut -d' ' -f1))
+	$(eval SMALL_SHA256 := $(shell sha256sum $(TARGET_SMALL) | cut -d' ' -f1))
 	@sed -e 's|@VERSION@|$(VERSION_NODOT)|g' \
 	     -e 's|@VERSION_DOT@|$(VERSION)|g' \
 	     -e 's|@DATE@|$(DATE)|g' \
 	     -e 's|@DATE_SHORT@|$(DATE_SHORT)|g' \
-	     -e 's|@DEBUG_SIZE@|$(DEBUG_SIZE)|g' \
-	     -e 's|@DEBUG_MD5@|$(DEBUG_MD5)|g' \
-	     -e 's|@DEBUG_SHA256@|$(DEBUG_SHA256)|g' \
-	     -e 's|@NODEBUG_SIZE@|$(NODEBUG_SIZE)|g' \
-	     -e 's|@NODEBUG_MD5@|$(NODEBUG_MD5)|g' \
-	     -e 's|@NODEBUG_SHA256@|$(NODEBUG_SHA256)|g' \
+	     -e 's|@FULL_SIZE@|$(FULL_SIZE)|g' \
+	     -e 's|@FULL_MD5@|$(FULL_MD5)|g' \
+	     -e 's|@FULL_SHA256@|$(FULL_SHA256)|g' \
+	     -e 's|@SMALL_SIZE@|$(SMALL_SIZE)|g' \
+	     -e 's|@SMALL_MD5@|$(SMALL_MD5)|g' \
+	     -e 's|@SMALL_SHA256@|$(SMALL_SHA256)|g' \
 	     $(README_TEMPLATE) > $@
 	@echo "Generated: $@"
 
@@ -84,7 +84,7 @@ $(README_NAME): $(README_TEMPLATE) $(TARGET_DEBUG) $(TARGET_SMALL)
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: $(TARGET_DEBUG) $(TARGET_SMALL) $(README_NAME) check-lha
+release: $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) check-lha
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
 	@echo "=================================="
 	$(eval STAGING := $(shell mktemp -d))
@@ -96,7 +96,7 @@ release: $(TARGET_DEBUG) $(TARGET_SMALL) $(README_NAME) check-lha
 	@cp c/pcmciacheck "$(STAGING)/cfd/c/" 2>/dev/null || true
 	@cp c/pcmciaspeed "$(STAGING)/cfd/c/" 2>/dev/null || true
 	@# Device variants and mountlist
-	@cp $(TARGET_DEBUG) "$(STAGING)/cfd/devs/"
+	@cp $(TARGET_FULL) "$(STAGING)/cfd/devs/"
 	@cp $(TARGET_SMALL) "$(STAGING)/cfd/devs/"
 	@cp devs/CF0 "$(STAGING)/cfd/devs/"
 	@cp devs/CF0.info "$(STAGING)/cfd/devs/" 2>/dev/null || true
@@ -149,11 +149,11 @@ check-lha:
 # ============================================================
 
 # Show checksums for both versions
-checksums: $(TARGET_DEBUG) $(TARGET_SMALL)
+checksums: $(TARGET_FULL) $(TARGET_SMALL)
 	@echo "=== Full version ==="
-	@ls -l $(TARGET_DEBUG)
-	@echo "MD5:    $$(md5sum $(TARGET_DEBUG) | cut -d' ' -f1)"
-	@echo "SHA256: $$(sha256sum $(TARGET_DEBUG) | cut -d' ' -f1)"
+	@ls -l $(TARGET_FULL)
+	@echo "MD5:    $$(md5sum $(TARGET_FULL) | cut -d' ' -f1)"
+	@echo "SHA256: $$(sha256sum $(TARGET_FULL) | cut -d' ' -f1)"
 	@echo ""
 	@echo "=== Small version (no debug) ==="
 	@ls -l $(TARGET_SMALL)
@@ -162,7 +162,7 @@ checksums: $(TARGET_DEBUG) $(TARGET_SMALL)
 
 # Clean build artifacts
 clean:
-	rm -f $(TARGET_DEBUG) $(TARGET_SMALL)
+	rm -f $(TARGET_FULL) $(TARGET_SMALL)
 
 # Clean everything including release archives
 distclean: clean
@@ -186,7 +186,7 @@ help:
 	@echo "  help      - Show this help"
 	@echo ""
 	@echo "Output files:"
-	@echo "  $(TARGET_DEBUG)  - full version (with serial debug capability)"
+	@echo "  $(TARGET_FULL)  - full version (with serial debug capability)"
 	@echo "  $(TARGET_SMALL)  - small version (no debug code)"
 	@echo "  $(README_NAME)   - Aminet readme (generated)"
 	@echo "  $(ARCHIVE_NAME)  - Aminet release archive"

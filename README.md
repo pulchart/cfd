@@ -4,11 +4,7 @@ AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA. Fork of the
 
 ## Download
 
-* **GitHub**: [Releases](https://github.com/pulchart/cfd/releases)
-* **Aminet (v1.35)**: [driver/media/cfd135](https://aminet.net/driver/media/cfd135.lha)
-* **Aminet (v1.34)**: [driver/media/cfd134](https://aminet.net/driver/media/cfd134.lha)
-* **Aminet (v1.33)**: [driver/media/CFD133](https://aminet.net/driver/media/CFD133.lha)
-* **Aminet (v1.32)**: [driver/media/cfd](https://aminet.net/driver/media/cfd.lha)
+**GitHub**: [Releases](https://github.com/pulchart/cfd/releases)
 
 ## Purpose
 
@@ -17,6 +13,10 @@ Read and write your digital photos, mp3 files etc. directly from CompactFlash ca
 The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
 
 ## What's New in
+
+### v1.36
+
+* TBD
 
 ### v1.35
 
@@ -229,6 +229,7 @@ If cards are not recognized:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.36 | 01/2026 | TBD (Jaroslav Pulchart) |
 | v1.35 | 12/2025 | Serial debug output, enforce multi mode flag, SD-to-CF adapter fix. Full/small build variants (Jaroslav Pulchart) |
 | v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
 | v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
