@@ -16,6 +16,37 @@
 ; License along with this library; if not, write to the Free Software
 ; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+;===========================================================================
+; ARCHITECTURE OVERVIEW
+;===========================================================================
+;
+; This driver implements a block device for CompactFlash cards connected
+; via PCMCIA slot on Amiga 600/1200. It supports both ATA (CF native) and
+; ATAPI protocols, as well as SD cards via SD-to-CF adapters.
+;
+; REGISTER CONVENTIONS (internal functions):
+;   a3 = CFU pointer (CompactFlashUnit) - preserved across most calls
+;   a4 = CFD pointer (CompactFlashDevice base) - preserved across most calls
+;   a6 = library base (exec.library or other) - caller saves if needed
+;   d0 = return value / scratch
+;   d1 = scratch / parameter
+;   d2-d6 = preserved (caller saves via movem if used)
+;   a0-a2 = scratch / parameters
+;
+; KEY DATA STRUCTURES:
+;   CFD (CompactFlashDevice) - device base, contains exec pointers
+;   CFU (CompactFlashUnit) - per-unit state, card info, buffers
+;
+; TRANSFER MODES:
+;   The driver supports multiple PIO transfer modes (byte/word, I/O/memory)
+;   selected during card identification based on card capabilities.
+;
+; BUILD VARIANTS:
+;   Full build (DEBUG=1): includes serial debug output (~10KB)
+;   Small build (no DEBUG): minimal size (~8KB)
+;
+;===========================================================================
+
 FILE_VERSION	= 1
 FILE_REVISION	= 36
 
@@ -489,94 +520,150 @@ CMM_Sizeof		= 24
 A_Pb		= $bfe101		;Centronics data register
 
 ;--- private structs ---------------------------------------
-
+;
+; CompactFlashDevice (CFD) - Device base structure
+; Extends standard Amiga device structure (36 bytes)
+;
 ;struct CompactFlashDevice
-CFD_ExecBase	= 36			;LIB_Sizeof + 2
-CFD_DosBase	= 40
-CFD_CardBase	= 44
-CFD_SegList	= 48
-CFD_Unit	= 52
+CFD_ExecBase	= 36			;exec.library base pointer
+CFD_DosBase	= 40			;dos.library base pointer
+CFD_CardBase	= 44			;card.resource base pointer
+CFD_SegList	= 48			;segment list for expunge
+CFD_Unit	= 52			;pointer to CFU (single unit)
 CFD_Sizeof	= 56
 
+;---------------------------------------------------------------------------
+; CompactFlashUnit (CFU) - Per-unit state structure
+; Contains all runtime state for a PCMCIA card slot
+; Passed in a3 register to most internal functions
+;---------------------------------------------------------------------------
 ;struct CompactFlashUnit
-CFU_Flags	= 38			;UN_Sizeof
-CFU_Device	= 40
+CFU_Flags	= 38			;unit flags (CFUF_*)
+CFU_Device	= 40			;back-pointer to CFD
 
-CFU_UnitSize	= 44			;help cfddebug
-CFU_ResVersion	= 48
-CFU_ResRev	= 50
-CFU_Debug	= 52
-CFU_ActiveHacks	= 54
-CFU_ReadErrors	= 56
-CFU_WriteErrors	= 60
+;--- Diagnostics ---
+CFU_UnitSize	= 44			;size of this struct
+CFU_ResVersion	= 48			;resource version
+CFU_ResRev	= 50			;resource revision
+CFU_Debug	= 52			;debug flags
+CFU_ActiveHacks	= 54			;active compatibility hacks
+CFU_ReadErrors	= 56			;read error counter (long)
+CFU_WriteErrors	= 60			;write error counter (long)
 
-CFU_TimeReq	= 64
+;--- Timer ---
+CFU_TimeReq	= 64			;struct IORequest for timer.device
 
-CFU_Process	= 104
-CFU_CardSig	= 108
-CFU_Signals2	= 112			;timer, card
-CFU_Signals3	= 116			;timer, card, ioreq
-CFU_CardHandle	= 120
-CFU_InsertInt	= 148
-CFU_RemoveInt	= 172
-CFU_StatusInt	= 196
-CFU_EventFlags	= 220
-CFU_IOErr	= 221
-CFU_IDEStatus	= 222
-CFU_IDEError	= 223
-CFU_MemPtr	= 224
-CFU_AttrPtr	= 228
-CFU_IOPtr	= 232
-CFU_MultiSize	= 236
+;--- Task/Signal management ---
+CFU_Process	= 104			;unit process pointer
+CFU_CardSig	= 108			;signal for card events
+CFU_Signals2	= 112			;signal mask: timer + card
+CFU_Signals3	= 116			;signal mask: timer + card + ioreq
+CFU_CardHandle	= 120			;card.resource handle
+
+;--- Interrupt servers ---
+CFU_InsertInt	= 148			;card insert interrupt
+CFU_RemoveInt	= 172			;card remove interrupt
+CFU_StatusInt	= 196			;status change interrupt
+
+;--- Card state ---
+CFU_EventFlags	= 220			;event flags byte
+				;  bit 0-1: card removed flags
+				;  bit 6: timer active
+CFU_IOErr	= 221			;last I/O error code
+CFU_IDEStatus	= 222			;last IDE status register
+CFU_IDEError	= 223			;last IDE error register
+
+;--- Memory pointers ---
+CFU_MemPtr	= 224			;PCMCIA common memory base
+CFU_AttrPtr	= 228			;PCMCIA attribute memory base
+CFU_IOPtr	= 232			;PCMCIA I/O space base
+
+;--- Multi-sector settings ---
+CFU_MultiSize	= 236			;sectors per interrupt (from card)
 CFU_OpenFlags	= 238			;mount Flags field
-					;bit 0: "cfd first" hack
-					;bit 1: skip PCMCIA signature
-					;bit 2: compatibility mode
-					;bit 3: serial debug output
-					;bit 4: enforce multi mode (256 sectors)
+				;  bit 0: "cfd first" hack
+				;  bit 1: skip PCMCIA signature
+				;  bit 2: compatibility mode
+				;  bit 3: serial debug output (Flags=8)
+				;  bit 4: enforce multi mode 256 sectors (Flags=16)
 CFUF_SERIALDEBUG = 8			;Flags = 8 enables serial debug
-CFU_DTSize	= 240			;struct DeviceTData
-CFU_DTSpeed	= 244
-CFU_DTType	= 248
-CFU_DTFlags	= 249
-CFU_CardReady	= 250			;0 during recognition/initialization
-CFU_Clients	= 252			;struct List
-CFU_Request	= 264
-CFU_DriveSize	= 268
-CFU_BlockSize	= 272
-CFU_Block	= 276
-CFU_Count	= 280
-CFU_Buffer	= 284
-CFU_Try		= 288
-CFU_SCSIState	= 290
-CFU_ConfigAddr	= 292
-CFU_RWFlags	= 296
-CFU_BlockShift	= 298
-CFU_ReadMode	= 300
-CFU_WriteMode	= 301
-CFU_ReceiveMode	= 302
-CFU_SendMode	= 303
-CFU_WatchInt	= 304
-CFU_WatchTimer	= 328
-CFU_IDESense	= 330
-CFU_unused2	= 331
-CFU_OKInts	= 332
-CFU_FastInts	= 336
-CFU_LostInts	= 340
-CFU_IDEAddr	= 344
-CFU_IDESet	= 348
-CFU_SCSIStruct	= 356
-CFU_PLength	= 386
-CFU_Packet	= 388
 
-CFU_ConfigBlock	= 404
+;--- Transfer configuration ---
+CFU_DTSize	= 240			;DeviceTData size
+CFU_DTSpeed	= 244			;DeviceTData speed
+CFU_DTType	= 248			;DeviceTData type
+CFU_DTFlags	= 249			;DeviceTData flags
+CFU_CardReady	= 250			;0 during recognition/init, 1 when ready
 
-CFU_TimePort	= 916
+;--- Client management ---
+CFU_Clients	= 252			;struct List of disk change clients
+CFU_Request	= 264			;current IORequest pointer
 
-CFU_KillSig	= 952
-CFU_KillTask	= 956
-CFU_CacheFlags	= 960
-CFU_MultiSizeRW	= 964			;multi size for read/write (or static override)
+;--- Drive geometry ---
+CFU_DriveSize	= 268			;total sectors (LBA count)
+CFU_BlockSize	= 272			;bytes per sector (usually 512)
+
+;--- Current I/O operation ---
+CFU_Block	= 276			;current block number
+CFU_Count	= 280			;bytes remaining
+CFU_Buffer	= 284			;buffer pointer
+CFU_Try		= 288			;retry counter
+
+;--- SCSI emulation ---
+CFU_SCSIState	= 290			;SCSI state machine
+CFU_ConfigAddr	= 292			;card configuration address
+CFU_RWFlags	= 296			;read/write flags
+CFU_BlockShift	= 298			;log2(blocksize), e.g. 9 for 512
+
+;--- Transfer modes ---
+; These select PIO transfer method (byte/word, I/O mapped/memory mapped)
+CFU_ReadMode	= 300			;read transfer mode
+CFU_WriteMode	= 301			;write transfer mode
+CFU_ReceiveMode	= 302			;receive transfer mode (for identify)
+CFU_SendMode	= 303			;send transfer mode
+
+;--- Watchdog ---
+CFU_WatchInt	= 304			;watchdog interrupt
+CFU_WatchTimer	= 328			;watchdog timer value
+
+;--- IDE state ---
+CFU_IDESense	= 330			;IDE sense data
+CFU_unused2	= 331			;reserved
+CFU_OKInts	= 332			;successful interrupt count
+CFU_FastInts	= 336			;fast interrupt count
+CFU_LostInts	= 340			;lost interrupt count
+
+;--- IDE command block ---
+CFU_IDEAddr	= 344			;IDE register base address
+CFU_IDESet	= 348			;IDE command buffer (8 bytes)
+				;  +0: Features
+				;  +1: Sector Count
+				;  +2: LBA Low (7:0)
+				;  +3: LBA Mid (15:8)
+				;  +4: LBA High (23:16)
+				;  +5: Device/Head (27:24 + flags)
+				;  +6: Command
+				;  +7: (unused)
+
+;--- SCSI direct ---
+CFU_SCSIStruct	= 356			;SCSI command structure
+CFU_PLength	= 386			;ATAPI packet length (12 or 16), 0=ATA
+CFU_Packet	= 388			;ATAPI command packet
+
+;--- IDENTIFY data ---
+CFU_ConfigBlock	= 404			;512-byte IDENTIFY buffer
+
+;--- Message port ---
+CFU_TimePort	= 916			;timer reply port
+
+;--- Termination ---
+CFU_KillSig	= 952			;kill signal number
+CFU_KillTask	= 956			;task to signal on kill
+CFU_CacheFlags	= 960			;saved cache flags
+
+;--- Multi-sector R/W ---
+CFU_MultiSizeRW	= 964			;bytes per transfer (sectors * 512)
+				;set from card or override (Flags=16)
 
 CFU_Sizeof	= 966
 
@@ -3155,7 +3242,19 @@ bw_end:
 	rts
 
 ;--- wait for drive ----------------------------------------
-
+; Wait for drive to become ready (BSY clear)
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Output:
+;   CFU_IDEStatus updated with current status
+;
+; Notes:
+;   - Polls INTRQ/READY or waits for interrupt
+;   - Handles both fast (polling) and slow (wait) paths
+;   - Some cards (e.g. Kingston) use READY instead of INTRQ
+;
 WaitReady:
 	moveq.l	#7,d0
 	and.b	CFU_EventFlags(a3),d0
@@ -3200,7 +3299,18 @@ cws_end:
 	rts
 
 ;--- start IDE ---------------------------------------------
-
+; Begin IDE/PCMCIA access session
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Side effects:
+;   - Calls BeginCardAccess on card.resource
+;   - Disables data cache if using memory-mapped mode
+;
+; Notes:
+;   Must be paired with _IDEStop after transfer completes
+;
 _IDEStart:
 	cmp.b	#4,CFU_ReceiveMode(a3)
 	bne.s	_ia_1
@@ -3214,7 +3324,15 @@ _ia_1:
 	JMPCARD BeginCardAccess
 
 ;--- stop IDE ----------------------------------------------
-
+; End IDE/PCMCIA access session
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Side effects:
+;   - Calls EndCardAccess on card.resource
+;   - Restores data cache state if using memory-mapped mode
+;
 _IDEStop:
 	lea	CFU_CardHandle(a3),a1
 	CALLCARD EndCardAccess
@@ -3276,8 +3394,21 @@ _idee_done:
 	rts
 
 ;--- send Kommand ------------------------------------------
-; d0 -> 1 (OK)
-
+; Send IDE command to the drive
+;
+; Input:
+;   a3 = CFU pointer
+;   CFU_IDESet = command block (Features, SectorCount, LBA, Command)
+;
+; Output:
+;   d0 = 1 if command sent OK, 0 if card removed/error
+;   CFU_IDEStatus updated
+;
+; Notes:
+;   - Waits for BSY clear before sending
+;   - Writes command block to IDE registers
+;   - Command is in CFU_IDESet+6 (byte 7 of task file)
+;
 _IDECmd:
 	move.l	a2,-(sp)
 	moveq.l	#0,d0
@@ -3328,7 +3459,38 @@ _idec_end:
 	rts
 
 ;--- read drive Konfiguration ------------------------------
-
+; Identify the connected CF/ATA/ATAPI device
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = device type:
+;        0 = no device / error
+;        1 = ATA device (CompactFlash)
+;        2 = ATAPI device (CD-ROM, etc.)
+;
+; Side effects:
+;   - Fills CFU_ConfigBlock with 512-byte IDENTIFY data
+;   - Sets CFU_DriveSize (total sectors)
+;   - Sets CFU_MultiSize (sectors per interrupt)
+;   - Sets CFU_PLength (0=ATA, 12/16=ATAPI packet length)
+;
+; Register usage:
+;   d2 = return value (device type)
+;   d3 = read mode counter (tries different PIO modes)
+;   d4 = (scratch)
+;   d5 = command word ($e0ec=IDENTIFY, $a0a1=IDENTIFY PACKET)
+;   d6 = retry counter for slow SD-to-CF adapters
+;   a2 = buffer pointer
+;
+; Flow:
+;   1. Send IDENTIFY DEVICE command ($EC)
+;   2. Wait for DRQ, retry up to 32 times for slow adapters
+;   3. If DRQ not set after retries, try IDENTIFY PACKET DEVICE ($A1)
+;   4. Read 512-byte identify data
+;   5. Parse device type and set unit parameters
+;
 _GetIDEID:
 	movem.l	d2-d6/a2,-(sp)
 
@@ -3475,11 +3637,31 @@ _gid_end:
 	rts
 
 ;--- read Blocks -------------------------------------------
-; d0 <- Block #
-; d1 <- byte count
-; a1 <-> &buffer
-; d0 -> bytes read
-
+; Read sectors from CF card using PIO
+;
+; Input:
+;   d0 = starting block number (LBA)
+;   d1 = byte count to read
+;   a1 = destination buffer pointer
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = bytes actually read (0 on error)
+;
+; Register usage:
+;   d2 = current block number
+;   d3 = bytes remaining
+;   d4 = bytes per transfer chunk
+;   d5 = total bytes (for return value)
+;   d6 = sectors per interrupt
+;   a2 = buffer pointer
+;
+; Notes:
+;   - Uses READ SECTORS ($21) for single-sector transfers
+;   - Uses READ MULTIPLE ($C4) for multi-sector transfers
+;   - Handles ATAPI via SCSI path (_rb_scsi)
+;   - Retries up to 5 times on error
+;
 _ReadBlocks:
 	movem.l	d2-d6/a2,-(sp)
 	move.l	a1,a2			;&buffer
@@ -3680,9 +3862,32 @@ _rb_serror:
 	bra.w	_rb_ready
 
 ;--- PIO IN Transfer ---------------------------------------
-; d0 <-  # Bytes
-; a2 <-> &buffer
-
+; Read data from CF card using Programmed I/O
+;
+; Input:
+;   d0 = byte count to read
+;   a2 = destination buffer pointer
+;   a3 = CFU pointer
+;   CFU_ReceiveMode = transfer mode (0-4)
+;
+; Output:
+;   a2 = updated buffer pointer (past data read)
+;
+; Transfer Modes (CFU_ReceiveMode):
+;   0 = I/O Register 8, word-wise
+;       Simple word reads from single PCMCIA I/O register
+;   1 = I/O Register 8 + duplicates, word-wise
+;       Reads from register with address increment (8KB window)
+;       For cards that mirror data across address range
+;   2 = I/O Registers 8 and 9, byte-wise
+;       Alternating byte reads from two registers (low/high)
+;       For byte-only PCMCIA implementations
+;   3 = I/O Register 8, word-wise, drop every other word
+;       Reads word, discards next word (for specific adapters)
+;   4 = Memory mapped, word-wise
+;       Direct memory access (fastest, 1KB window)
+;       Requires memory-mapped PCMCIA support
+;
 _pio_in:
 	moveq.l	#0,d1
 	move.b	CFU_ReceiveMode(a3),d1
@@ -3844,9 +4049,27 @@ pi4_loop2:
 	rts
 
 ;--- PIO OUT Transfer --------------------------------------
-; d0 <-  # Bytes
-; a2 <-> &buffer
-
+; Write data to CF card using Programmed I/O
+;
+; Input:
+;   d0 = byte count to write
+;   a2 = source buffer pointer
+;   a3 = CFU pointer
+;   CFU_SendMode = transfer mode (0-4)
+;
+; Output:
+;   a2 = updated buffer pointer (past data written)
+;
+; Transfer Modes (CFU_SendMode):
+;   0 = I/O Register 8, word-wise
+;   1 = I/O Register 8 + duplicates, word-wise (8KB window)
+;   2 = I/O Registers 8 and 9, byte-wise
+;   3 = (redirects to mode 1)
+;   4 = Memory mapped, word-wise (1KB window)
+;
+; Note: Mode selection is determined during card identification
+; based on card capabilities and PCMCIA hardware.
+;
 _pio_out:
 	moveq.l	#0,d1
 	move.b	CFU_SendMode(a3),d1
@@ -3982,11 +4205,32 @@ po4_loop2:
 	rts
 
 ;--- write Blocks ------------------------------------------
-; d0 <- Block #
-; d1 <- bytes to write
-; a0 <-> &buffer or -1 ("erase only)"
-; d0 -> bytes written
-
+; Write sectors to CF card using PIO
+;
+; Input:
+;   d0 = starting block number (LBA)
+;   d1 = byte count to write
+;   a0 = source buffer pointer, or -1 for erase (zero-fill)
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = bytes actually written (0 on error)
+;
+; Register usage:
+;   d2 = current block number
+;   d3 = bytes remaining
+;   d4 = bytes per transfer chunk
+;   d5 = total bytes (for return value)
+;   d6 = sectors per interrupt
+;   a2 = buffer pointer
+;
+; Notes:
+;   - Uses WRITE SECTORS ($31) for single-sector transfers
+;   - Uses WRITE MULTIPLE ($C5) for multi-sector transfers
+;   - Handles ATAPI via SCSI path (_wb_scsi)
+;   - Special case: a0=-1 writes zeros (erase)
+;   - Retries up to 5 times on error
+;
 _WB2:
 	move.l	a1,a0
 _WriteBlocks:

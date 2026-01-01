@@ -19,6 +19,10 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 * **SD-to-CF adapter retry fix**
   - when ATA IDENTIFY retries exhaust (regresion in v1.33), now tries ATAPI IDENTIFY PACKET DEVICE before giving up (as v1.32)
   - Fixes potential hang on SD-to-CF adapters
+* **Improved code documentation**
+  - Architecture overview with register conventions
+  - Documented CFU structure fields
+  - Added function headers with input/output/register usage
 
 ### v1.35
 

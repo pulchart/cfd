@@ -15,6 +15,9 @@ CHANGES IN @VERSION_DOT@ (@DATE@)
 * SD-to-CF adapter retry fix (introduced in v1.33)
   - When ATA IDENTIFY retries exhaust, now tries ATAPI IDENTIFY PACKET DEVICE
   - Fixes potential hang on SD-to-CF adapters
+* Improved code documentation
+  - Architecture overview with register conventions
+  - Documented CFU structure fields and key functions
 
 FEATURES
 ========
