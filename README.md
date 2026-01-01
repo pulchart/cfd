@@ -1,15 +1,6 @@
 # compactflash.device
 
-AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA
-
-**Fork** of the original driver by Torsten Jager, with improvements for >4GB cards.
-
-| Version | Author | Date |
-|---------|--------|------|
-| v1.32 | Torsten Jager | 18.11.2009 |
-| v1.33 | Paul Carter | 1.1.2017 |
-| v1.34 | Jaroslav Pulchart | 22.10.2025 |
-| v1.35 | Jaroslav Pulchart | 31.12.2025 |
+AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA. Fork of the original driver by Torsten Jager.
 
 ## Download
 
@@ -25,7 +16,9 @@ Read and write your digital photos, mp3 files etc. directly from CompactFlash ca
 
 The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
 
-## What's New in v1.35
+## What's New in
+
+### v1.35
 
 * **Serial debug output** - set `Flags = 8` to enable debug messages via serial port
   - Shows card insert/remove, identification, size, and MultiSize
@@ -35,7 +28,7 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
   - **Warning:** May cause data corruption on unsupported cards - see Enforce Multi Mode section below
 * **Simplified SD-to-CF adapter support** - cleaner retry mechanism for IDENTIFY command introduced in v1.33
 
-## What's New in v1.34
+### v1.34
 
 * Improved compatibility with >4GB CF cards
   - Workaround for "get IDE ID" on large capacity cards
@@ -76,13 +69,13 @@ Copy def_CF0.info env:sys
 
 ## Hardware Notes
 
-You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side (see `images/cf-pcmcia-adapter.jpg`).
+You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side (see [images/cf-pcmcia-adapter.jpg](images/cf-pcmcia-adapter.jpg)).
 
 There are two types of such adapters:
 * **CF Type 1** - for standard thickness CF cards
 * **CF Type 2** - also supports thicker cards like MicroDrive (costs more)
 
-Alternatively, you can use an SD-to-CF adapter with SD cards (see `images/sd-cf-adapter.jpg`).
+Alternatively, you can use an SD-to-CF adapter with SD cards (see [images/sd-cf-adapter.jpg](images/sd-cf-adapter.jpg)).
 
 Tested with CompactFlash cards (16MB, 4GB, 8GB, 16GB, 32GB, 64GB) and SD cards via SD-to-CF adapter (SanDisk, Samsung MicroSD).
 
@@ -157,7 +150,7 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 
 Read and Write IO path will use 256 sectors for single IO regardless of what the card supports in Multiple Sector Mode if this flag is set (same behaviour as v1.33). The IO sector count can be limited by `MaxTransfer` (0x200 = 1 sector per IO) value in CF0 file.
 
-**Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:cfd.s`). The content should not contain repeating 32-byte pattern after first 512 bytes. See `images/multimode-issue.jpg` for an example of what broken output looks like on unsupported cards.
+**Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:cfd.s`). The content should not contain repeating 32-byte pattern after first 512 bytes. See [images/multimode-issue.jpg](images/multimode-issue.jpg) for an example of what broken output looks like on unsupported cards.
 
 ```
 Flags = 16
