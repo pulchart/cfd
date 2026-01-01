@@ -3369,7 +3369,10 @@ _gid_command:
 	moveq.l	#$29,d0			;DF, DRQ, ERR
 	and.b	CFU_IDEStatus(a3),d0
 	subq.b	#8,d0			;DRQ
-	bne.w	_gid_check_retry	;retry for slow adapters
+	beq.s	.drq_ok
+	moveq.l	#0,d2			;mark: ATA not yet identified
+	bra.w	_gid_check_retry	;retry for slow adapters
+.drq_ok:
 
 	lea	CFU_ConfigBlock(a3),a2
 	moveq.l	#512>>8,d0
@@ -3454,9 +3457,14 @@ _gid_atapi:
 _gid_a1:
 	move.w	d1,CFU_PLength(a3)	;set ATAPI command length
 	moveq.l	#2,d2			;ATAPI OK
+	bra.s	_gid_end
+
+;--- Retry for slow SD-to-CF adapters ---
+; When DRQ not set after IDENTIFY DEVICE, retry with delay.
+; If retries exhausted, try ATAPI IDENTIFY PACKET DEVICE.
 _gid_check_retry:
 	subq.l	#1,d6
-	beq.s	_gid_end		;no more retries
+	beq.s	_gid_break		;ATA exhausted, try ATAPI
 	bsr.w	Wait40			;delay before retry
 	bra.w	_gid_retry
 
