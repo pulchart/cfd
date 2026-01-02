@@ -44,6 +44,7 @@
 ; BUILD VARIANTS:
 ;   Full build (DEBUG=1): includes serial debug output (~10KB)
 ;   Small build (no DEBUG): minimal size (~8KB)
+;   Fast PIO build (FASTPIO=1): enables PIO speed optimization (experimental)
 ;
 ;===========================================================================
 
@@ -55,6 +56,11 @@ FILE_REVISION	= 36
 ; Set via assembler command line: -DDEBUG=1
 ; Or uncomment the next line:
 ;DEBUG	= 1
+
+; Define FASTPIO symbol to enable PIO speed optimization
+; Set via assembler command line: -DFASTPIO=1
+; Or uncomment the next line:
+;FASTPIO	= 1
 
 ;--- from exec.library -------------------------------------
 
@@ -406,6 +412,7 @@ INQUIRY		= $12
 READCAPACITY	= $25
 READ10		= $28
 WRITE10		= $2a
+ATA_IDENTIFY	= $EC			;ATA IDENTIFY passthrough (vendor-specific)
 
 ;--- from timer.device -------------------------------------
 
@@ -695,7 +702,7 @@ s_name:
 	dc.b	"compactflash.device",0
 	dc.b	"$VER: "
 s_idstring:
-	dc.b	"compactflash.device 1.36 (01.01.2026)",LF,0
+	dc.b	"compactflash.device 1.36 (02.01.2026)",LF,0
 	dc.b	"� Torsten Jager",0
 CardName:
 	dc.b	"card.resource",0
@@ -730,6 +737,24 @@ dbg_spinup:
 	dc.b	"[CFD] Spinup",13,10,0
 dbg_multimode:
 	dc.b	"[CFD] Init multi mode",13,10,0
+	ifd	FASTPIO
+dbg_card_pio:
+	dc.b	"[CFD] ..Card PIO: ",0
+dbg_gayle_speed:
+	dc.b	" -> Gayle: ",0
+dbg_gayle_actual:
+	dc.b	"[CFD] ..actual:  ",0
+dbg_gayle_cardres:
+	dc.b	"[CFD] ..using CardResource",13,10,0
+dbg_gayle_direct:
+	dc.b	"[CFD] ..using direct Gayle access",13,10,0
+	endc
+dbg_gayle_timing:
+	dc.b	"[CFD] Gayle timing: ",13,10,0
+dbg_gayle_current:
+	dc.b	"[CFD] ..current: ",0
+dbg_ns:
+	dc.b	"ns",13,10,0
 dbg_notify:
 	dc.b	"[CFD] Notify clients",13,10,0
 dbg_done:
@@ -1584,6 +1609,7 @@ _sc_tab:
 	dc.w	6<<8+TESTUNITREADY, _TestUnitReady-_sc_tab
 	dc.w	6<<8+REQUESTSENSE, _RequestSense-_sc_tab
 	dc.w	6<<8+INQUIRY, _Inquiry-_sc_tab
+	dc.w	6<<8+ATA_IDENTIFY, _ATAIdentify-_sc_tab
 	dc.w	0
 
 ;*** SCSI Emulation ****************************************
@@ -1672,6 +1698,45 @@ _iq_copy:
 _iq_2:
 	add.w	#96,sp
 	moveq.l	#0,d0
+	rts
+
+;--- ATA IDENTIFY PASSTHROUGH ------------------------------
+; Returns cached 512-byte IDENTIFY data from CFU_ConfigBlock
+; This is a vendor-specific extension (command $EC)
+;
+; Input:
+;   a2 = &SCSICmd structure
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = SCSI status (0 = success)
+;   SCSI_Actual = bytes copied
+;   SCSI_Data buffer filled with IDENTIFY data
+;
+_ATAIdentify:
+	move.l	SCSI_Length(a2),d1
+	beq.s	_aid_end		;no buffer
+
+	move.l	(a2),d0			;SCSI_Data
+	beq.s	_aid_end		;no buffer pointer
+
+	;Limit to 512 bytes (IDENTIFY data size)
+	cmp.l	#512,d1
+	bls.s	_aid_1
+	move.l	#512,d1
+_aid_1:
+	move.l	d1,SCSI_Actual(a2)
+	move.l	d0,a1			;destination
+	lea	CFU_ConfigBlock(a3),a0	;source (cached IDENTIFY data)
+
+	;Copy d1 bytes from a0 to a1
+_aid_copy:
+	move.b	(a0)+,(a1)+
+	subq.l	#1,d1
+	bgt.s	_aid_copy
+
+_aid_end:
+	moveq.l	#0,d0			;success
 	rts
 
 ;--- READ CAPACITY -----------------------------------------
@@ -2757,6 +2822,7 @@ _t_i8:
 	DBGMSG	dbg_multimode
 	bsr.w	_InitMultipleMode
 	DBGMSG	dbg_done
+	bsr.w	_OptimizePIOSpeed	;set faster PIO if flag set
 	bra.s	_t_iok
 _t_iatapi:
 	bsr.w	ATAPIPoll		;start monitoring media removals
@@ -4574,6 +4640,201 @@ _imm_error:
 	DBGMSG	dbg_multifail
 	moveq.l	#1,d0			;default to single blocks
 	bra.s	_imm_end
+
+;--- PIO Mode to Memory Timing Mapping ---------------------
+; Compile-time option: FASTPIO
+;
+; Maps card's ATA PIO mode capability to Gayle PCMCIA memory
+; access timing. This sets the memory bus speed based on what
+; the card reports it can handle.
+;
+; Input:
+;   a3 = CFU pointer
+;   CFU_ConfigBlock contains IDENTIFY data
+;
+; IDENTIFY Word 51 (offset 102), bits 15:8:
+;   0 = PIO mode 0, 1 = PIO mode 1, 2 = PIO mode 2
+;
+; IDENTIFY Word 64 (offset 128):
+;   Bit 0: PIO mode 3 supported (180ns cycle)
+;   Bit 1: PIO mode 4 supported (120ns cycle)
+;
+; PIO to Gayle memory timing mapping:
+;   PIO 4 (120ns) → Gayle 100ns
+;   PIO 3 (180ns) → Gayle 150ns
+;   PIO 2 (240ns) → Gayle 250ns
+;   PIO 1 (383ns) → Gayle 250ns
+;   PIO 0 (600ns) → Gayle 720ns (default)
+;
+_OptimizePIOSpeed:
+	ifd	FASTPIO
+	DBGMSG	dbg_gayle_timing
+
+	;Check Word 64 for advanced PIO modes (3/4)
+	;d0 = Gayle speed (ns), d1 = PIO mode number
+	move.w	CFU_ConfigBlock+128(a3),d0	;Word 64: advanced PIO modes
+	btst	#1,d0			;PIO mode 4?
+	beq.s	_ops_pio3
+
+	;PIO mode 4: use 100ns (Gayle fastest)
+	moveq.l	#4,d1			;PIO mode 4
+	move.l	#100,d0			;Gayle 100ns
+	bra.s	_ops_set
+_ops_pio3:
+	btst	#0,d0			;PIO mode 3?
+	beq.s	_ops_pio2
+
+	;PIO mode 3: use 150ns
+	moveq.l	#3,d1			;PIO mode 3
+	move.l	#150,d0			;Gayle 150ns
+	bra.s	_ops_set
+_ops_pio2:
+	;Check Word 51 high byte for basic PIO modes (0/1/2)
+	move.b	CFU_ConfigBlock+102(a3),d0	;Word 51 bits 15:8
+	cmp.b	#2,d0			;PIO mode 2?
+	bne.s	_ops_pio1
+
+	;PIO mode 2: use 250ns
+	moveq.l	#2,d1			;PIO mode 2
+	move.l	#250,d0			;Gayle 250ns
+	bra.s	_ops_set
+_ops_pio1:
+	cmp.b	#1,d0			;PIO mode 1?
+	bne.w	_ops_end		;PIO 0, keep default 720ns
+
+	;PIO mode 1: use 250ns
+	moveq.l	#1,d1			;PIO mode 1
+	move.l	#250,d0			;Gayle 250ns
+_ops_set:
+	move.l	d0,CFU_DTSpeed(a3)
+	ifd	DEBUG
+	movem.l	d0-d1,-(sp)
+	DBGMSG	dbg_card_pio
+	move.l	4(sp),d0		;PIO mode (d1)
+	bsr.w	_DebugDecimal
+	DBGMSG	dbg_gayle_speed
+	move.l	(sp),d0			;Gayle speed (d0)
+	bsr.w	_DebugDecimal
+	DBGMSG	dbg_ns
+	movem.l	(sp)+,d0-d1
+	endc
+
+	;Check compatibility flag to choose method
+	btst	#2,CFU_OpenFlags+1(a3)	;Flags = 4?
+	beq.s	_ops_direct		;not set, try direct
+
+	;Use CardResource API (Flags = 4)
+	ifd	DEBUG
+	DBGMSG	dbg_gayle_cardres
+	;Show current Gayle speed before changing
+	DBGMSG	dbg_gayle_current
+	move.l	#$00DAB000,a0
+	moveq.l	#0,d0
+	move.b	(a0),d0
+	and.b	#$0C,d0			;mask speed bits 2-3
+	bsr.w	_ops_bits_to_ns		;convert to nanoseconds
+	bsr.w	_DebugDecimal
+	DBGMSG	dbg_ns
+	endc
+	move.l	CFU_DTSpeed(a3),d0
+	lea	CFU_CardHandle(a3),a1
+	CALLCARD CardAccessSpeed
+	bra.s	_ops_show_actual
+
+_ops_direct:
+	;Direct Gayle write to register $DAB000
+	;  bits 2-3 = memory speed
+	;  00 = 250ns (default), 01 = 150ns, 10 = 100ns, 11 = 720ns
+	ifd	DEBUG
+	DBGMSG	dbg_gayle_direct
+	;Show current Gayle speed before changing
+	DBGMSG	dbg_gayle_current
+	move.l	#$00DAB000,a0
+	moveq.l	#0,d0
+	move.b	(a0),d0
+	and.b	#$0C,d0			;mask speed bits 2-3
+	bsr.s	_ops_bits_to_ns		;convert to nanoseconds
+	bsr.w	_DebugDecimal
+	DBGMSG	dbg_ns
+	endc
+	;Convert nanoseconds to Gayle speed bits
+	move.l	CFU_DTSpeed(a3),d0
+	moveq.l	#0,d1			;speed bits
+	cmp.l	#150,d0
+	bhi.s	_ops_d_250		;>150 = 250ns or slower
+	cmp.l	#100,d0
+	bhi.s	_ops_d_150		;>100 = 150ns
+	moveq.l	#8,d1			;100ns = bit 3
+	bra.s	_ops_d_set
+_ops_d_150:
+	moveq.l	#4,d1			;150ns = bit 2
+	bra.s	_ops_d_set
+_ops_d_250:
+	cmp.l	#720,d0
+	bls.s	_ops_d_set		;<=720 = 250ns (d1=0)
+	moveq.l	#12,d1			;720ns = bits 2+3
+_ops_d_set:
+	;Write $DAB000
+	;Preserve bits 0-1 (voltage), set bits 2-3 (speed)
+	move.l	#$00DAB000,a0
+	move.b	(a0),d0			;read current value
+	and.b	#$03,d0			;keep voltage bits 0-1
+	or.b	d1,d0			;add speed bits 2-3
+	move.b	d0,(a0)			;write to
+	;Read back and convert bits to nanoseconds
+	moveq.l	#0,d0
+	move.b	(a0),d0			;read back
+	and.b	#$0C,d0			;mask speed bits 2-3
+	bsr.s	_ops_bits_to_ns		;convert to nanoseconds
+
+_ops_show_actual:
+	ifd	DEBUG
+	;d0 = actual speed selected by hardware
+	move.l	d0,-(sp)
+	DBGMSG	dbg_gayle_actual
+	move.l	(sp)+,d0
+	bsr.w	_DebugDecimal
+	DBGMSG	dbg_ns
+	endc
+_ops_end:
+	rts
+	else
+	;FASTPIO not compiled - read and show current Gayle speed
+	ifd	DEBUG
+	DBGMSG	dbg_gayle_timing
+	DBGMSG	dbg_gayle_current
+	move.l	#$00DAB000,a0
+	moveq.l	#0,d0
+	move.b	(a0),d0
+	and.b	#$0C,d0			;mask speed bits 2-3
+	bsr.s	_ops_bits_to_ns		;convert to nanoseconds
+	bsr.w	_DebugDecimal
+	DBGMSG	dbg_ns
+	endc
+	rts
+	endc
+
+;Convert Gayle speed bits to nanoseconds
+;Input:  d0 = speed bits (0, 4, 8, or 12)
+;Output: d0 = nanoseconds (250, 150, 100, or 720)
+_ops_bits_to_ns:
+	cmp.b	#8,d0
+	beq.s	_ops_b_100
+	cmp.b	#4,d0
+	beq.s	_ops_b_150
+	cmp.b	#12,d0
+	beq.s	_ops_b_720
+	move.l	#250,d0			;default 250ns (bits=0)
+	rts
+_ops_b_100:
+	move.l	#100,d0
+	rts
+_ops_b_150:
+	move.l	#150,d0
+	rts
+_ops_b_720:
+	move.l	#720,d0
+	rts
 
 ;--- start disk --------------------------------------------
 
