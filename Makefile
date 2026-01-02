@@ -1,31 +1,72 @@
 # Makefile for compactflash.device
-# Cross-compilation for Amiga using vasm
+# Build using vasm/ASMPro (assembler) and vbcc (C compiler)
+#
+# Usage: make [options] [target]
+#   help - show detailed usage output
 
-# Version (update these for new releases)
+# Driver Version (update these for new releases)
 VERSION = 1.36
-DATE = 01.01.2026
+DATE = 02.01.2026
 DATE_SHORT = 01/2026
 
-# Derived version (remove dot for filenames)
+# Tool-specific versions
+CFINFO_VERSION = 1.36
+CFINFO_DATE = 02.01.2026
+
+PCMCIASPEED_VERSION = 1.36
+PCMCIASPEED_DATE = 02.01.2026
+
+PCMCIACHECK_VERSION = 1.36
+PCMCIACHECK_DATE = 04.01.2026
+
+# Derived version (remove dot for release naming)
 VERSION_NODOT = $(subst .,,$(VERSION))
 
-# Tools
-VASM = vasmm68k_mot
+# Verbose mode (V=1 for verbose output)
+ifeq ($(V),1)
+  Q =
+  DEFINITIONS =
+else
+  Q = @
+  DEFINITIONS = -quiet
+endif
+
+# Gayle PCMCIA timing based on PIO modes (experimental)
+TEXT=""
+ifeq ($(FASTPIO),1)
+  TEXT="+gayletiming"
+  DEFINITIONS += -DFASTPIO=$(FASTPIO)
+endif
+
+# Tools (override these for different installations)
+VASM_HOME = /opt/vbcc
+VBCC_HOME = /opt/vbcc
+VASM = $(VASM_HOME)/bin/vasmm68k_mot
+VBCC = $(VBCC_HOME)/bin/vc
 LHA = lha
 
 # Flags
-VASMFLAGS = -Fhunkexe -m68020 -nosym
+VASMFLAGS = -Fhunkexe -m68020 -nosym $(DEFINITIONS)
+VBCCFLAGS = +aos68k -O2 -c99 -INDK/Include_H
 
 # Directories
 SRCDIR = src
 OUTDIR = devs
 
-# Files
+# Files: Driver
 SOURCE = $(SRCDIR)/cfd.s
 TARGET_FULL = $(OUTDIR)/compactflash.device
 TARGET_SMALL = $(OUTDIR)/compactflash.device.small
 
-# Release files
+# Files: Tools
+SOURCE_CFINFO = $(SRCDIR)/cfinfo.c
+TARGET_CFINFO = c/CFInfo
+SOURCE_PCMCIASPEED = $(SRCDIR)/pcmciaspeed.c
+TARGET_PCMCIASPEED = c/pcmciaspeed
+SOURCE_PCMCIACHECK = $(SRCDIR)/pcmciacheck.c
+TARGET_PCMCIACHECK = c/pcmciacheck
+
+# Files: Release
 RELEASE_NAME = cfd$(VERSION_NODOT)
 ARCHIVE_NAME = $(RELEASE_NAME).lha
 README_NAME = $(RELEASE_NAME).readme
@@ -35,18 +76,20 @@ README_TEMPLATE = cfd.readme.in
 # Build targets
 # ============================================================
 
-# Default target - build both versions
-all: $(TARGET_FULL) $(TARGET_SMALL)
+# Default target - build both versions and tools
+all: $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Full version (with serial debug capability)
 $(TARGET_FULL): $(SOURCE)
-	$(VASM) $(VASMFLAGS) -DDEBUG=1 -o $@ $<
-	@echo "Built: $@ ($$(stat -c%s $@) bytes) [full]"
+	$(Q)echo "  VASM    $@ [full${TEXT}]"
+	$(Q)$(VASM) $(VASMFLAGS) -DDEBUG=1 -o $@ $<
+	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # Small version (no debug code/strings)
 $(TARGET_SMALL): $(SOURCE)
-	$(VASM) $(VASMFLAGS) -o $@ $<
-	@echo "Built: $@ ($$(stat -c%s $@) bytes) [small]"
+	$(Q)echo "  VASM    $@ [small$(TEXT)]"
+	$(Q)$(VASM) $(VASMFLAGS) -o $@ $<
+	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # Build only full version
 full: $(TARGET_FULL)
@@ -54,12 +97,36 @@ full: $(TARGET_FULL)
 # Build only small version
 small: $(TARGET_SMALL)
 
+# Tools only target
+tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+
+# CFInfo utility (requires vbcc)
+$(TARGET_CFINFO): $(SOURCE_CFINFO)
+	$(Q)mkdir -p c
+	$(Q)echo "  VBCC    $(TARGET_CFINFO)"
+	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $<
+	$(Q)echo "          $$(stat -c%s $(TARGET_CFINFO)) bytes, md5:$$(md5sum $(TARGET_CFINFO) | cut -c1-8)"
+
+# pcmciaspeed utility (requires vbcc)
+$(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED)
+	$(Q)mkdir -p c
+	$(Q)echo "  VBCC    $(TARGET_PCMCIASPEED)"
+	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIASPEED_VERSION)"' -DDATE='"$(PCMCIASPEED_DATE)"' -o $(TARGET_PCMCIASPEED) $<
+	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIASPEED)) bytes, md5:$$(md5sum $(TARGET_PCMCIASPEED) | cut -c1-8)"
+
+# pcmciacheck utility (requires vbcc)
+$(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
+	$(Q)mkdir -p c
+	$(Q)echo "  VBCC    $(TARGET_PCMCIACHECK)"
+	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $<
+	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIACHECK)) bytes, md5:$$(md5sum $(TARGET_PCMCIACHECK) | cut -c1-8)"
+
 # ============================================================
 # Release targets
 # ============================================================
 
 # Generate readme from template
-$(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL)
+$(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 	@echo "Generating $(README_NAME) from template..."
 	$(eval FULL_SIZE := $(shell stat -c%s $(TARGET_FULL)))
 	$(eval FULL_MD5 := $(shell md5sum $(TARGET_FULL) | cut -d' ' -f1))
@@ -67,17 +134,35 @@ $(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL)
 	$(eval SMALL_SIZE := $(shell stat -c%s $(TARGET_SMALL)))
 	$(eval SMALL_MD5 := $(shell md5sum $(TARGET_SMALL) | cut -d' ' -f1))
 	$(eval SMALL_SHA256 := $(shell sha256sum $(TARGET_SMALL) | cut -d' ' -f1))
+	$(eval CFINFO_SIZE := $(shell stat -c%s $(TARGET_CFINFO)))
+	$(eval CFINFO_MD5 := $(shell md5sum $(TARGET_CFINFO) | cut -d' ' -f1))
+	$(eval CFINFO_SHA256 := $(shell sha256sum $(TARGET_CFINFO) | cut -d' ' -f1))
+	$(eval PCMCIASPEED_SIZE := $(shell stat -c%s $(TARGET_PCMCIASPEED)))
+	$(eval PCMCIASPEED_MD5 := $(shell md5sum $(TARGET_PCMCIASPEED) | cut -d' ' -f1))
+	$(eval PCMCIASPEED_SHA256 := $(shell sha256sum $(TARGET_PCMCIASPEED) | cut -d' ' -f1))
+	$(eval PCMCIACHECK_SIZE := $(shell stat -c%s $(TARGET_PCMCIACHECK)))
+	$(eval PCMCIACHECK_MD5 := $(shell md5sum $(TARGET_PCMCIACHECK) | cut -d' ' -f1))
+	$(eval PCMCIACHECK_SHA256 := $(shell sha256sum $(TARGET_PCMCIACHECK) | cut -d' ' -f1))
 	@sed -e 's|@VERSION@|$(VERSION_NODOT)|g' \
-	     -e 's|@VERSION_DOT@|$(VERSION)|g' \
-	     -e 's|@DATE@|$(DATE)|g' \
-	     -e 's|@DATE_SHORT@|$(DATE_SHORT)|g' \
-	     -e 's|@FULL_SIZE@|$(FULL_SIZE)|g' \
-	     -e 's|@FULL_MD5@|$(FULL_MD5)|g' \
-	     -e 's|@FULL_SHA256@|$(FULL_SHA256)|g' \
-	     -e 's|@SMALL_SIZE@|$(SMALL_SIZE)|g' \
-	     -e 's|@SMALL_MD5@|$(SMALL_MD5)|g' \
-	     -e 's|@SMALL_SHA256@|$(SMALL_SHA256)|g' \
-	     $(README_TEMPLATE) > $@
+		 -e 's|@VERSION_DOT@|$(VERSION)|g' \
+		 -e 's|@DATE@|$(DATE)|g' \
+		 -e 's|@DATE_SHORT@|$(DATE_SHORT)|g' \
+		 -e 's|@FULL_SIZE@|$(FULL_SIZE)|g' \
+		 -e 's|@FULL_MD5@|$(FULL_MD5)|g' \
+		 -e 's|@FULL_SHA256@|$(FULL_SHA256)|g' \
+		 -e 's|@SMALL_SIZE@|$(SMALL_SIZE)|g' \
+		 -e 's|@SMALL_MD5@|$(SMALL_MD5)|g' \
+		 -e 's|@SMALL_SHA256@|$(SMALL_SHA256)|g' \
+		 -e 's|@CFINFO_SIZE@|$(CFINFO_SIZE)|g' \
+		 -e 's|@CFINFO_MD5@|$(CFINFO_MD5)|g' \
+		 -e 's|@CFINFO_SHA256@|$(CFINFO_SHA256)|g' \
+		 -e 's|@PCMCIASPEED_SIZE@|$(PCMCIASPEED_SIZE)|g' \
+		 -e 's|@PCMCIASPEED_MD5@|$(PCMCIASPEED_MD5)|g' \
+		 -e 's|@PCMCIASPEED_SHA256@|$(PCMCIASPEED_SHA256)|g' \
+		 -e 's|@PCMCIACHECK_SIZE@|$(PCMCIACHECK_SIZE)|g' \
+		 -e 's|@PCMCIACHECK_MD5@|$(PCMCIACHECK_MD5)|g' \
+		 -e 's|@PCMCIACHECK_SHA256@|$(PCMCIACHECK_SHA256)|g' \
+		 $(README_TEMPLATE) > $@
 	@echo "Generated: $@"
 
 # Generate readme only
@@ -95,6 +180,7 @@ release: $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) check-lha
 	@# Binaries
 	@cp c/pcmciacheck "$(STAGING)/cfd/c/" 2>/dev/null || true
 	@cp c/pcmciaspeed "$(STAGING)/cfd/c/" 2>/dev/null || true
+	@cp c/CFInfo "$(STAGING)/cfd/c/" 2>/dev/null || true
 	@# Device variants and mountlist
 	@cp $(TARGET_FULL) "$(STAGING)/cfd/devs/"
 	@cp $(TARGET_SMALL) "$(STAGING)/cfd/devs/"
@@ -104,6 +190,7 @@ release: $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) check-lha
 	@cp src/*.s "$(STAGING)/cfd/src/"
 	@# Documentation
 	@cp README.md "$(STAGING)/cfd/"
+	@cp $(README_NAME) "$(STAGING)/cfd/"
 	@cp LICENSE "$(STAGING)/cfd/"
 	@# Images (optional)
 	@mkdir -p "$(STAGING)/cfd/images"
@@ -149,20 +236,21 @@ check-lha:
 # ============================================================
 
 # Show checksums for both versions
-checksums: $(TARGET_FULL) $(TARGET_SMALL)
-	@echo "=== Full version ==="
-	@ls -l $(TARGET_FULL)
-	@echo "MD5:    $$(md5sum $(TARGET_FULL) | cut -d' ' -f1)"
-	@echo "SHA256: $$(sha256sum $(TARGET_FULL) | cut -d' ' -f1)"
-	@echo ""
-	@echo "=== Small version (no debug) ==="
-	@ls -l $(TARGET_SMALL)
-	@echo "MD5:    $$(md5sum $(TARGET_SMALL) | cut -d' ' -f1)"
-	@echo "SHA256: $$(sha256sum $(TARGET_SMALL) | cut -d' ' -f1)"
+checksums: $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+	@for target in $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK); do \
+		if [ -f "$$target" ]; then \
+			echo "=== $${target} ==="; \
+			ls -l "$$target"; \
+			echo "MD5:    $$(md5sum "$$target" | cut -d' ' -f1)"; \
+			echo "SHA256: $$(sha256sum "$$target" | cut -d' ' -f1)"; \
+			echo ""; \
+		fi \
+	done
+
 
 # Clean build artifacts
 clean:
-	rm -f $(TARGET_FULL) $(TARGET_SMALL)
+	rm -f $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Clean everything including release archives
 distclean: clean
@@ -170,10 +258,19 @@ distclean: clean
 
 # Show help
 help:
+	@echo "Usage: make [V=1] [target]"
+	@echo ""
 	@echo "Build targets:"
-	@echo "  all       - Build both versions (default)"
-	@echo "  full      - Build full version only (with serial debug capability)"
-	@echo "  small     - Build small version only (no debug)"
+	@echo "  all   - Build driver + tools (default)"
+	@echo "  full  - Build full driver version only (with serial debug capability)"
+	@echo "  small - Build small driver version only (no serial debug code)"
+	@echo "  tools - Build all tools"
+	@echo ""
+	@echo "Options:"
+	@echo "  V=1                 - Verbose output (show full compiler messages)"
+	@echo "  FASTPIO=1           - Driver setup Gayle timing based on CF's supported PIO modes"
+	@echo "  VASM_HOME=/opt/vbcc - vasm installation path"
+	@echo "  VBCC_HOME=/opt/vbcc - vbcc installation path"
 	@echo ""
 	@echo "Release targets:"
 	@echo "  readme    - Generate $(README_NAME) from template"
@@ -186,11 +283,14 @@ help:
 	@echo "  help      - Show this help"
 	@echo ""
 	@echo "Output files:"
-	@echo "  $(TARGET_FULL)  - full version (with serial debug capability)"
-	@echo "  $(TARGET_SMALL)  - small version (no debug code)"
-	@echo "  $(README_NAME)   - Aminet readme (generated)"
-	@echo "  $(ARCHIVE_NAME)  - Aminet release archive"
+	@echo "  $(TARGET_FULL)- full version (with serial debug capability)"
+	@echo "  $(TARGET_SMALL) - small version"
+	@echo "  $(TARGET_CFINFO) - card info utility"
+	@echo "  $(TARGET_PCMCIASPEED) - pcmcia speed/timing benchmark utility"
+	@echo "  $(TARGET_PCMCIACHECK) - pcmcia check utility"
+	@echo "  $(README_NAME) - Aminet readme"
+	@echo "  $(ARCHIVE_NAME) - Aminet release archive"
 	@echo ""
 	@echo "Version: $(VERSION) ($(DATE))"
 
-.PHONY: all full small readme release check-lha checksums clean distclean help
+.PHONY: all full small  readme release check-lha checksums clean distclean help

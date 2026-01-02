@@ -12,12 +12,26 @@ compactflash.device V@VERSION_DOT@ - PCMCIA CompactFlash driver for Amiga 600/12
 
 CHANGES IN @VERSION_DOT@ (@DATE@)
 ============================
+Driver:
 * SD-to-CF adapter retry fix (introduced in v1.33)
   - When ATA IDENTIFY retries exhaust, now tries ATAPI IDENTIFY PACKET DEVICE
   - Fixes potential hang on SD-to-CF adapters
+* Implement ATA_IDENTIFY command
+  - retrieve the cached ATA IDENTIFY data from the driver
+Tools:
+* CFInfo utility
+  - Displays card model, serial, firmware, capacity, and capabilities
+* pcmciaspeed utility
+  - Recreated PCMCIA memory access timing benchmark tool
+* **pcmciacheck utility**
+  - Recreated PCMCIA check tool
+Others:
 * Improved code documentation
   - Architecture overview with register conventions
   - Documented CFU structure fields and key functions
+* Gayle memory timing
+  - Experimental: disabled, user can compile driver with option FASTPIO=1
+  - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
 
 FEATURES
 ========
@@ -50,8 +64,9 @@ Choose based on your needs:
 Steps:
 1. Copy devs/compactflash.device to DEVS:
    (or copy compactflash.device.small as DEVS:compactflash.device)
-2. Have fat95 installed on your system
-3. Mount the drive by double-clicking devs/CF0
+2. Copy c/CFInfo to C: (optional, card info utility)
+3. Have fat95 installed on your system
+4. Mount the drive by double-clicking devs/CF0
 
 For OS 3.5+:
   Copy def_CF0.info to sys:prefs/env-archive/sys and env:sys
@@ -136,6 +151,38 @@ Tested configurations (author's experience - your results may vary):
   CF cards                    <=4GB       - Works
   CF cards                    >4GB        - Not working
 
+CFINFO UTILITY
+==============
+CFInfo displays detailed information about the inserted CF card.
+Requires compactflash.device v1.36+ for full IDENTIFY data.
+
+  CFInfo          ; Show info for compactflash.device unit 0
+  CFInfo 1        ; Show info for unit 1
+
+Example output:
+  CFInfo @VERSION_DOT@ - CompactFlash Card Information
+  Device:     compactflash.device unit 0
+  
+  === CompactFlash Card Information ===
+  
+  Model:      TS16GCF133
+  Serial:     G64126022013C4120210
+  Firmware:   20180926
+  
+  === Capacity ===
+  Size:       15.2 GB (31522736 sectors)
+  Geometry:   30401 cyl, 16 heads, 63 sectors/track
+  
+  === Capabilities ===
+  LBA:        Yes
+  DMA:        No
+  PIO Modes:  0, 1, 2, 3, 4
+  Multi-sect: Max 1 sectors/interrupt
+  
+  === Card Type ===
+  Removable:  Yes
+  Type:       CompactFlash
+
 SOURCE CODE
 ===========
 Source code available at:
@@ -157,8 +204,21 @@ compactflash.device.small (no debug, @SMALL_SIZE@ bytes):
   MD5:    @SMALL_MD5@
   SHA256: @SMALL_SHA256@
 
+CFInfo (@CFINFO_SIZE@ bytes):
+  MD5:    @CFINFO_MD5@
+  SHA256: @CFINFO_SHA256@
+
+pcmciacheck (@PCMCIA_CHECK_SIZE@ bytes):
+  MD5:    @PCMCIACHECK_MD5@
+  SHA256: @PCMCIACHECK_SHA256@
+
+pcmciaspeed (@PCMCIA_SPEED_SIZE@ bytes):
+  MD5:    @PCMCIASPEED_MD5@
+  SHA256: @PCMCIASPEED_SHA256@
+
 CONTENTS
 ========
+cfd/c/CFInfo          - Card information utility (displays model, size, capabilities)
 cfd/c/pcmciacheck     - PCMCIA check utility
 cfd/c/pcmciaspeed     - Speed test utility
 cfd/devs/CF0          - Mountlist entry (with flags documentation)
