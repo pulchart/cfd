@@ -2,3 +2,4 @@ c/* filter=lfs diff=lfs merge=lfs -text
 *.device* filter=lfs diff=lfs merge=lfs -text
 *.info filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
+c/* filter=lfs diff=lfs merge=lfs -text
