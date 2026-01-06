@@ -20,6 +20,11 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 * **MuForce hit fix when using Format** ([#8](https://github.com/pulchart/cfd/issues/8))
   - Fixed memory access issue detected by MuForce during disk formatting operations
+* **Clear stale card data on removal**
+  - CFU_IDEStatus, CFU_IDEError, CFU_IDEAddr, CFU_ConfigAddr cleared when card is removed
+  - CFU_MultiSize, CFU_MultiSizeRW cleared to reset multi-sector settings
+  - 512-byte IDENTIFY buffer (CFU_ConfigBlock) fully cleared - prevents stale model/serial/firmware/capacity data
+  - Prevents returning stale data when no card is present or after card swap
 * **SD-to-CF adapter retry fix**
   - when ATA IDENTIFY retries exhaust (regresion in v1.33), now tries ATAPI IDENTIFY PACKET DEVICE before giving up (as v1.32)
   - Fixes potential hang on SD-to-CF adapters
@@ -30,6 +35,7 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 * **CFInfo utility**
   - displays card model, serial, firmware, capacity, and capabilities
+  - detects "No Card Present" using ATA standard Word 0 signatures (0x0000/0xFFFF)
 * **pcmciaspeed utility**
   - Recreated PCMCIA memory access timing benchmark tool
 * **pcmciacheck utility**

@@ -13,6 +13,12 @@ compactflash.device V@VERSION_DOT@ - PCMCIA CompactFlash driver for Amiga 600/12
 CHANGES IN @VERSION_DOT@ (@DATE@)
 ============================
 Driver:
+* MuForce hit fix when using Format (issue #8)
+  - Fixed memory access issue detected by MuForce during disk formatting
+* Clear stale card data on removal
+  - Prevents stale data when no card is present or after card swap
+  - IDE status, error, addresses, multi-sector settings now cleared on card removal
+  - 512-byte IDENTIFY buffer fully cleared (model, serial, firmware, capacity)
 * SD-to-CF adapter retry fix (introduced in v1.33)
   - When ATA IDENTIFY retries exhaust, now tries ATAPI IDENTIFY PACKET DEVICE
   - Fixes potential hang on SD-to-CF adapters
@@ -23,7 +29,7 @@ Tools:
   - Displays card model, serial, firmware, capacity, and capabilities
 * pcmciaspeed utility
   - Recreated PCMCIA memory access timing benchmark tool
-* **pcmciacheck utility**
+* pcmciacheck utility
   - Recreated PCMCIA check tool
 Others:
 * Improved code documentation

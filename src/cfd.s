@@ -2868,6 +2868,17 @@ _t_disown:
 	DBGMSG	dbg_card_remove
 	clr.l	CFU_DriveSize(a3)
 	clr.w	CFU_PLength(a3)
+	clr.w	CFU_IDEStatus(a3)	;clear IDEStatus and IDEError
+	clr.l	CFU_IDEAddr(a3)		;clear IDE address pointer
+	clr.l	CFU_ConfigAddr(a3)	;clear config address
+	clr.w	CFU_MultiSize(a3)	;clear multi-sector size
+	clr.w	CFU_MultiSizeRW(a3)	;clear multi-sector RW size
+	;Clear 512-byte IDENTIFY buffer (CFU_ConfigBlock)
+	lea	CFU_ConfigBlock(a3),a0
+	moveq.l	#512/4-1,d0		;128 longwords - 1
+.clr_loop:
+	clr.l	(a0)+
+	dbf	d0,.clr_loop
 	bsr.w	NotifyClients
 	moveq.l	#0,d0
 	lea	CFU_CardHandle(a3),a1
