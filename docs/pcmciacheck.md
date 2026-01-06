@@ -4,8 +4,6 @@
 
 `pcmciacheck` is a diagnostic tool for testing PCMCIA CompactFlash card compatibility with Amiga systems. It tests the same read/write modes used by the `compactflash.device` driver to determine which data access modes work correctly with your CF card, helping identify potential compatibility issues before using the card with the `compactflash.device` driver.
 
-## Features
-
 - **Multiple Access Mode Testing**: Tests 4 different read modes and 4 write modes
 - **Pattern-Based Compatibility Testing**: Mirrors the `cfd.s` driver's RWTest functionality  
 - **Safe Operation**: Write testing requires explicit `-w` flag to prevent accidental data loss
@@ -13,33 +11,17 @@
 - **IFF Log Format**: Creates structured log files for analysis
 - **Hardware Detection**: Automatic card presence detection and timeout handling
 
-## Installation
-
-Build from source using the provided Makefile:
-
-```bash
-make c/pcmciacheck
-```
-
-**Requirements:**
-- vbcc cross-compiler for AmigaOS m68k
-- AmigaOS NDK (Native Developer Kit)
-- Amiga system with PCMCIA slot
-
 ## Usage
-
-### Basic Syntax
 
 ```
 pcmciacheck [-w] <logfile>
 ```
 
-### Options
-
+Options:
 - **`<logfile>`**: Output file for test results (IFF format)
 - **`-w`**: Enable write testing (WARNING: overwrites sectors 1-4 on the CF card)
 
-### Examples
+Examples:
 
 **Read-only testing (safe):**
 ```
@@ -201,9 +183,3 @@ The tool implements the same transfer mode detection algorithm used by the `comp
 - **Recommended:** Use driver v1.34+ which properly handles this issue
 - **Avoid:** Do NOT use `Flags = 16` in driver v1.35+ for these cards (multi-sector override)
 - **Configuration:** See README.md "Enforce Multi Mode" section for detailed workarounds
-
-## Related Tools
-
-- **[cfinfo.md](cfinfo.md)**: CF card information display
-- **[pcmciaspeed.md](pcmciaspeed.md)**: Performance benchmarking
-- **compactflash.device**: Main CF driver

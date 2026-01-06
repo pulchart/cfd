@@ -115,6 +115,12 @@ small: $(TARGET_SMALL)
 # Tools only target
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
+# Generate AmigaGuide documentation from Markdown
+guides:
+	$(Q)echo "  GUIDE   docs/*.guide"
+	$(Q)for f in docs/*.md; do tools/md2guide.py "$$f" --version $(VERSION) --date $(DATE); done
+	$(Q)tools/md2guide.py README.md docs/cfd.guide --version $(VERSION) --date $(DATE) --title "compactflash.device"
+
 # CFInfo utility (requires vbcc)
 $(TARGET_CFINFO): $(SOURCE_CFINFO)
 	$(Q)mkdir -p c
@@ -183,7 +189,7 @@ $(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINF
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) check-lha
+release: $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) guides check-lha
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
 	@echo "=================================="
 	$(eval STAGING := $(shell mktemp -d))
@@ -201,13 +207,12 @@ release: $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) check-lha
 	@cp devs/CF0 "$(STAGING)/cfd/devs/"
 	@cp devs/CF0.info "$(STAGING)/cfd/devs/" 2>/dev/null || true
 	@# Source code
-	@cp src/*.s "$(STAGING)/cfd/src/"
+	@cp src/*.* "$(STAGING)/cfd/src/"
 	@# Documentation
-	@cp README.md "$(STAGING)/cfd/"
 	@cp $(README_NAME) "$(STAGING)/cfd/"
 	@cp LICENSE "$(STAGING)/cfd/"
 	@mkdir -p "$(STAGING)/cfd/docs"
-	@cp docs/*.md "$(STAGING)/cfd/docs/" 2>/dev/null || true
+	@cp docs/*.guide "$(STAGING)/cfd/docs/" 2>/dev/null || true
 	@# Images (optional)
 	@mkdir -p "$(STAGING)/cfd/images"
 	@cp images/cf-pcmcia-adapter.jpg "$(STAGING)/cfd/images/" 2>/dev/null || true
@@ -277,10 +282,11 @@ help:
 	@echo "Usage: make [V=1] [target]"
 	@echo ""
 	@echo "Build targets:"
-	@echo "  all   - Build driver + tools (default)"
-	@echo "  full  - Build full driver version only (with serial debug capability)"
-	@echo "  small - Build small driver version only (no serial debug code)"
-	@echo "  tools - Build all tools"
+	@echo "  all    - Build driver + tools (default)"
+	@echo "  full   - Build full driver version only (with serial debug capability)"
+	@echo "  small  - Build small driver version only (no serial debug code)"
+	@echo "  tools  - Build all tools"
+	@echo "  guides - Generate AmigaGuide documentation from Markdown"
 	@echo ""
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
@@ -309,4 +315,4 @@ help:
 	@echo ""
 	@echo "Version: $(VERSION) ($(DATE))"
 
-.PHONY: all full small  readme release check-lha checksums clean distclean help
+.PHONY: all full small tools guides readme release check-lha checksums clean distclean help

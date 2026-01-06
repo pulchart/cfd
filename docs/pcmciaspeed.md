@@ -1,5 +1,7 @@
 # pcmciaspeed
 
+## Overview
+
 PCMCIA Memory Access Timing Benchmark tool.
 
 ## Usage
@@ -11,7 +13,7 @@ pcmciaspeed >SER:    ; Send output to serial port
 
 No arguments required. The tool measures memory access timing at different Gayle speed settings.
 
-## Example Output
+Example Output:
 
 ```
 PCMCIA Memory Access Timing Benchmark
