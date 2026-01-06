@@ -4,11 +4,7 @@ AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA. Fork of the
 
 ## Download
 
-* **GitHub**: [Releases](https://github.com/pulchart/cfd/releases)
-* **Aminet (v1.35)**: [driver/media/cfd135](https://aminet.net/driver/media/cfd135.lha)
-* **Aminet (v1.34)**: [driver/media/cfd134](https://aminet.net/driver/media/cfd134.lha)
-* **Aminet (v1.33)**: [driver/media/CFD133](https://aminet.net/driver/media/CFD133.lha)
-* **Aminet (v1.32)**: [driver/media/cfd](https://aminet.net/driver/media/cfd.lha)
+**GitHub**: [Releases](https://github.com/pulchart/cfd/releases)
 
 ## Purpose
 
@@ -17,6 +13,43 @@ Read and write your digital photos, mp3 files etc. directly from CompactFlash ca
 The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
 
 ## What's New in
+
+### v1.36-dev
+
+#### Driver
+
+* **MuForce hit fix when using Format** ([#8](https://github.com/pulchart/cfd/issues/8))
+  - Fixed memory access issue detected by MuForce during disk formatting operations
+* **Clear stale card data on removal**
+  - CFU_IDEStatus, CFU_IDEError, CFU_IDEAddr, CFU_ConfigAddr cleared when card is removed
+  - CFU_MultiSize, CFU_MultiSizeRW cleared to reset multi-sector settings
+  - 512-byte IDENTIFY buffer (CFU_ConfigBlock) fully cleared - prevents stale model/serial/firmware/capacity data
+  - Prevents returning stale data when no card is present or after card swap
+* **SD-to-CF adapter retry fix**
+  - when ATA IDENTIFY retries exhaust (regresion in v1.33), now tries ATAPI IDENTIFY PACKET DEVICE before giving up (as v1.32)
+  - Fixes potential hang on SD-to-CF adapters
+* **Implement ATA_IDENTIFY command**
+  - retrieve the cached ATA IDENTIFY data from the driver
+
+#### Tools
+
+* **CFInfo utility**
+  - displays card model, serial, firmware, capacity, and capabilities
+  - detects "No Card Present" using ATA standard Word 0 signatures (0x0000/0xFFFF)
+* **pcmciaspeed utility**
+  - Recreated PCMCIA memory access timing benchmark tool
+* **pcmciacheck utility**
+  - Recreated PCMCIA check tool
+
+#### Others
+
+* **Gayle memory timing**
+  - Experimental: disabled by default, compile with `FASTPIO=1` to enable
+  - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
+* **Improved code documentation**
+  - Architecture overview with register conventions
+  - Documented CFU structure fields
+  - Added function headers with input/output/register usage
 
 ### v1.35
 
@@ -56,6 +89,7 @@ Choose the version you need:
 
 ```
 Copy devs/compactflash.device to DEVS:
+Copy c/CFInfo to C:
 ```
 (or `compactflash.device.small`, renamed to `compactflash.device`)
 
@@ -191,6 +225,20 @@ Retaken from readme of version 1.32/1.33. Those versions behave as if **Enforce 
 | 2GB Sandisk | 2.1 MB/s | 1.7 MB/s |
 | 4GB Kingston | 2.2 MB/s | 1.9 MB/s |
 
+## Tools
+
+### CFInfo
+
+Display card information (requires v1.36+ driver). See [CFInfo.md](docs/CFInfo.md) for detailed field reference.
+
+### pcmciaspeed
+
+PCMCIA memory access timing benchmark. See [pcmciaspeed.md](docs/pcmciaspeed.md) for detailed documentation.
+
+### pcmciacheck
+
+PCMCIA CompactFlash card compatibility testing tool. Tests the same read/write modes used by the driver to validate card compatibility. See [pcmciacheck.md](docs/pcmciacheck.md) for detailed documentation.
+
 ## Error Codes
 
 Besides the usual AmigaOS error codes, there are some additional ones:
@@ -229,7 +277,8 @@ If cards are not recognized:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.35 | 12/2025 | Serial debug output, enforce multi mode flag, SD-to-CF adapter fix. Full/small build variants (Jaroslav Pulchart) |
+| v1.36 | 01/2026 | CFInfo utility, ATA IDENTIFY passthrough, SD-to-CF adapter retry fix (Jaroslav Pulchart) |
+| v1.35 | 12/2025 | Serial debug output, enforce multi mode flag, SD-to-CF adapter fix, full/small build variants (Jaroslav Pulchart) |
 | v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
 | v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
 | v1.32 | 11/2009 | Error messages, open source release (Torsten Jager) |
@@ -269,45 +318,62 @@ If cards are not recognized:
 ### Requirements
 
 * **vasm** - Portable 68k assembler ([sun.hasenbraten.de/vasm](http://sun.hasenbraten.de/vasm/))
+* **vbcc** - C compiler for CFInfo tool (optional, [compilers.de/vbcc](http://www.compilers.de/vbcc.html))
+* **NDK** - AmigaOS NDK headers for CFInfo (optional, [aminet.net NDK3.2](https://aminet.net/package/dev/misc/NDK3.2R4))
 * **lha** - For creating release archives (optional)
+
+### NDK Setup (for CFInfo)
+
+Extract NDK to project directory:
+```bash
+mkdir NDK && cd NDK && lha x ~/Downloads/NDK3.2.lha
+```
 
 ### Quick Start
 
 ```bash
-# Build both versions
+# Build all (driver + CFInfo)
 make
 
-# Build only full version
-make full
+# Build with custom tool paths (prefix), the binaries are in prefix/bin/...
+make VASM_HOME=/path/to/vasm VBCC_HOME=/path/to/vbcc
 
-# Build only small version (no debug)
-make small
-
-# Show checksums
-make checksums
-
-# Create Aminet release archive
-make release
+# Verbose output
+make V=1
 ```
+
+### Build Options
+
+| Option | Description |
+|--------|-------------|
+| `V=1` | Verbose output (show full compiler messages) |
+| `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
+| `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |
 
 ### Build Targets
 
 | Target | Description |
 |--------|-------------|
-| `make` | Build both full and small versions |
-| `make full` | Build full version only |
-| `make small` | Build small version only |
+| `make` | Build driver (full + small) and CFInfo |
+| `make full` | Build full version only (with debug support) |
+| `make small` | Build small version only (no debug) |
+| `make cfinfo` | Build CFInfo utility (requires vbcc + NDK) |
+| `make fastpio` | Build with Fast PIO support (experimental) |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |
-| `make clean` | Remove built device files |
-| `make distclean` | Remove all generated files |
+| `make clean` | Remove built files |
+| `make help` | Show all available targets |
 
-### Cross-Compilation
+### Cross-Compilation Notes
 
-The source uses Motorola 68k syntax compatible with both ASMPro (Amiga) and vasm (Linux):
+The assembly source uses Motorola 68k syntax compatible with both ASMPro (Amiga) and vasm (Linux/cross).
 
 ```bash
+# Manual vasm invocation
 vasmm68k_mot -Fhunkexe -m68020 -nosym -DDEBUG=1 -o compactflash.device src/cfd.s
+
+# Manual vbcc invocation (CFInfo)
+vc +aos68k -O2 -c99 -INDK/Include_H -o CFInfo src/cfinfo.c
 ```
 
 ## License
@@ -320,4 +386,3 @@ GNU Lesser General Public License v2.1
 
 ---
 
-Have Fun!
