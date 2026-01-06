@@ -3797,7 +3797,7 @@ _rb_2:
 	moveq.l	#$ffffffa9,d0		;BSY, DWF, DRQ, ERR
 	and.b	CFU_IDEStatus(a3),d0
 	subq.b	#8,d0			;DRQ
-	bne.s	_rb_break
+	bne.w	_rb_break
 
 	move.l	CFU_IOPtr(a3),a0
 	addq.l	#8,a0
@@ -3827,7 +3827,10 @@ _rb_lnext:
 	bgt.w	_rb_swath
 _rb_stop:
 	move.l	CFU_IDEAddr(a3),a0
+	move.l	a0,d0
+	beq.s	_rb_skip_status		;skip if IDEAddr is NULL
 	move.b	14(a0),CFU_IDEStatus(a3)
+_rb_skip_status:
 	bsr.w	_IDEStop
 	tst.b	CFU_EventFlags(a3)
 	bpl.s	_rb_ready

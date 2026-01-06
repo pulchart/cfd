@@ -18,6 +18,8 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 #### Driver
 
+* **MuForce hit fix when using Format** ([#8](https://github.com/pulchart/cfd/issues/8))
+  - Fixed memory access issue detected by MuForce during disk formatting operations
 * **SD-to-CF adapter retry fix**
   - when ATA IDENTIFY retries exhaust (regresion in v1.33), now tries ATAPI IDENTIFY PACKET DEVICE before giving up (as v1.32)
   - Fixes potential hang on SD-to-CF adapters

@@ -6,7 +6,7 @@
 
 # Driver Version (update these for new releases)
 VERSION = 1.36
-DATE = 02.01.2026
+DATE = 06.01.2026
 DATE_SHORT = 01/2026
 
 # Tool-specific versions
