@@ -2,15 +2,15 @@ Short:        CompactFlash PCMCIA driver for A600/1200
 Uploader:     jaroslav.pulchart@gmail.com (Jaroslav Pulchart)
 Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by Torsten Jager and Paul Carter
 Type:         driver/media
-Version:      @VERSION_DOT@
+Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Replaces:     driver/media/cfd134.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
-compactflash.device V@VERSION_DOT@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
+compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
-CHANGES IN @VERSION_DOT@ (@DATE@)
+CHANGES IN @VERSION@ (@DATE@)
 ============================
 Driver:
 * MuForce hit fix when using Format (issue #8)
@@ -166,7 +166,7 @@ Requires compactflash.device v1.36+ for full IDENTIFY data.
   CFInfo 1        ; Show info for unit 1
 
 Example output:
-  CFInfo @VERSION_DOT@ - CompactFlash Card Information
+  CFInfo @VERSION@ - CompactFlash Card Information
   Device:     compactflash.device unit 0
   
   === CompactFlash Card Information ===
@@ -230,6 +230,9 @@ cfd/c/pcmciaspeed     - Speed test utility
 cfd/devs/CF0          - Mountlist entry (with flags documentation)
 cfd/devs/compactflash.device       - Driver with debug to serial console flag support
 cfd/devs/compactflash.device.small - Driver without debug to serial console support
+cfd/docs/CFInfo.md    - CFInfo utility documentation
+cfd/docs/pcmciacheck.md - pcmciacheck utility documentation
+cfd/docs/pcmciaspeed.md - pcmciaspeed utility documentation
 cfd/src/              - Full assembler source code
 cfd/images/cf-pcmcia-adapter.jpg - CF-to-PCMCIA adapter photo
 cfd/images/sd-cf-adapter.jpg     - SD-to-CF adapter photo

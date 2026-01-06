@@ -48,8 +48,13 @@
 ;
 ;===========================================================================
 
+;--- Version (defined by Makefile, with defaults for standalone assembly) ---
+	ifnd	FILE_VERSION
 FILE_VERSION	= 1
+	endc
+	ifnd	FILE_REVISION
 FILE_REVISION	= 36
+	endc
 
 ;--- Conditional compilation ---
 ; Define DEBUG symbol to include serial debug support
@@ -702,7 +707,10 @@ s_name:
 	dc.b	"compactflash.device",0
 	dc.b	"$VER: "
 s_idstring:
-	dc.b	"compactflash.device 1.36 (02.01.2026)",LF,0
+	;Version string from Makefile-generated include
+	include	"version.i"
+	VERSION_STRING
+	dc.b	LF,0
 	dc.b	"� Torsten Jager",0
 CardName:
 	dc.b	"card.resource",0

@@ -14,7 +14,7 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 ## What's New in
 
-### v1.36
+### v1.36-dev
 
 #### Driver
 
@@ -229,15 +229,15 @@ Retaken from readme of version 1.32/1.33. Those versions behave as if **Enforce 
 
 ### CFInfo
 
-Display card information (requires v1.36+ driver). See [CFInfo.md](CFInfo.md) for detailed field reference.
+Display card information (requires v1.36+ driver). See [CFInfo.md](docs/CFInfo.md) for detailed field reference.
 
 ### pcmciaspeed
 
-PCMCIA memory access timing benchmark. See [pcmciaspeed.md](pcmciaspeed.md) for detailed documentation.
+PCMCIA memory access timing benchmark. See [pcmciaspeed.md](docs/pcmciaspeed.md) for detailed documentation.
 
 ### pcmciacheck
 
-PCMCIA CompactFlash card compatibility testing tool. Tests the same read/write modes used by the driver to validate card compatibility. See [pcmciacheck.md](pcmciacheck.md) for detailed documentation.
+PCMCIA CompactFlash card compatibility testing tool. Tests the same read/write modes used by the driver to validate card compatibility. See [pcmciacheck.md](docs/pcmciacheck.md) for detailed documentation.
 
 ## Error Codes
 
