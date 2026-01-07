@@ -215,30 +215,35 @@ CFInfo (@CFINFO_SIZE@ bytes):
   MD5:    @CFINFO_MD5@
   SHA256: @CFINFO_SHA256@
 
-pcmciacheck (@PCMCIA_CHECK_SIZE@ bytes):
+pcmciacheck (@PCMCIACHECK_SIZE@ bytes):
   MD5:    @PCMCIACHECK_MD5@
   SHA256: @PCMCIACHECK_SHA256@
 
-pcmciaspeed (@PCMCIA_SPEED_SIZE@ bytes):
+pcmciaspeed (@PCMCIASPEED_SIZE@ bytes):
   MD5:    @PCMCIASPEED_MD5@
   SHA256: @PCMCIASPEED_SHA256@
 
 CONTENTS
 ========
-cfd/c/CFInfo          - Card information utility (displays model, size, capabilities)
-cfd/c/pcmciacheck     - PCMCIA check utility
-cfd/c/pcmciaspeed     - Speed test utility
-cfd/devs/CF0          - Mountlist entry (with flags documentation)
+cfd/c/CFInfo      - Card information utility (displays model, size, capabilities)
+cfd/c/pcmciacheck - PCMCIA check utility
+cfd/c/pcmciaspeed - Speed test utility
+
+cfd/devs/CF0                       - Mountlist entry (with flags documentation)
 cfd/devs/compactflash.device       - Driver with debug to serial console flag support
 cfd/devs/compactflash.device.small - Driver without debug to serial console support
-cfd/docs/cfd.guide    - Main documentation (AmigaGuide)
-cfd/docs/CFInfo.guide - CFInfo utility documentation (AmigaGuide)
+
+cfd/docs/cfd.guide         - Main documentation (AmigaGuide)
+cfd/docs/CFInfo.guide      - CFInfo utility documentation (AmigaGuide)
 cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation (AmigaGuide)
 cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation (AmigaGuide)
-cfd/src/              - Full source code (assembler + C)
+
+cfd/src/ - Full source code (assembler + C)
+
 cfd/images/cf-pcmcia-adapter.jpg - CF-to-PCMCIA adapter photo
 cfd/images/sd-cf-adapter.jpg     - SD-to-CF adapter photo
-cfd/images/multimode-issue.jpg - Example of broken output with unsupported enforce multi mode
-cfd/LICENSE           - GNU LGPL v2.1
+cfd/images/multimode-issue.jpg   - Example of broken output with unsupported enforce multi mode
+
+cfd/LICENSE - GNU LGPL v2.1
 
 "CompactFlash" is (TM) by CompactFlash Association

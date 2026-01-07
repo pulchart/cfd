@@ -1,2 +1,6 @@
 NDK
 *.o
+*.lha
+.version-stamp
+cfd*.readme
+cfd*.readme.info
