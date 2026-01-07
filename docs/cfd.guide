@@ -112,6 +112,8 @@ cards. This driver provides a suitable alternative.
 
 @{b}Others@{ub}
 
+  * @{b}AmigaGuide documentation@{ub}
+  * Native Amiga .guide files included in release
   * @{b}Gayle memory timing@{ub}
   * Experimental: disabled by default, compile with @{b}FASTPIO=1@{ub} to enable
   * Maps card's ATA PIO mode to Gayle PCMCIA memory timing

@@ -32,6 +32,7 @@ Tools:
 * pcmciacheck utility
   - Recreated PCMCIA check tool
 Others:
+* AmigaGuide documentation included (.guide files)
 * Improved code documentation
   - Architecture overview with register conventions
   - Documented CFU structure fields and key functions

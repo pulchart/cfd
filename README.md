@@ -43,6 +43,8 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 #### Others
 
+* **AmigaGuide documentation**
+  - Native Amiga .guide files included in release
 * **Gayle memory timing**
   - Experimental: disabled by default, compile with `FASTPIO=1` to enable
   - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
