@@ -265,7 +265,6 @@ Besides the usual AmigaOS error codes, there are some additional ones:
 
 Report issues at: https://github.com/pulchart/cfd/issues
 
-If cards are not recognized:
 1. Set `Flags = 8` in CF0 mountlist to enable serial debug
 2. Connect serial cable and monitor (9600 baud)
 3. Mount CF0:
@@ -277,8 +276,8 @@ If cards are not recognized:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.36 | 01/2026 | CFInfo utility, ATA IDENTIFY passthrough, SD-to-CF adapter retry fix (Jaroslav Pulchart) |
-| v1.35 | 12/2025 | Serial debug output, enforce multi mode flag, SD-to-CF adapter fix, full/small build variants (Jaroslav Pulchart) |
+| v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
+| v1.35 | 12/2025 | Serial debug (Flags=8), enforce multi mode (Flags=16), SD-to-CF support simplification |
 | v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
 | v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
 | v1.32 | 11/2009 | Error messages, open source release (Torsten Jager) |
@@ -383,6 +382,3 @@ GNU Lesser General Public License v2.1
 ## Trademark
 
 "CompactFlash" is (TM) by CompactFlash Association
-
----
-

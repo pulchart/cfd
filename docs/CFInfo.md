@@ -11,8 +11,7 @@ CFInfo          ; Show info for unit 0
 CFInfo 1        ; Show info for unit 1
 ```
 
-## Example Output
-
+Example Output:
 ```
 CFInfo 1.36 (02.01.2026) - CompactFlash Card Information
 Device:     compactflash.device unit 0

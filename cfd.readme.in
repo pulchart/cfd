@@ -230,14 +230,14 @@ cfd/c/pcmciaspeed     - Speed test utility
 cfd/devs/CF0          - Mountlist entry (with flags documentation)
 cfd/devs/compactflash.device       - Driver with debug to serial console flag support
 cfd/devs/compactflash.device.small - Driver without debug to serial console support
-cfd/docs/CFInfo.md    - CFInfo utility documentation
-cfd/docs/pcmciacheck.md - pcmciacheck utility documentation
-cfd/docs/pcmciaspeed.md - pcmciaspeed utility documentation
-cfd/src/              - Full assembler source code
+cfd/docs/cfd.guide    - Main documentation (AmigaGuide)
+cfd/docs/CFInfo.guide - CFInfo utility documentation (AmigaGuide)
+cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation (AmigaGuide)
+cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation (AmigaGuide)
+cfd/src/              - Full source code (assembler + C)
 cfd/images/cf-pcmcia-adapter.jpg - CF-to-PCMCIA adapter photo
 cfd/images/sd-cf-adapter.jpg     - SD-to-CF adapter photo
 cfd/images/multimode-issue.jpg - Example of broken output with unsupported enforce multi mode
 cfd/LICENSE           - GNU LGPL v2.1
-cfd/README.md         - Full documentation
 
 "CompactFlash" is (TM) by CompactFlash Association
