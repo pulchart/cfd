@@ -35,7 +35,6 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 * **CFInfo utility**
   - displays card model, serial, firmware, capacity, and capabilities
-  - detects "No Card Present" using ATA standard Word 0 signatures (0x0000/0xFFFF)
 * **pcmciaspeed utility**
   - Recreated PCMCIA memory access timing benchmark tool
 * **pcmciacheck utility**
