@@ -14,7 +14,7 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 ## What's New in
 
-### v1.36-dev
+### v1.36
 
 #### Driver
 
