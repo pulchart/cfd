@@ -1924,7 +1924,7 @@ _GetSense:
 	move.b	(a0)+,(a1)+		;Sense Code
 	move.b	(a0)+,(a1)+		;Extended Sense Code
 	clr.b	(a1)+			;FRU
-	move.b	(a0)+,(a1)+		;Spezific Information
+	move.b	(a0)+,(a1)+		;Specific Information
 	move.b	(a0)+,(a1)+		;byte position of error
 	move.b	(a0)+,(a1)+
 	moveq.l	#18,d0
@@ -2728,7 +2728,7 @@ _t_saddr:
 	bra.s	_t_saddr
 _t_iblind:
 	btst	#1,CFU_OpenFlags+1(a3)
-	beq.w	_t_ibreak		;Hack #2 deaktivated..
+	beq.w	_t_ibreak		;Hack #2 deactivated..
 
 	moveq.l	#$200>>3,d2		;..or try again without CIS
 	lsl.l	#3,d2
@@ -2980,7 +2980,7 @@ cst_yes:
 _CfdFirst:
 	movem.l	d2/a2,-(sp)
 	btst	#0,CFU_OpenFlags+1(a3)
-	beq.s	_cfdf_end		;deaktivated
+	beq.s	_cfdf_end		;deactivated
 
 	moveq.l	#CFU_CardHandle,d2
 	add.l	a3,d2			;&CardHandle
@@ -3016,7 +3016,7 @@ _SocketOn:
 
 	move.b	$00da8000,d0
 	btst	#0,d0
-	beq.s	_so_end			;aktive already
+	beq.s	_so_end			;active already
 
 	moveq.l	#0,d2
 	CALLEXEC Disable
@@ -4879,7 +4879,7 @@ _su_wait:
 	bra.w	_IDEStop
 
 ;--- query Disk Status -------------------------------------
-; d0 -> -1 (erro), 0 (no disk), 1 (inserted), 2 (new Disk)
+; d0 -> -1 (error), 0 (no disk), 1 (inserted), 2 (new Disk)
 
 _MediaStatus:
 	move.l	d2,-(sp)
@@ -5048,7 +5048,7 @@ _p_d1:
 	roxr.b	#2,d0
 	bcs.w	_p_error		;wrong data direction
 
-	add.l	d2,d4			;advane &buffer
+	add.l	d2,d4			;advance &buffer
 	move.l	d2,d3
 	lsr.l	#4,d3
 	move.l	d3,d0
