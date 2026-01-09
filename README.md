@@ -26,7 +26,7 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
   - 512-byte IDENTIFY buffer (CFU_ConfigBlock) fully cleared - prevents stale model/serial/firmware/capacity data
   - Prevents returning stale data when no card is present or after card swap
 * **SD-to-CF adapter retry fix**
-  - when ATA IDENTIFY retries exhaust (regresion in v1.33), now tries ATAPI IDENTIFY PACKET DEVICE before giving up (as v1.32)
+  - when ATA IDENTIFY retries exhaust (regression in v1.33), now tries ATAPI IDENTIFY PACKET DEVICE before giving up (as v1.32)
   - Fixes potential hang on SD-to-CF adapters
 * **Implement ATA_IDENTIFY command**
   - retrieve the cached ATA IDENTIFY data from the driver
