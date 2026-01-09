@@ -4,7 +4,7 @@ Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by 
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
-Replaces:     driver/media/cfd134.lha
+Replaces:     driver/media/cfd135.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
@@ -13,32 +13,11 @@ compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. 
 CHANGES IN @VERSION@ (@DATE@)
 ============================
 Driver:
-* MuForce hit fix when using Format (issue #8)
-  - Fixed memory access issue detected by MuForce during disk formatting
-* Clear stale card data on removal
-  - Prevents stale data when no card is present or after card swap
-  - IDE status, error, addresses, multi-sector settings now cleared on card removal
-  - 512-byte IDENTIFY buffer fully cleared (model, serial, firmware, capacity)
-* SD-to-CF adapter retry fix (introduced in v1.33)
-  - When ATA IDENTIFY retries exhaust, now tries ATAPI IDENTIFY PACKET DEVICE
-  - Fixes potential hang on SD-to-CF adapters
-* Implement ATA_IDENTIFY command
-  - retrieve the cached ATA IDENTIFY data from the driver
+* TBD
 Tools:
-* CFInfo utility
-  - Displays card model, serial, firmware, capacity, and capabilities
-* pcmciaspeed utility
-  - Recreated PCMCIA memory access timing benchmark tool
-* pcmciacheck utility
-  - Recreated PCMCIA check tool
+* TBD
 Others:
-* AmigaGuide documentation included (.guide files)
-* Improved code documentation
-  - Architecture overview with register conventions
-  - Documented CFU structure fields and key functions
-* Gayle memory timing
-  - Experimental: disabled, user can compile driver with option FASTPIO=1
-  - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
+* TBD
 
 FEATURES
 ========

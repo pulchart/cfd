@@ -14,6 +14,17 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 
 ## What's New in
 
+### v1.37-dev
+
+#### Driver
+TBD
+
+#### Tools
+TBD
+
+#### Others
+TBD
+
 ### v1.36
 
 #### Driver
@@ -277,6 +288,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.37 | 01/2026 | TBD |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
 | v1.35 | 12/2025 | Serial debug (Flags=8), enforce multi mode (Flags=16), SD-to-CF support simplification |
 | v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
