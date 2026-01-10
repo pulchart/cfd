@@ -17,7 +17,14 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 ### v1.37-dev
 
 #### Driver
-TBD
+
+* **Autodetect multi-sector override capability**
+  - Driver estimates by simple test during init if 256 sectors per interrupt works
+  - If test passes (DRQ clears properly), 256 sector mode is enabled for best performance
+  - If test fails (DRQ stays high), falls back to firmware-reported value for compatibility
+  - `Flags = 16` still available as manual override to force 256 sector mode
+  - `Flags = 32` skips auto-detection and uses firmware-reported value directly
+  - Debug output shows detection result: "DRQ issue not detected" / "DRQ issue detected"
 
 #### Tools
 TBD
@@ -140,6 +147,7 @@ Set in CF0 mountlist. Flags can be combined (e.g., `Flags = 9` for cfd first + s
 | `compatibility` | 4 | Use CardResource OS API instead of direct chipset access |
 | `serial debug` | 8 | Output initialization messages to serial port at 9600 baud (v1.35+ full build) |
 | `enforce multi mode` | 16 | Force 256 sector transfers regardless of card's reported capability (v1.35+) |
+| `skip multi-sector auto-detect` | 32 | Disable auto-detection, use firmware-reported multi-sector value (v1.37+) |
 
 ### Example: Enable serial debug
 ```
@@ -185,7 +193,10 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 [CFD] ..card supports max multi: 1
 [CFD] ..setting multi mode to: 1
 [CFD] ..OK
-[CFD] ..override multi size: 256
+[CFD] ..testing multi-sector capability...
+[CFD] ..DRQ issue not detected
+[CFD] ..auto-enabling 256 sector mode
+[CFD] ..multi-sector RW size: 256
 [CFD] ..done
 [CFD] Card identified OK
 [CFD] Notify clients
@@ -193,6 +204,8 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 ```
 
 ### Enforce Multi Mode (Flag 16)
+
+**Note:** As of v1.37, the driver automatically detects multi-sector capability and enables 256 sector mode when safe. This flag is now only needed as a manual override if auto-detection fails for your specific card.
 
 Read and Write IO path will use 256 sectors for single IO regardless of what the card supports in Multiple Sector Mode if this flag is set (same behaviour as v1.33). The IO sector count can be limited by `MaxTransfer` (0x200 = 1 sector per IO) value in CF0 file.
 
@@ -288,7 +301,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.37 | 01/2026 | TBD |
+| v1.37 | 01/2026 | Autodetect multi-sector override capability |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
 | v1.35 | 12/2025 | Serial debug (Flags=8), enforce multi mode (Flags=16), SD-to-CF support simplification |
 | v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |

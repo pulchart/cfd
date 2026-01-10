@@ -598,6 +598,7 @@ CFU_OpenFlags	= 238			;mount Flags field
 				;  bit 2: compatibility mode
 				;  bit 3: serial debug output (Flags=8)
 				;  bit 4: enforce multi mode 256 sectors (Flags=16)
+				;  bit 5: skip multi-sector auto-detection (Flags=32)
 CFUF_SERIALDEBUG = 8			;Flags = 8 enables serial debug
 
 ;--- Transfer configuration ---
@@ -820,7 +821,16 @@ dbg_multifail:
 dbg_multinosup:
 	dc.b	"[CFD] ..not supported",13,10,0
 dbg_multisizerw:
-	dc.b	"[CFD] ..override multi size: ",0
+	dc.b	"[CFD] ..multi-sector RW size: ",0
+dbg_multi_test:
+	dc.b	"[CFD] ..testing multi-sector capability...",13,10,0
+dbg_multi_ok256:
+	dc.b	"[CFD] ..DRQ issue not detected",13,10
+	dc.b	"[CFD] ..auto-enabling 256 sector mode",13,10,0
+dbg_multi_drq_issue:
+	dc.b	"[CFD] ..DRQ issue detected, using firmware value",13,10,0
+dbg_multi_skip:
+	dc.b	"[CFD] ..auto-detection skipped",13,10,0
 	endc
 	even
 
@@ -4615,11 +4625,11 @@ _InitMultipleMode:
 	bsr.w	WaitReady
 	moveq.l	#3,d1
 	and.b	CFU_EventFlags(a3),d1
-	bne.s	_imm_error		;card removed
+	bne.w	_imm_error		;card removed
 
 	moveq.l	#$21,d1
 	and.b	CFU_IDEStatus(a3),d1
-	bne.s	_imm_error		;error or unsupported
+	bne.w	_imm_error		;error or unsupported
 
 	DBGMSG	dbg_multiok
 
@@ -4629,13 +4639,42 @@ _InitMultipleMode:
 _imm_end:
 	move.w	d0,CFU_MultiSize(a3)
 	move.w	CFU_MultiSize(a3),d0
-	;Set CFU_MultiSizeRW: static 256 if flag 16 (enforce multi mode), else use card's value
+	;Set CFU_MultiSizeRW: static 256 if flag 16 (enforce multi mode), else auto-detect
 	btst	#4,CFU_OpenFlags+1(a3)		;flag 16 = enforce multi mode?
-	beq.s	_imm_rw_normal
+	beq.s	_imm_auto_detect
 	move.w	#256,CFU_MultiSizeRW(a3)	;static override
 	bra.s	_imm_rw_debug
-_imm_rw_normal:
-	move.w	d0,CFU_MultiSizeRW(a3)		;same as CFU_MultiSize
+
+_imm_auto_detect:
+	;--- Check if auto-detection is disabled (Flags=32) ---
+	btst	#5,CFU_OpenFlags+1(a3)		;flag 32 = skip auto-detection?
+	bne.s	_imm_rw_skip_auto		;yes, use firmware value directly
+
+	;--- Auto-detect multi-sector capability ---
+	;Test by reading 1 sector and checking if DRQ clears properly
+	;If DRQ clears after reading expected data, card works correctly -> use 256
+	;If DRQ stays high, card has issue -> use firmware value
+	bsr.w	_TestMultiSectorIssue
+	tst.b	d0
+	bne.s	_imm_rw_drq_issue		;DRQ issue detected, use firmware value
+	DBGMSG	dbg_multi_ok256
+	move.w	#256,CFU_MultiSizeRW(a3)	;auto-detected: card works, use 256
+	bra.s	_imm_rw_debug
+
+_imm_rw_skip_auto:
+	DBGMSG	dbg_multi_skip
+	ifd	DEBUG
+	bra.s	_imm_rw_firmware
+	endc
+
+_imm_rw_drq_issue:
+	DBGMSG	dbg_multi_drq_issue
+	;fall through to _imm_rw_firmware
+
+_imm_rw_firmware:
+	moveq.l	#0,d0
+	move.w	CFU_MultiSize(a3),d0
+	move.w	d0,CFU_MultiSizeRW(a3)		;use firmware value
 _imm_rw_debug:
 	ifd	DEBUG
 	move.l	d0,-(sp)
@@ -4651,7 +4690,7 @@ _imm_rw_debug:
 _imm_nosup:
 	DBGMSG	dbg_multinosup
 	moveq.l	#1,d0			;default to single blocks
-	bra.s	_imm_end
+	bra.w	_imm_end
 
 _imm_error:
 	ifd	DEBUG
@@ -4661,7 +4700,85 @@ _imm_error:
 	endc
 	DBGMSG	dbg_multifail
 	moveq.l	#1,d0			;default to single blocks
-	bra.s	_imm_end
+	bra.w	_imm_end
+
+;--- Test Multi-Sector Capability ---------------------------
+;
+; Tests if the card properly clears DRQ after reading
+; the expected number of sectors. Some CF/SD adapters 
+; report MaxMulti=1 but actually work fine with higher
+; values (DRQ clears properly after reading).
+;
+; Method:
+;   1. Issue READ SECTORS for LBA 0, 1 sector
+;   2. Read 512 bytes (1 sector)
+;   3. Check if DRQ clears after reading
+;
+; Input:
+;   a3 = CFU pointer
+;   IDE access must be available
+;
+; Output:
+;   d0 = 0 if DRQ cleared properly (card works, use 256)
+;   d0 = 1 if DRQ stayed high (issue detected, use firmware value)
+;
+; Preserves: a2-a6, d2-d7
+;
+_TestMultiSectorIssue:
+	movem.l	d1-d2/a0-a1,-(sp)
+	DBGMSG	dbg_multi_test
+
+	;--- Start IDE access ---
+	bsr.w	_IDEStart
+
+	;--- Issue READ SECTORS command for LBA 0, 1 sector ---
+	lea	CFU_IDESet+2(a3),a0
+	move.w	#$0100,(a0)+		;1 sector, LBA bits 7:0 = 0
+	clr.w	(a0)+			;LBA bits 23:8 = 0
+	move.w	#$e020,(a0)		;LBA mode, drive 0, READ SECTORS ($20)
+	bsr.w	_IDECmd
+	tst.w	d0
+	beq.s	_tms_ok			;command failed, assume card works
+
+	;--- Wait for DRQ ---
+	bsr.w	WaitReady
+	moveq.l	#3,d0
+	and.b	CFU_EventFlags(a3),d0
+	bne.s	_tms_ok			;card removed, assume ok
+
+	moveq.l	#$29,d0			;DF, DRQ, ERR
+	and.b	CFU_IDEStatus(a3),d0
+	subq.b	#8,d0			;DRQ?
+	bne.s	_tms_ok			;no DRQ, assume card works
+
+	;--- Read 512 bytes (discard data) ---
+	;Uses word reads, 256 iterations of 1 word = 512 bytes
+	move.l	CFU_IOPtr(a3),a0
+	addq.l	#8,a0			;IDE data register
+	move.w	#256-1,d1		;256 word reads
+_tms_read:
+	move.w	(a0),d2			;read and discard
+	dbf	d1,_tms_read
+
+	;--- Check if DRQ is still set ---
+	;If DRQ cleared, card works correctly
+	;If DRQ still set, card has issue
+	move.l	CFU_IDEAddr(a3),a0
+	move.b	14(a0),d0		;read status register
+	btst	#3,d0			;DRQ still set?
+	beq.s	_tms_ok			;DRQ cleared = card works
+
+	;--- DRQ still set = issue detected ---
+	bsr.w	_IDEStop
+	moveq.l	#1,d0			;return 1 = issue, use firmware value
+	bra.s	_tms_end
+
+_tms_ok:
+	bsr.w	_IDEStop
+	moveq.l	#0,d0			;return 0 = card works, use 256
+_tms_end:
+	movem.l	(sp)+,d1-d2/a0-a1
+	rts
 
 ;--- PIO Mode to Memory Timing Mapping ---------------------
 ; Compile-time option: FASTPIO
@@ -4682,11 +4799,11 @@ _imm_error:
 ;   Bit 1: PIO mode 4 supported (120ns cycle)
 ;
 ; PIO to Gayle memory timing mapping:
-;   PIO 4 (120ns) → Gayle 100ns
-;   PIO 3 (180ns) → Gayle 150ns
-;   PIO 2 (240ns) → Gayle 250ns
-;   PIO 1 (383ns) → Gayle 250ns
-;   PIO 0 (600ns) → Gayle 720ns (default)
+;   PIO 4 (120ns) -> Gayle 100ns
+;   PIO 3 (180ns) -> Gayle 150ns
+;   PIO 2 (240ns) -> Gayle 250ns
+;   PIO 1 (383ns) -> Gayle 250ns
+;   PIO 0 (600ns) -> Gayle 720ns (default)
 ;
 _OptimizePIOSpeed:
 	ifd	FASTPIO

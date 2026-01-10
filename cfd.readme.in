@@ -4,7 +4,7 @@ Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by 
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
-Replaces:     driver/media/cfd135.lha
+Replaces:     driver/media/cfd135.lha, driver/media/cfd136.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
@@ -13,9 +13,16 @@ compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. 
 CHANGES IN @VERSION@ (@DATE@)
 ============================
 Driver:
-* TBD
+* Autodetect multi-sector override capability
+  - Driver estimates by simple test if 256 sectors/interrupt works
+  - If test passes, 256 sector mode auto-enabled for best performance
+  - If test fails, falls back to firmware-reported value
+  - Flags = 16 still available as manual override to force 256
+  - Flags = 32 skips auto-detection, uses firmware value directly
+
 Tools:
 * TBD
+
 Others:
 * TBD
 
@@ -67,6 +74,7 @@ Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
   Flags = 4    /* use CardResource API instead of direct chipset access */
   Flags = 8    /* output init messages to serial port at 9600 baud (v1.35+ full build) */
   Flags = 16   /* force 256 sector transfers regardless of card capability (v1.35+) */
+  Flags = 32   /* skip multi-sector auto-detection, use firmware value (v1.37+) */
 
 SERIAL DEBUG EXAMPLE
 ====================
@@ -110,7 +118,10 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
   [CFD] ..card supports max multi: 1
   [CFD] ..setting multi mode to: 1
   [CFD] ..OK
-  [CFD] ..override multi size: 256
+  [CFD] ..testing multi-sector capability...
+  [CFD] ..DRQ issue not detected
+  [CFD] ..auto-enabling 256 sector mode
+  [CFD] ..multi-sector RW size: 256
   [CFD] ..done
   [CFD] Card identified OK
   [CFD] Notify clients
@@ -118,6 +129,10 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
 
 ENFORCE MULTI MODE (FLAG 16)
 ============================
+NOTE: As of v1.37, the driver automatically detects multi-sector
+capability and enables 256 sector mode when safe. This flag is now
+only needed as a manual override if auto-detection fails.
+
 Forces 256 sector reads/writes per IO regardless of card firmware
 support to improve IO performance. Same behaviour as v1.33 and
 earlier versions.
