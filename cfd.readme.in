@@ -4,7 +4,7 @@ Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by 
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
-Replaces:     driver/media/cfd134.lha
+Replaces:     driver/media/cfd135.lha, driver/media/cfd136.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
@@ -13,32 +13,18 @@ compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. 
 CHANGES IN @VERSION@ (@DATE@)
 ============================
 Driver:
-* MuForce hit fix when using Format (issue #8)
-  - Fixed memory access issue detected by MuForce during disk formatting
-* Clear stale card data on removal
-  - Prevents stale data when no card is present or after card swap
-  - IDE status, error, addresses, multi-sector settings now cleared on card removal
-  - 512-byte IDENTIFY buffer fully cleared (model, serial, firmware, capacity)
-* SD-to-CF adapter retry fix (introduced in v1.33)
-  - When ATA IDENTIFY retries exhaust, now tries ATAPI IDENTIFY PACKET DEVICE
-  - Fixes potential hang on SD-to-CF adapters
-* Implement ATA_IDENTIFY command
-  - retrieve the cached ATA IDENTIFY data from the driver
+* Autodetect multi-sector override capability
+  - Driver estimates by simple test if 256 sectors/interrupt works
+  - If test passes, 256 sector mode auto-enabled for best performance
+  - If test fails, falls back to firmware-reported value
+  - Flags = 16 still available as manual override to force 256
+  - Flags = 32 skips auto-detection, uses firmware value directly
+
 Tools:
-* CFInfo utility
-  - Displays card model, serial, firmware, capacity, and capabilities
-* pcmciaspeed utility
-  - Recreated PCMCIA memory access timing benchmark tool
-* pcmciacheck utility
-  - Recreated PCMCIA check tool
+* TBD
+
 Others:
-* AmigaGuide documentation included (.guide files)
-* Improved code documentation
-  - Architecture overview with register conventions
-  - Documented CFU structure fields and key functions
-* Gayle memory timing
-  - Experimental: disabled, user can compile driver with option FASTPIO=1
-  - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
+* TBD
 
 FEATURES
 ========
@@ -88,6 +74,7 @@ Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
   Flags = 4    /* use CardResource API instead of direct chipset access */
   Flags = 8    /* output init messages to serial port at 9600 baud (v1.35+ full build) */
   Flags = 16   /* force 256 sector transfers regardless of card capability (v1.35+) */
+  Flags = 32   /* skip multi-sector auto-detection, use firmware value (v1.37+) */
 
 SERIAL DEBUG EXAMPLE
 ====================
@@ -131,7 +118,10 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
   [CFD] ..card supports max multi: 1
   [CFD] ..setting multi mode to: 1
   [CFD] ..OK
-  [CFD] ..override multi size: 256
+  [CFD] ..testing multi-sector capability...
+  [CFD] ..DRQ issue not detected
+  [CFD] ..auto-enabling 256 sector mode
+  [CFD] ..multi-sector RW size: 256
   [CFD] ..done
   [CFD] Card identified OK
   [CFD] Notify clients
@@ -139,6 +129,10 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
 
 ENFORCE MULTI MODE (FLAG 16)
 ============================
+NOTE: As of v1.37, the driver automatically detects multi-sector
+capability and enables 256 sector mode when safe. This flag is now
+only needed as a manual override if auto-detection fails.
+
 Forces 256 sector reads/writes per IO regardless of card firmware
 support to improve IO performance. Same behaviour as v1.33 and
 earlier versions.
