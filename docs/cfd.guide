@@ -194,7 +194,7 @@ TBD
       model/serial/firmware/capacity data
     * Prevents returning stale data when no card is present or after card swap
   * @{b}SD-to-CF adapter retry fix@{ub}
-    * when ATA IDENTIFY retries exhaust (regresion in v1.33), now tries ATAPI
+    * when ATA IDENTIFY retries exhaust (regression in v1.33), now tries ATAPI
       IDENTIFY PACKET DEVICE before giving up (as v1.32)
     * Fixes potential hang on SD-to-CF adapters
   * @{b}Implement ATA_IDENTIFY command@{ub}
