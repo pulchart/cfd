@@ -37,7 +37,7 @@ import sys
 import os
 from datetime import datetime
 
-SCRIPT_VERSION = '1.0 (08.01.2026)'
+SCRIPT_VERSION = '1.1 (11.01.2026)'
 
 # Constants for text formatting
 DEFAULT_WRAP_WIDTH = 72
@@ -987,7 +987,7 @@ def md2guide(md_content, title=None, version="1.0", date=None, ver_title=None):
         result.append(line)
         prev_empty = is_empty
     
-    return '\n'.join(result)
+    return '\n'.join(result) + '\n'
 
 
 def main():
