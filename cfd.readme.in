@@ -19,13 +19,12 @@ Driver:
   - If test fails, falls back to firmware-reported value
   - Flags = 16 still available as manual override to force 256
   - Flags = 32 skips auto-detection, uses firmware value directly
-
+* CFD_GETCONFIG command (0xED) to retrieve driver internal configuration
 Tools:
 * CFInfo shows driver configuration (flags, multi-sector, transfer modes)
 * pcmciacheck tests all 5 transfer modes including memory-mapped (mode 4)
-
 Others:
-* TBD
+* Typo fixes throughout documentation
 
 FEATURES
 ========

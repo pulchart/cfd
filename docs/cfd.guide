@@ -167,6 +167,9 @@ cards. This driver provides a suitable alternative.
     * Debug output shows detection result: "DRQ issue not detected" / "DRQ issue
       detected"
 
+  * @{b}CFD_GETCONFIG command (0xED)@{ub}
+    * New SCSI passthrough command to retrieve driver internal configuration
+
 @{b}Tools@{ub}
 
   * @{b}CFInfo shows driver configuration@{ub}
@@ -180,7 +183,8 @@ cards. This driver provides a suitable alternative.
     * Tests use proper PCMCIA configuration switching for memory-mapped access
 
 @{b}Others@{ub}
-TBD
+
+  * Typo fixes throughout documentation
 
 ----------------------------------------
 @{"<< Prev" link What_s_New_in}  @{"Contents" link Main}  @{"Next >>" link v1_36}
