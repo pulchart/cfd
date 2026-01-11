@@ -53,7 +53,7 @@
 FILE_VERSION	= 1
 	endc
 	ifnd	FILE_REVISION
-FILE_REVISION	= 36
+FILE_REVISION	= 37
 	endc
 
 ;--- Conditional compilation ---
@@ -2863,7 +2863,7 @@ _t_itest:
 	bsr.w	_DebugTransferMode	;show which transfer mode
 	endc
 	DBGMSG	dbg_getid
-	bsr.w	_GetIDEID		;read ATA Konfiguration block
+	bsr.w	_GetIDEID		;read ATA configuration block
 	DBGMSG	dbg_done
 	move.l	d0,d2
 	beq.s	_t_inodisk
@@ -3239,9 +3239,29 @@ ncl_end:
 	movem.l	(sp)+,d2/a5
 	rts
 
-;--- test PCMCIA Kommunikation -----------------------------
-; d0 -> bitfield telling the working modes
-
+;--- test PCMCIA communication -----------------------------
+; Test which PIO transfer modes work reliably with the card
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = bitfield of working modes (bits 0-3)
+;        bit 0: mode 0 (WORD - 16-bit word access)
+;        bit 1: mode 1 (BYTE data - 8-bit at adjacent addresses)
+;        bit 2: mode 2 (BYTE alt - 8-bit at separate I/O addresses)
+;        bit 3: mode 3 (BYTE alt2 - 8-bit via alternate register)
+;   CFU_RWFlags = bitfield of working modes
+;   CFU_WriteMode = selected write mode (0-3, lowest working mode)
+;   CFU_ReadMode = cleared to 0
+;
+; Notes:
+;   - Tests I/O modes 0-3 using pattern-based read/write tests
+;   - Runs TestRun twice for reliability (AND results)
+;   - Selects the lowest working I/O mode (0 preferred)
+;   - If no modes work, defaults to mode 1
+;   - Updates transfer mode configuration in CFU
+;
 RWTest:
 	movem.l	d2-d3,-(sp)
 	move.l	CFU_IDEAddr(a3),a0
@@ -3267,6 +3287,27 @@ rwt_1:
 	movem.l	(sp)+,d2-d3
 	rts
 
+;--- test I/O mode patterns --------------------------------
+; Test I/O modes 0-3 by writing/reading test patterns
+;
+; Input:
+;   a0 = IDE register base address (CFU_IDEAddr + 4)
+;   a1 = alternate address (a0 + 0x10000)
+;   d2 = test pattern (e.g., $1234)
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = bitfield of working I/O modes (bits 0-3)
+;
+; Notes:
+;   - Tests all 16 combinations of write/read modes (4x4)
+;   - Mode 0: 16-bit word access
+;   - Mode 1: 8-bit byte access (adjacent addresses)
+;   - Mode 2: 8-bit byte access (separate I/O)
+;   - Mode 3: 8-bit byte access (alternate register)
+;   - Uses jump table (tr_tab) for mode-specific handlers
+;   - Increments pattern for each test to detect stale data
+;
 TestRun:
 	movem.l	d3-d5,-(sp)
 	moveq.l	#0,d4
@@ -3356,10 +3397,25 @@ _r3:
 	move.b	1(a1),d3
 	rts
 
-;*** IDE Protokoll *****************************************
+;*** IDE Protocol ******************************************
 ;--- wait by polling ---------------------------------------
-; d0 -> IDE Status or -1
-
+; Poll IDE status register until drive becomes ready
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = IDE status byte (bit 7 = BSY, bit 6 = DRDY)
+;        Returns -1 if card removed or timeout
+;
+; Notes:
+;   - Polls IDE status register waiting for BSY to clear
+;   - Selects master drive (DEVHEAD = $E0) before polling
+;   - 30-second timeout (100 iterations × 300ms delay)
+;   - Acknowledges status changes via PCMCIA config register
+;   - Frees interrupts when ready (bit 1 of register 14)
+;   - Used during card initialization to wait for drive ready
+;
 BusyWait:
 	move.l	d2,-(sp)
 	bsr.w	_IDEStart
@@ -3504,7 +3560,25 @@ _io_1:
 	rts
 
 ;--- get IDE error -----------------------------------------
-
+; Read IDE error register and ATAPI sense data
+;
+; Input:
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = sense key (0-127) if ATAPI, -1 if ATA or error
+;   CFU_IDEError = IDE error register value
+;   CFU_IDESense = ATAPI sense key (if ATAPI device)
+;   CFU_IOErr = converted IO error code (if ATAPI)
+;
+; Notes:
+;   - Reads IDE error register (offset 13) into CFU_IDEError
+;   - For ATAPI devices, issues REQUEST SENSE command ($03)
+;   - Reads sense key from error register after REQUEST SENSE
+;   - Converts sense key to IO error code (bit 6 set = error)
+;   - Handles both word (mode 0) and byte (modes 1-3) transfers
+;   - Returns -1 if BSY/ERR set or command failed
+;
 _IDEError:
 	movem.l	d2/a2,-(sp)
 	move.l	CFU_IDEAddr(a3),a0
@@ -3551,7 +3625,7 @@ _idee_done:
 	movem.l	(sp)+,d2/a2
 	rts
 
-;--- send Kommand ------------------------------------------
+;--- send command ------------------------------------------
 ; Send IDE command to the drive
 ;
 ; Input:
@@ -3616,7 +3690,7 @@ _idec_end:
 	move.l	(sp)+,a2
 	rts
 
-;--- read drive Konfiguration ------------------------------
+;--- read drive configuration ------------------------------
 ; Identify the connected CF/ATA/ATAPI device
 ;
 ; Input:
@@ -3855,7 +3929,7 @@ _rb_1:
 	moveq.l	#0,d1
 	move.w	CFU_MultiSize(a3),d1
 	move.l	d1,d6			;Blocks/Interrupt
-	move.b	d4,(a0)+		;Sektors
+	move.b	d4,(a0)+		;Sectors
 	move.b	d2,(a0)+		;LBA 7-0
 	move.l	d2,d0
 	lsr.l	#8,d0
@@ -4425,7 +4499,7 @@ _wb_1:
 	moveq.l	#0,d1
 	move.w	CFU_MultiSize(a3),d1
 	move.l	d1,d6			;Blocks/Interrupt
-	move.b	d4,(a0)+		;Sektors
+	move.b	d4,(a0)+		;Sectors
 	move.b	d2,(a0)+		;LBA 7-0
 	move.l	d2,d0
 	lsr.l	#8,d0
@@ -5052,7 +5126,7 @@ _su_wait:
 	move.b	7(a0),d0
 	bmi.s	_su_wait		;BSY
 
-	move.b	#7,13(a0)		;Subkommand "Spin Up"
+	move.b	#7,13(a0)		;Subcommand "Spin Up"
 	move.b	#$ef,7(a0)		;SET FEATURES
 	bsr.w	WaitReady
 	move.b	CFU_IDEStatus(a3),d0
@@ -5190,7 +5264,7 @@ _p_wait2:
 	lea	CFU_Packet(a3),a0
 	move.w	CFU_PLength(a3),d1
 _p_packet:
-	move.w	(a0)+,(a2)		;send kommand line
+	move.w	(a0)+,(a2)		;send command line
 	subq.w	#2,d1
 	bgt.s	_p_packet
 _p_data:
