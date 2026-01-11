@@ -26,6 +26,9 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
   - `Flags = 32` skips auto-detection and uses firmware-reported value directly
   - Debug output shows detection result: "DRQ issue not detected" / "DRQ issue detected"
 
+* **CFD_GETCONFIG command (0xED)**
+  - New SCSI passthrough command to retrieve driver internal configuration
+
 #### Tools
 
 * **CFInfo shows driver configuration**
@@ -37,7 +40,8 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
   - Tests use proper PCMCIA configuration switching for memory-mapped access
 
 #### Others
-TBD
+
+* Typo fixes throughout documentation
 
 ### v1.36
 
