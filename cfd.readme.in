@@ -14,14 +14,15 @@ CHANGES IN @VERSION@ (@DATE@)
 ============================
 Driver:
 * Autodetect multi-sector override capability
-  - Driver estimates by simple test if 256 sectors/interrupt works
+  - Driver estimates by simple test if multi-sector override works
   - If test passes, 256 sector mode auto-enabled for best performance
   - If test fails, falls back to firmware-reported value
   - Flags = 16 still available as manual override to force 256
   - Flags = 32 skips auto-detection, uses firmware value directly
 
 Tools:
-* TBD
+* CFInfo shows driver configuration (flags, multi-sector, transfer modes)
+* pcmciacheck tests all 5 transfer modes including memory-mapped (mode 4)
 
 Others:
 * TBD
@@ -74,7 +75,7 @@ Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
   Flags = 4    /* use CardResource API instead of direct chipset access */
   Flags = 8    /* output init messages to serial port at 9600 baud (v1.35+ full build) */
   Flags = 16   /* force 256 sector transfers regardless of card capability (v1.35+) */
-  Flags = 32   /* skip multi-sector auto-detection, use firmware value (v1.37+) */
+  Flags = 32   /* skip multi-sector override auto-detection, use firmware value (v1.37+) */
 
 SERIAL DEBUG EXAMPLE
 ====================
@@ -130,8 +131,8 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
 ENFORCE MULTI MODE (FLAG 16)
 ============================
 NOTE: As of v1.37, the driver automatically detects multi-sector
-capability and enables 256 sector mode when safe. This flag is now
-only needed as a manual override if auto-detection fails.
+override capability and enables 256 sector mode when safe. This flag
+is now only needed as a manual override if auto-detection fails.
 
 Forces 256 sector reads/writes per IO regardless of card firmware
 support to improve IO performance. Same behaviour as v1.33 and
@@ -155,7 +156,7 @@ Tested configurations (author's experience - your results may vary):
 CFINFO UTILITY
 ==============
 CFInfo displays detailed information about the inserted CF card.
-Requires compactflash.device v1.36+ for full IDENTIFY data.
+Requires compactflash.device v1.36+ for IDENTIFY data, v1.37+ for driver config.
 
   CFInfo          ; Show info for compactflash.device unit 0
   CFInfo 1        ; Show info for unit 1
@@ -183,6 +184,17 @@ Example output:
   === Card Type ===
   Removable:  Yes
   Type:       CompactFlash
+  
+  === Driver Configuration ===
+  Driver Ver:   1.37
+  Mount Flags:  0 (none)
+  Multi-sect:   FW=1, Used=256
+  R/W Mode:     WORD/WORD
+
+R/W Mode indicates how the driver accesses the PCMCIA:
+  WORD        16-bit word access (standard)
+  BYTE (...)  8-bit byte access variants (fallback)
+  MMAP        Memory mapped word access
 
 SOURCE CODE
 ===========

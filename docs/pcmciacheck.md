@@ -4,7 +4,7 @@
 
 `pcmciacheck` is a diagnostic tool for testing PCMCIA CompactFlash card compatibility with Amiga systems. It tests the same read/write modes used by the `compactflash.device` driver to determine which data access modes work correctly with your CF card, helping identify potential compatibility issues before using the card with the `compactflash.device` driver.
 
-- **Multiple Access Mode Testing**: Tests 4 different read modes and 4 write modes
+- **Multiple Access Mode Testing**: Tests 5 different read modes and 5 write modes (including memory-mapped)
 - **Pattern-Based Compatibility Testing**: Mirrors the `cfd.s` driver's RWTest functionality  
 - **Safe Operation**: Write testing requires explicit `-w` flag to prevent accidental data loss
 - **Detailed Progress Reporting**: Real-time status output suitable for serial redirection
@@ -42,12 +42,15 @@ pcmciacheck -w >SER: RAM:test.log
 
 ### Read Mode Results
 
-The tool tests 4 different read access modes:
+The tool tests 5 different read access modes:
 
-- **Mode 0**: Word access (16-bit reads)
+- **Mode 0**: Word access (16-bit reads via I/O space)
 - **Mode 1**: Sequential byte access  
 - **Mode 2**: Alternating byte access
 - **Mode 3**: Offset byte access
+- **Mode 4 (MMAP)**: Memory mapped word access (uses PCMCIA common memory)
+
+Mode 4 uses a different PCMCIA configuration (memory-mapped instead of I/O) and is tested separately from modes 0-3.
 
 **Result Types:**
 - **OK (512 bytes)**: Full IDENTIFY data read successfully

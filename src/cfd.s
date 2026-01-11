@@ -418,6 +418,7 @@ READCAPACITY	= $25
 READ10		= $28
 WRITE10		= $2a
 ATA_IDENTIFY	= $EC			;ATA IDENTIFY passthrough (vendor-specific)
+CFD_GETCONFIG	= $ED			;Get driver config (vendor-specific)
 
 ;--- from timer.device -------------------------------------
 
@@ -598,7 +599,7 @@ CFU_OpenFlags	= 238			;mount Flags field
 				;  bit 2: compatibility mode
 				;  bit 3: serial debug output (Flags=8)
 				;  bit 4: enforce multi mode 256 sectors (Flags=16)
-				;  bit 5: skip multi-sector auto-detection (Flags=32)
+				;  bit 5: skip multi-sector override auto-detection (Flags=32)
 CFUF_SERIALDEBUG = 8			;Flags = 8 enables serial debug
 
 ;--- Transfer configuration ---
@@ -1628,6 +1629,7 @@ _sc_tab:
 	dc.w	6<<8+REQUESTSENSE, _RequestSense-_sc_tab
 	dc.w	6<<8+INQUIRY, _Inquiry-_sc_tab
 	dc.w	6<<8+ATA_IDENTIFY, _ATAIdentify-_sc_tab
+	dc.w	6<<8+CFD_GETCONFIG, _CFDGetConfig-_sc_tab
 	dc.w	0
 
 ;*** SCSI Emulation ****************************************
@@ -1754,6 +1756,67 @@ _aid_copy:
 	bgt.s	_aid_copy
 
 _aid_end:
+	moveq.l	#0,d0			;success
+	rts
+
+;--- CFD GET CONFIG ----------------------------------------
+; Returns driver internal configuration
+; This is a vendor-specific extension (command $ED)
+;
+; Input:
+;   a2 = &SCSICmd structure
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = SCSI status (0 = success)
+;   SCSI_Actual = bytes copied (actual struct size)
+;   SCSI_Data buffer filled with config data:
+;
+; Structure layout (extensible - check struct_size for version):
+;     Offset 0-1:  struct_size (total bytes in this structure, for versioning)
+;     Offset 2:    Driver major version
+;     Offset 3:    Driver minor version
+;     Offset 4-5:  CFU_OpenFlags (mount Flags field)
+;     Offset 6-7:  CFU_MultiSize (firmware-reported multi-sector)
+;     Offset 8-9:  CFU_MultiSizeRW (actual multi-sector used)
+;     Offset 10:   CFU_ReceiveMode (read transfer mode: 0=WORD, 1-3=BYTE)
+;     Offset 11:   CFU_WriteMode (write transfer mode)
+;     --- v1.37 structure ends here (12 bytes) ---
+;     Future versions may add more fields after offset 12
+;
+; Clients should:
+;   1. Request a large buffer (e.g., 64 bytes)
+;   2. Check struct_size to know what fields are available
+;   3. Only access fields within struct_size bounds
+;
+CFD_CONFIG_SIZE	= 12			;current structure size
+
+_CFDGetConfig:
+	move.l	SCSI_Length(a2),d1
+	beq.s	_cgc_end		;no buffer
+
+	move.l	(a2),d0			;SCSI_Data
+	beq.s	_cgc_end		;no buffer pointer
+
+	;Limit to CFD_CONFIG_SIZE bytes
+	cmp.l	#CFD_CONFIG_SIZE,d1
+	bls.s	_cgc_1
+	move.l	#CFD_CONFIG_SIZE,d1
+_cgc_1:
+	move.l	d1,SCSI_Actual(a2)
+	move.l	d0,a1			;destination
+
+	;Build config data in buffer
+	move.w	#CFD_CONFIG_SIZE,(a1)+	;offset 0-1: structure size (for versioning)
+	move.b	#FILE_VERSION,(a1)+	;offset 2: major version
+	move.b	#FILE_REVISION,(a1)+	;offset 3: minor version
+	move.w	CFU_OpenFlags(a3),(a1)+	;offset 4-5: flags
+	move.w	CFU_MultiSize(a3),(a1)+	;offset 6-7: firmware multi
+	move.w	CFU_MultiSizeRW(a3),(a1)+ ;offset 8-9: actual multi
+	move.b	CFU_ReceiveMode(a3),(a1)+ ;offset 10: read mode
+	move.b	CFU_WriteMode(a3),(a1)+	;offset 11: write mode
+
+_cgc_end:
 	moveq.l	#0,d0			;success
 	rts
 

@@ -7,7 +7,6 @@
  * Build: make cfinfo (requires vbcc + NDK)
  * Usage: CFInfo [unit]
  *
- * Requires compactflash.device v1.36+ for full IDENTIFY data.
  */
 
 #include "common.h"
@@ -34,6 +33,29 @@ const char version[] = MAKE_VERSION_STRING("CFInfo");
 #define SCSI_TEST_UNIT_READY 0x00
 #define SCSI_READ_CAPACITY   0x25
 #define ATA_IDENTIFY         0xEC  /* Vendor-specific passthrough (v1.36+) */
+#define CFD_GETCONFIG        0xED  /* Driver config passthrough (v1.37+) */
+
+/* CFD_GETCONFIG response structure (extensible)
+ *
+ * The first field (struct_size) indicates the total structure size.
+ * Future driver versions may extend this structure with more fields.
+ * Clients should check struct_size before accessing fields beyond
+ * the minimum known size.
+ */
+struct CFDConfig {
+    UWORD struct_size;      /* offset 0-1: structure size (for versioning) */
+    UBYTE version_major;    /* offset 2: driver major version */
+    UBYTE version_minor;    /* offset 3: driver minor version */
+    UWORD open_flags;       /* offset 4-5: mount Flags field */
+    UWORD multi_size;       /* offset 6-7: firmware multi-sector */
+    UWORD multi_size_rw;    /* offset 8-9: actual multi-sector used */
+    UBYTE receive_mode;     /* offset 10: read transfer mode */
+    UBYTE write_mode;       /* offset 11: write transfer mode */
+    /* Future fields may be added here - check struct_size */
+};
+
+#define CFD_CONFIG_SIZE_V137 12   /* v1.37 structure size */
+#define CFD_CONFIG_BUFFER_SIZE 64 /* request larger buffer for future compat */
 
 /* IDENTIFY data word offsets */
 #define ID_CONFIG       0   /* General configuration */
@@ -119,6 +141,22 @@ BOOL DoATAIdentify(void)
 {
     memset(data_buf, 0, IDENTIFY_BUFFER_SIZE);
     return DoSCSI(ATA_IDENTIFY, IDENTIFY_BUFFER_SIZE, 6);
+}
+
+/* Get driver config (v1.37+ passthrough) */
+BOOL DoGetConfig(struct CFDConfig *config)
+{
+    memset(data_buf, 0, CFD_CONFIG_BUFFER_SIZE);
+    memset(config, 0, sizeof(struct CFDConfig));
+
+    /* Request larger buffer for future compatibility */
+    if (!DoSCSI(CFD_GETCONFIG, CFD_CONFIG_BUFFER_SIZE, 6)) {
+        return FALSE;
+    }
+
+    /* Copy only what we understand (our struct size) */
+    memcpy(config, data_buf, sizeof(struct CFDConfig));
+    return TRUE;
 }
 
 /* Test if unit is ready */
@@ -327,6 +365,54 @@ void PrintCardInfo(UWORD *id)
     }
 }
 
+/* Print driver configuration */
+void PrintDriverConfig(struct CFDConfig *cfg)
+{
+    printf("\r\n");
+    printf("=== Driver Configuration ===\r\n");
+    printf("Driver Ver:   %u.%u\r\n", cfg->version_major, cfg->version_minor);
+    printf("Mount Flags:  %u (", cfg->open_flags);
+    if (cfg->open_flags == 0) {
+        printf("none");
+    } else {
+        int first = 1;
+        if (cfg->open_flags & 1)  { printf("%scfd_first", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 2)  { printf("%sskip_sig", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 4)  { printf("%scompat", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 8)  { printf("%sserial_debug", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 16) { printf("%sforce_multi", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 32) { printf("%sno_autodetect", first ? "" : ", "); first = 0; }
+    }
+    printf(")\r\n");
+    printf("Multi-sect:   FW=%u, Used=%u\r\n", cfg->multi_size, cfg->multi_size_rw);
+
+    /* Transfer modes - combined R/W display */
+    {
+        char read_buf[16], write_buf[16];
+        const char *read_mode, *write_mode;
+
+        switch (cfg->receive_mode) {
+            case 0:  read_mode = "WORD"; break;
+            case 1:  read_mode = "BYTE (data)"; break;
+            case 2:  read_mode = "BYTE (alt)"; break;
+            case 3:  read_mode = "BYTE (alt2)"; break;
+            case 4:  read_mode = "MMAP"; break;
+            default: sprintf(read_buf, "mode %u", cfg->receive_mode);
+                     read_mode = read_buf; break;
+        }
+        switch (cfg->write_mode) {
+            case 0:  write_mode = "WORD"; break;
+            case 1:  write_mode = "BYTE (data)"; break;
+            case 2:  write_mode = "BYTE (alt)"; break;
+            case 3:  write_mode = "BYTE (alt2)"; break;
+            case 4:  write_mode = "MMAP"; break;
+            default: sprintf(write_buf, "mode %u", cfg->write_mode);
+                     write_mode = write_buf; break;
+        }
+        printf("R/W Mode:     %s/%s\r\n", read_mode, write_mode);
+    }
+}
+
 void Cleanup(void)
 {
     if (io) {
@@ -396,13 +482,21 @@ int main(int argc, char **argv)
     /* Get IDENTIFY data via ATA passthrough (v1.36+) */
     if (!DoATAIdentify()) {
         printf("Error: IDENTIFY command failed\r\n");
-        printf("       (Requires compactflash.device v1.36 or later)\r\n");
+        printf("       (Requires compactflash.device v1.36+)\r\n");
         Cleanup();
         return 5;
     }
 
     /* Print information */
     PrintCardInfo((UWORD *)data_buf);
+
+    /* Get driver config (v1.37+) - optional, don't fail if not supported */
+    {
+        struct CFDConfig cfg;
+        if (DoGetConfig(&cfg)) {
+            PrintDriverConfig(&cfg);
+        }
+    }
 
     Cleanup();
     return 0;

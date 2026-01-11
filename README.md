@@ -19,7 +19,7 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
 #### Driver
 
 * **Autodetect multi-sector override capability**
-  - Driver estimates by simple test during init if 256 sectors per interrupt works
+  - Driver estimates by simple test during init if multi-sector override works
   - If test passes (DRQ clears properly), 256 sector mode is enabled for best performance
   - If test fails (DRQ stays high), falls back to firmware-reported value for compatibility
   - `Flags = 16` still available as manual override to force 256 sector mode
@@ -27,7 +27,14 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
   - Debug output shows detection result: "DRQ issue not detected" / "DRQ issue detected"
 
 #### Tools
-TBD
+
+* **CFInfo shows driver configuration**
+  - Displays mount flags, multi-sector settings (firmware vs actual), transfer modes
+  - Requires driver v1.37+ for config display (card info still works with v1.36+)
+
+* **pcmciacheck tests all 5 transfer modes**
+  - Added mode 4 (MMAP) memory-mapped transfer testing
+  - Tests use proper PCMCIA configuration switching for memory-mapped access
 
 #### Others
 TBD
@@ -147,7 +154,7 @@ Set in CF0 mountlist. Flags can be combined (e.g., `Flags = 9` for cfd first + s
 | `compatibility` | 4 | Use CardResource OS API instead of direct chipset access |
 | `serial debug` | 8 | Output initialization messages to serial port at 9600 baud (v1.35+ full build) |
 | `enforce multi mode` | 16 | Force 256 sector transfers regardless of card's reported capability (v1.35+) |
-| `skip multi-sector auto-detect` | 32 | Disable auto-detection, use firmware-reported multi-sector value (v1.37+) |
+| `skip override auto-detect` | 32 | Skip multi-sector override auto-detection, use firmware value (v1.37+) |
 
 ### Example: Enable serial debug
 ```
@@ -250,11 +257,30 @@ Retaken from readme of version 1.32/1.33. Those versions behave as if **Enforce 
 | 2GB Sandisk | 2.1 MB/s | 1.7 MB/s |
 | 4GB Kingston | 2.2 MB/s | 1.9 MB/s |
 
+## Transfer Modes
+
+The driver auto-detects the transfer mode during card initialization by testing which PCMCIA access methods work reliably:
+
+| Mode | Description |
+|------|-------------|
+| WORD | 16-bit word access to PCMCIA I/O register. Standard mode for most CF cards. |
+| BYTE (data) | 8-bit byte access with high/low bytes at adjacent addresses. For cards that don't support 16-bit transfers. |
+| BYTE (alt) | 8-bit byte access with high/low bytes at separate I/O addresses. For specific adapter configurations. |
+| BYTE (alt2) | 8-bit byte access via alternate register. Rarely used fallback mode. |
+| MMAP | Memory mapped word access. Direct memory transfer (requires PCMCIA memory mapping). |
+
+Most CF cards work with WORD mode. The driver tests write/read patterns during initialization and falls back to BYTE modes if 16-bit access fails. The selected mode is shown in serial debug output as `[CFD] Transfer: WORD` or similar.
+
 ## Tools
 
 ### CFInfo
 
 Display card information (requires v1.36+ driver). See [CFInfo.md](docs/CFInfo.md) for detailed field reference.
+
+With driver v1.37+, CFInfo also shows driver configuration including:
+- **Mount Flags**: Active flags from CF0 mountlist
+- **Multi-sect**: Firmware-reported vs actual multi-sector value used
+- **R/W Mode**: Data transfer mode (see [Transfer Modes](#transfer-modes))
 
 ### pcmciaspeed
 

@@ -2,7 +2,12 @@
 
 CFInfo displays detailed information about CF cards in the PCMCIA slot using the `compactflash.device` driver.
 
-**Requires:** compactflash.device v1.36+
+## Requirements
+
+| Feature | Driver Version |
+|---------|----------------|
+| Card information (IDENTIFY data) | v1.36+ |
+| Driver configuration display | v1.37+ |
 
 ## Usage
 
@@ -13,7 +18,7 @@ CFInfo 1        ; Show info for unit 1
 
 Example Output:
 ```
-CFInfo 1.36 (02.01.2026) - CompactFlash Card Information
+CFInfo 1.37 - CompactFlash Card Information
 Device:     compactflash.device unit 0
 
 === CompactFlash Card Information ===
@@ -53,6 +58,15 @@ Multiword DMA:  max=2
 === CF PCMCIA Timing (Word 164) ===
 Memory Mode:  max=3 (100ns), current=0 (600ns)
 I/O Mode:     max=3 (100ns), current=0 (600ns)
+
+=== Gayle Timing (hardware) ===
+Memory Speed: 250ns
+
+=== Driver Configuration ===
+Driver Ver:   1.37
+Mount Flags:  8 (serial_debug)
+Multi-sect:   FW=1, Used=256
+R/W Mode:     WORD/WORD
 ```
 
 ## Field Reference
@@ -149,11 +163,63 @@ PCMCIA memory and I/O timing modes (what Amiga Gayle chip controls):
 
 **Note:** If `current < max`, the card could potentially run faster if the host (Gayle) supports it. The experimental `FASTPIO=1` compile option attempts to optimize this.
 
+## Driver Configuration (v1.37+)
+
+Internal driver settings retrieved via vendor-specific command 0xED:
+
+| Field | Description |
+|-------|-------------|
+| Driver Ver | Driver version (major.minor) |
+| Mount Flags | Flags from CF0 mountlist |
+| Multi-sect | FW=firmware reported, Used=actual value driver uses |
+| R/W Mode | Read/Write transfer mode (WORD or BYTE) |
+
+### Mount Flags
+
+Flags are displayed with `, ` separator for combinations:
+- `Mount Flags:  0 (none)` - no flags set
+- `Mount Flags:  8 (serial_debug)` - single flag
+- `Mount Flags:  24 (serial_debug, force_multi)` - combined flags (8+16)
+
+| Flag | Value | Description |
+|------|-------|-------------|
+| cfd_first | 1 | "cfd first" hack for PCMCIA conflicts |
+| skip_sig | 2 | Skip PCMCIA signature check |
+| compat | 4 | Use CardResource API |
+| serial_debug | 8 | Serial debug output enabled |
+| force_multi | 16 | Force 256 sector multi-mode |
+| no_autodetect | 32 | Skip multi-sector override auto-detection |
+
+### Multi-sect Field
+
+- **FW**: Value reported by card firmware (IDENTIFY Word 47)
+- **Used**: Actual value the driver uses for READ/WRITE MULTIPLE commands
+
+If auto-detection determines the card works with 256 sectors, Used=256 even if FW=1.
+
+### R/W Mode
+
+Transfer mode used for reading/writing sector data. The driver auto-detects the working mode during card initialization by testing which PCMCIA access methods work reliably.
+
+| Mode | Description |
+|------|-------------|
+| WORD | 16-bit word access to PCMCIA I/O data register. Standard mode. |
+| BYTE (data) | 8-bit access, high and low bytes at adjacent I/O addresses. |
+| BYTE (alt) | 8-bit access, high and low bytes at separate I/O registers. |
+| BYTE (alt2) | 8-bit access via alternate register (rarely used fallback). |
+| MMAP | Memory mapped word access. Direct memory transfer. |
+
+**How it works**: During initialization, the driver writes test patterns to the card and reads them back using each mode. The first mode that returns correct data is selected. WORD mode is preferred as it transfers 16 bits per access. BYTE modes transfer 8 bits and require two accesses per word, used only when 16-bit access doesn't work.
+
 ## Technical Notes
 
-### ATA IDENTIFY Command
+### ATA IDENTIFY Command (0xEC)
 
 CFInfo uses a vendor-specific SCSI passthrough (command 0xEC) added in v1.36 to retrieve the cached ATA IDENTIFY data from the driver.
+
+### Driver Config Command (0xED)
+
+Added in v1.37, command 0xED returns the driver's internal configuration. The response structure is extensible - the first 2 bytes indicate the structure size, allowing future versions to add fields while maintaining backward compatibility.
 
 ### Word 0 (General Configuration)
 
