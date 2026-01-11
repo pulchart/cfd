@@ -396,6 +396,7 @@ void PrintDriverConfig(struct CFDConfig *cfg)
             case 1:  read_mode = "BYTE (data)"; break;
             case 2:  read_mode = "BYTE (alt)"; break;
             case 3:  read_mode = "BYTE (alt2)"; break;
+            case 4:  read_mode = "MMAP"; break;
             default: sprintf(read_buf, "mode %u", cfg->receive_mode);
                      read_mode = read_buf; break;
         }
@@ -404,6 +405,7 @@ void PrintDriverConfig(struct CFDConfig *cfg)
             case 1:  write_mode = "BYTE (data)"; break;
             case 2:  write_mode = "BYTE (alt)"; break;
             case 3:  write_mode = "BYTE (alt2)"; break;
+            case 4:  write_mode = "MMAP"; break;
             default: sprintf(write_buf, "mode %u", cfg->write_mode);
                      write_mode = write_buf; break;
         }
@@ -480,7 +482,7 @@ int main(int argc, char **argv)
     /* Get IDENTIFY data via ATA passthrough (v1.36+) */
     if (!DoATAIdentify()) {
         printf("Error: IDENTIFY command failed\r\n");
-        printf("       (Requires compactflash.device v1.36 or later)\r\n");
+        printf("       (Requires compactflash.device v1.36+)\r\n");
         Cleanup();
         return 5;
     }

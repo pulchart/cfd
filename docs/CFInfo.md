@@ -207,6 +207,7 @@ Transfer mode used for reading/writing sector data. The driver auto-detects the 
 | BYTE (data) | 8-bit access, high and low bytes at adjacent I/O addresses. |
 | BYTE (alt) | 8-bit access, high and low bytes at separate I/O registers. |
 | BYTE (alt2) | 8-bit access via alternate register (rarely used fallback). |
+| MMAP | Memory mapped word access. Direct memory transfer. |
 
 **How it works**: During initialization, the driver writes test patterns to the card and reads them back using each mode. The first mode that returns correct data is selected. WORD mode is preferred as it transfers 16 bits per access. BYTE modes transfer 8 bits and require two accesses per word, used only when 16-bit access doesn't work.
 

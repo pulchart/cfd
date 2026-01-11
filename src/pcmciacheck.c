@@ -61,7 +61,7 @@ UWORD TestTransferModes(void)
         for (write_mode = 0; write_mode < 4; write_mode++) {
             for (read_mode = 0; read_mode < 4; read_mode++) {
                 int mode_combo = (write_mode << 2) | read_mode;
-                
+
                 /* Write test pattern using selected write mode */
                 switch (write_mode) {
                     case 0: /* Word write */
@@ -84,7 +84,7 @@ UWORD TestTransferModes(void)
                         written_data = test_pattern;
                         break;
                 }
-                
+
                 /* Read back using selected read mode */
                 switch (read_mode) {
                     case 0: /* Word read */
@@ -100,18 +100,18 @@ UWORD TestTransferModes(void)
                         read_data = (*(a0) << 8) | *(a1 + 1);
                         break;
                 }
-                
+
                 /* Check if data matches */
                 if (read_data == written_data) {
                     working_modes |= (1 << mode_combo);
                 }
-                
+
                 /* Update test pattern for next iteration (like cfd.s) */
                 test_pattern += 0x0202;
             }
         }
     }
-    
+
     return working_modes;
 }
 
@@ -122,15 +122,15 @@ void LogPatternTest(void)
 {
     UWORD modes;
     int i;
-    
+
     WriteChunkHeader("ptst", 2);  /* Pattern test chunk */
-    
+
     modes = TestTransferModes();
-    
+
     /* Store as big-endian word */
     *LogPtr++ = (modes >> 8) & 0xFF;
     *LogPtr++ = modes & 0xFF;
-    
+
     printf("  Pattern test modes: 0x%04X\r\n", modes);
 }
 
@@ -344,9 +344,39 @@ void WriteMode3(UBYTE *src)
     }
 }
 
+/*
+ * Read 256 bytes using memory mapped access (mode 4)
+ * Reads from PCMCIA common memory at offset 1024
+ */
+void ReadMode4(UBYTE *dest)
+{
+    volatile UWORD *src = PCMCIA_MEM_DATA;
+    UWORD *d = (UWORD *)dest;
+    int i;
+
+    for (i = 0; i < 128; i++) {
+        *d++ = *src++;
+    }
+}
+
+/*
+ * Write 256 bytes using memory mapped access (mode 4)
+ * Writes to PCMCIA common memory at offset 1024
+ */
+void WriteMode4(UBYTE *src)
+{
+    volatile UWORD *dest = PCMCIA_MEM_DATA;
+    UWORD *s = (UWORD *)src;
+    int i;
+
+    for (i = 0; i < 128; i++) {
+        *dest++ = *s++;
+    }
+}
+
 /* Function pointer arrays for read/write modes */
-ReadFunc ReadModes[4] = { ReadMode0, ReadMode1, ReadMode2, ReadMode3 };
-WriteFunc WriteModes[4] = { WriteMode0, WriteMode1, WriteMode2, WriteMode3 };
+ReadFunc ReadModes[5] = { ReadMode0, ReadMode1, ReadMode2, ReadMode3, ReadMode4 };
+WriteFunc WriteModes[5] = { WriteMode0, WriteMode1, WriteMode2, WriteMode3, WriteMode4 };
 
 /*
  * Test read modes with IDENTIFY DEVICE command
@@ -392,7 +422,7 @@ int TestReadModes(int *working_mode)
             status = *IDE_STATUS;
             if (status & STATUS_BSY) break;
         }
-        
+
         /* Check for multi-sector read issue */
         BOOL has_multisector_issue = (chunks_read == 2 && (status & STATUS_DRQ));
         if (has_multisector_issue) {
@@ -423,6 +453,67 @@ int TestReadModes(int *working_mode)
                 }
             }
         }
+    }
+
+    /* Test mode 4 (memory mapped) - requires different config */
+    {
+        UBYTE orig_config = *PCMCIA_CONFIG;
+
+        printf("  Testing read mode 4 (MMAP)...");
+        chunk_id[3] = '4';
+        chunk_start = LogPtr;
+        LogPtr += 8;
+
+        /* Switch to memory-mapped mode */
+        *PCMCIA_CONFIG = 0x40;
+        DelayMS(1);  /* Wait for config change */
+
+        /* Setup IDENTIFY DEVICE command via memory-mapped registers */
+        *MMAP_DEVHEAD = 0xE0;
+        *MMAP_COMMAND = ATA_IDENTIFY;
+
+        /* Wait for ready using memory-mapped status */
+        {
+            int timeout = 300;  /* 30 seconds */
+            status = -1;
+            while (timeout > 0) {
+                UBYTE s = *MMAP_STATUS;
+                if (!(s & STATUS_BSY)) {
+                    status = s;
+                    break;
+                }
+                DelayMS(100);
+                timeout--;
+            }
+        }
+
+        if (status < 0) {
+            printf(" TIMEOUT\r\n");
+            WriteChunkHeader(chunk_id, 0);
+            LogPtr = chunk_start + 8;
+        } else {
+            int chunks_read = 0;
+            while (status >= 0 && (status & STATUS_DRQ) && chunks_read < 2) {
+                ReadMode4(LogPtr);
+                LogPtr += 256;
+                chunks_read++;
+                status = *MMAP_STATUS;
+                if (status & STATUS_BSY) break;
+            }
+
+            {
+                ULONG size = LogPtr - (chunk_start + 8);
+                UBYTE *save_ptr = LogPtr;
+                LogPtr = chunk_start;
+                WriteChunkHeader(chunk_id, size);
+                LogPtr = save_ptr;
+                printf(" %s (%lu bytes)\r\n", (size == 512) ? "OK" : "PARTIAL", (unsigned long)size);
+            }
+        }
+
+        /* Restore I/O mode config */
+        *PCMCIA_CONFIG = orig_config;
+        DelayMS(1);
     }
 
     if (*working_mode < 0) {
@@ -466,7 +557,7 @@ int TestWriteModes(int read_mode)
 {
     int mode;
     int status;
-    ULONG bytes_written[4];
+    ULONG bytes_written[5];
     UBYTE *chunk_start;
     int sector;
 
@@ -526,10 +617,91 @@ int TestWriteModes(int read_mode)
         printf(" %lu bytes\r\n", (unsigned long)bytes_written[mode]);
     }
 
+    /* Test mode 4 (memory mapped) write */
+    {
+        UBYTE orig_config = *PCMCIA_CONFIG;
+
+        printf("  Testing write mode 4 MMAP (sector 5)...");
+        bytes_written[4] = 0;
+
+        /* Switch to memory-mapped mode */
+        *PCMCIA_CONFIG = 0x40;
+        DelayMS(1);
+
+        /* Setup WRITE SECTORS command via memory-mapped registers */
+        *((volatile UBYTE *)(PCMCIA_MEM + 0x02)) = 1;           /* SECCOUNT = 1 */
+        *((volatile UBYTE *)(PCMCIA_MEM + 0x03 + 0x10000)) = 5; /* SECNUM = 5 */
+        *((volatile UBYTE *)(PCMCIA_MEM + 0x04)) = 0;           /* CYLLO */
+        *((volatile UBYTE *)(PCMCIA_MEM + 0x05 + 0x10000)) = 0; /* CYLHI */
+        *MMAP_DEVHEAD = 0xE0;
+
+        /* Wait for ready */
+        {
+            int timeout = 50;
+            status = -1;
+            while (timeout > 0) {
+                UBYTE s = *MMAP_STATUS;
+                if (!(s & STATUS_BSY) && (s & STATUS_DRDY)) {
+                    status = s;
+                    break;
+                }
+                DelayMS(100);
+                timeout--;
+            }
+        }
+
+        if (status < 0) {
+            printf(" TIMEOUT\r\n");
+        } else {
+            *MMAP_COMMAND = ATA_WRITE;
+
+            /* Wait for DRQ */
+            {
+                int timeout = 50;
+                status = -1;
+                while (timeout > 0) {
+                    UBYTE s = *MMAP_STATUS;
+                    if (!(s & STATUS_BSY)) {
+                        status = s;
+                        break;
+                    }
+                    DelayMS(100);
+                    timeout--;
+                }
+            }
+
+            if (status >= 0 && (status & STATUS_DRQ)) {
+                UBYTE *pattern_ptr = WritePattern[0];
+                int chunk = 0;
+
+                while (status >= 0 && (status & STATUS_DRQ)) {
+                    WriteMode4(pattern_ptr);
+                    bytes_written[4] += 256;
+                    chunk++;
+                    pattern_ptr = WritePattern[chunk % 4];
+                    status = *MMAP_STATUS;
+                    if (status & STATUS_BSY) {
+                        int timeout = 50;
+                        while (timeout > 0 && (*MMAP_STATUS & STATUS_BSY)) {
+                            DelayMS(100);
+                            timeout--;
+                        }
+                        status = *MMAP_STATUS;
+                    }
+                }
+            }
+            printf(" %lu bytes\r\n", (unsigned long)bytes_written[4]);
+        }
+
+        /* Restore I/O mode config */
+        *PCMCIA_CONFIG = orig_config;
+        DelayMS(1);
+    }
+
     printf("  Writing test summary...\r\n");
     /* Write wcln chunk - bytes written per mode */
-    WriteChunkHeader("wcln", 16);
-    for (mode = 0; mode < 4; mode++) {
+    WriteChunkHeader("wcln", 20);  /* 5 modes x 4 bytes */
+    for (mode = 0; mode < 5; mode++) {
         *LogPtr++ = (bytes_written[mode] >> 24) & 0xFF;
         *LogPtr++ = (bytes_written[mode] >> 16) & 0xFF;
         *LogPtr++ = (bytes_written[mode] >> 8) & 0xFF;
@@ -557,28 +729,28 @@ int TestWriteModes(int read_mode)
         int chunks_read = 0;
         int sectors_read = 0;
         BOOL has_multisector_issue = FALSE;
-        
+
         while (status >= 0 && (status & STATUS_DRQ) && chunks_read < 8) { /* Max 8 chunks for 4 sectors */
             ReadModes[read_mode](LogPtr);
             LogPtr += 256;
             chunks_read++;
-            
+
             /* Report progress every 2 chunks (per sector) */
             if (chunks_read % 2 == 0) {
                 sectors_read++;
                 printf("    Sector %d read... OK\r\n", sectors_read);
             }
-            
+
             status = *IDE_STATUS;
             if (status & STATUS_BSY) break;
         }
-        
+
         /* Check for multi-sector read issue */
         if (chunks_read == 8 && (status & STATUS_DRQ)) {
             has_multisector_issue = TRUE;
             printf("  WARNING: Multi-sector read issue detected (DRQ still set after 4 sectors)\r\n");
         }
-        
+
         printf("  Verification completed (%d sectors, %d chunks)\r\n", sectors_read, chunks_read);
     }
 
@@ -637,7 +809,7 @@ int main(int argc, char **argv)
     int i;
 
     if (argc < 2) {
-        printf("pcmciacheck 1.36 - PCMCIA/CF Hardware Test Tool\r\n");
+        printf("pcmciacheck " STR(VERSION) " - PCMCIA/CF Hardware Test Tool\r\n");
         printf("Usage: pcmciacheck [-w] <logfile>\r\n");
         printf("\r\n");
         printf("Tests different data access modes and creates diagnostic log.\r\n");
@@ -682,7 +854,7 @@ int main(int argc, char **argv)
 
     LogPtr = LogBuffer;
 
-    printf("pcmciacheck 1.36 - Testing card...\r\n");
+    printf("pcmciacheck " STR(VERSION) " - Testing card...\r\n");
 
     /* Write IFF header */
     memcpy(LogPtr, "FORM", 4);

@@ -175,6 +175,10 @@ cards. This driver provides a suitable alternative.
     * Requires driver v1.37+ for config display (card info still works with
       v1.36+)
 
+  * @{b}pcmciacheck tests all 5 transfer modes@{ub}
+    * Added mode 4 (MMAP) memory-mapped transfer testing
+    * Tests use proper PCMCIA configuration switching for memory-mapped access
+
 @{b}Others@{ub}
 TBD
 
@@ -536,6 +540,9 @@ testing which PCMCIA access methods work reliably:
                specific adapter configurations.       
   BYTE (alt2)  8-bit byte access via alternate        
                register. Rarely used fallback mode.   
+  MMAP         Memory mapped word access. Direct      
+               memory transfer (requires PCMCIA       
+               memory mapping).                       
 
 Most CF cards work with WORD mode. The driver tests write/read patterns
 during initialization and falls back to BYTE modes if 16-bit access

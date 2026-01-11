@@ -22,6 +22,7 @@ Driver:
 
 Tools:
 * CFInfo shows driver configuration (flags, multi-sector, transfer modes)
+* pcmciacheck tests all 5 transfer modes including memory-mapped (mode 4)
 
 Others:
 * TBD
@@ -189,6 +190,11 @@ Example output:
   Mount Flags:  0 (none)
   Multi-sect:   FW=1, Used=256
   R/W Mode:     WORD/WORD
+
+R/W Mode indicates how the driver accesses the PCMCIA:
+  WORD        16-bit word access (standard)
+  BYTE (...)  8-bit byte access variants (fallback)
+  MMAP        Memory mapped word access
 
 SOURCE CODE
 ===========

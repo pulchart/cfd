@@ -408,6 +408,8 @@ which PCMCIA access methods work reliably.
                separate I/O registers.                
   BYTE (alt2)  8-bit access via alternate register    
                (rarely used fallback).                
+  MMAP         Memory mapped word access. Direct      
+               memory transfer.                       
 
 @{b}How it works@{ub} : During initialization, the driver writes test patterns to
 the card and reads them back using each mode. The first mode that

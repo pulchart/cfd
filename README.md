@@ -32,6 +32,10 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF cards. 
   - Displays mount flags, multi-sector settings (firmware vs actual), transfer modes
   - Requires driver v1.37+ for config display (card info still works with v1.36+)
 
+* **pcmciacheck tests all 5 transfer modes**
+  - Added mode 4 (MMAP) memory-mapped transfer testing
+  - Tests use proper PCMCIA configuration switching for memory-mapped access
+
 #### Others
 TBD
 
@@ -263,6 +267,7 @@ The driver auto-detects the transfer mode during card initialization by testing 
 | BYTE (data) | 8-bit byte access with high/low bytes at adjacent addresses. For cards that don't support 16-bit transfers. |
 | BYTE (alt) | 8-bit byte access with high/low bytes at separate I/O addresses. For specific adapter configurations. |
 | BYTE (alt2) | 8-bit byte access via alternate register. Rarely used fallback mode. |
+| MMAP | Memory mapped word access. Direct memory transfer (requires PCMCIA memory mapping). |
 
 Most CF cards work with WORD mode. The driver tests write/read patterns during initialization and falls back to BYTE modes if 16-bit access fails. The selected mode is shown in serial debug output as `[CFD] Transfer: WORD` or similar.
 

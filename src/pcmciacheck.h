@@ -14,7 +14,16 @@
 #define PCMCIA_ATTR     ((volatile UBYTE *)0x00A00000)
 #define PCMCIA_CONFIG   ((volatile UBYTE *)0x00A00200)
 
-/* IDE registers in PCMCIA common memory */
+/* PCMCIA memory spaces */
+#define PCMCIA_MEM      0x00600000  /* Common memory base (for mode 4) */
+#define PCMCIA_MEM_DATA ((volatile UWORD *)(PCMCIA_MEM + 0x400))  /* Data at offset 1024 */
+
+/* IDE registers in PCMCIA memory-mapped mode (mode 4) */
+#define MMAP_DEVHEAD    ((volatile UBYTE *)(PCMCIA_MEM + 0x06))
+#define MMAP_COMMAND    ((volatile UBYTE *)(PCMCIA_MEM + 0x07 + 0x10000))
+#define MMAP_STATUS     ((volatile UBYTE *)(PCMCIA_MEM + 0x0E))
+
+/* IDE registers in PCMCIA I/O space (modes 0-3) */
 #define IDE_BASE        0x00A20000
 #define IDE_DATA        ((volatile UWORD *)(IDE_BASE + 0x00))
 #define IDE_DATA_BYTE   ((volatile UBYTE *)(IDE_BASE + 0x00))
@@ -69,11 +78,13 @@ void ReadMode0(UBYTE *dest);
 void ReadMode1(UBYTE *dest);
 void ReadMode2(UBYTE *dest);
 void ReadMode3(UBYTE *dest);
+void ReadMode4(UBYTE *dest);  /* Memory mapped */
 
 /* Write mode functions */
 void WriteMode0(UBYTE *src);
 void WriteMode1(UBYTE *src);
 void WriteMode2(UBYTE *src);
 void WriteMode3(UBYTE *src);
+void WriteMode4(UBYTE *src);  /* Memory mapped */
 
 #endif /* PCMCIACHECK_H */
