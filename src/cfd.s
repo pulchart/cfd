@@ -1637,7 +1637,22 @@ _sc_tab:
 ; d0 -> SCSI_Status
 
 ;--- TEST UNIT READY ---------------------------------------
-
+; SCSI TEST UNIT READY command - check if device is ready
+;
+; Input:
+;   a2 = &SCSICmd structure
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = SCSI status
+;        0x0000 = success (unit ready)
+;        0x0202 = CHECK CONDITION (no disk or not ready)
+;
+; Notes:
+;   - Checks if drive is present (CFU_DriveSize != 0)
+;   - Returns success if disk is present and ready
+;   - Returns CHECK CONDITION if no disk or drive size is zero
+;
 _TestUnitReady:
 	moveq.l	#0,d0
 	tst.l	CFU_DriveSize(a3)
@@ -1648,7 +1663,23 @@ _tur_end:
 	rts
 
 ;--- REQUEST SENSE -----------------------------------------
-
+; SCSI REQUEST SENSE command - return sense data
+;
+; Input:
+;   a2 = &SCSICmd structure
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = SCSI status (0 = success)
+;   SCSI_Actual = bytes of sense data returned
+;   SCSI_Data = sense data buffer (filled by _GetSense)
+;
+; Notes:
+;   - Returns sense data for previous CHECK CONDITION
+;   - Uses CFU_SCSIState to determine sense key
+;   - Calls _GetSense to format sense data
+;   - Always returns success (sense data indicates error)
+;
 _RequestSense:
 	move.w	CFU_SCSIState(a3),d0
 	move.l	SCSI_Length(a2),d1
@@ -1659,7 +1690,26 @@ _RequestSense:
 	rts
 
 ;--- INQUIRY -----------------------------------------------
-
+; SCSI INQUIRY command - return device identification
+;
+; Input:
+;   a2 = &SCSICmd structure
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = SCSI status (0 = success)
+;   SCSI_Actual = bytes transferred
+;   SCSI_Data = INQUIRY response data (if buffer provided)
+;
+; Notes:
+;   - Builds SCSI INQUIRY response from IDE IDENTIFY data
+;   - Extracts vendor, product, and revision from CFU_ConfigBlock
+;   - Returns up to 96 bytes of INQUIRY data
+;   - Device type: 0x00 (direct access, disk)
+;   - Qualifier: 0x20 (device connected, LUN 0)
+;   - Flags: removable, SCSI-2, auto-sense supported
+;   - Pads vendor name if needed
+;
 _Inquiry:
 	moveq.l	#0,d0
 	moveq.l	#56/4,d1
