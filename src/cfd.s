@@ -2728,6 +2728,11 @@ _t_i2:
 	moveq.l	#600>>3,d1
 	lsl.l	#3,d1
 	move.l	d1,CFU_DTSpeed(a3)	;600ns = PIO 0
+
+	; Tuple Readings:
+	; CISTPL_DEVICE
+	; - Checks device type (0x0d = memory card)
+	; - Can be skipped; blind mode works without it
 	lea	CFU_ConfigBlock(a3),a0	;&tuple buffer
 	move.l	a2,a1
 	moveq.l	#1,d1			;CISTPL_DEVICE
@@ -2745,6 +2750,8 @@ _t_i2:
 	cmp.l	#$800,CFU_DTSize(a3)
 	bcc.s	_t_ifuncid
 
+	; Tuple CISTPL_VERS_1:
+	; - Checks for "FREECOM" and "PCCARD-IDE" strings
 	DBGMSG	dbg_tuple
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
@@ -2771,6 +2778,8 @@ _t_i2:
 	beq.w	_t_iblind
 	bra.s	_t_icfg
 _t_ifuncid:
+	; Tuple CISTPL_FUNCID:
+	; - Checks function ID (0x04 = Fixed Disk)
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#$21,d1			;CISTPL_FUNCID
@@ -2787,6 +2796,8 @@ _t_ifuncid:
 	cmp.b	#4,(a0)			;"fixed disk"
 	bne.w	_t_ibreak
 
+	; Tuple CISTPL_FUNCEXT:
+	; - Checks interface type (ATA)
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#$22,d1			;CISTPL_FUNCEXT
@@ -2813,6 +2824,12 @@ _t_icfg:
 	CALLCARD CardProgramVoltage
 	DBGMSG	dbg_voltage5v
 
+	; Tuple CISTPL_CONFIG - ESSENTIAL
+	; - Extracts configuration register address
+	; - Sets CFU_ConfigAddr used to:
+	;   - Switch between I/O and memory-mapped mode
+	;   - Acknowledge status changes
+	;   - Configure the card
 	DBGMSG	dbg_tuple
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
@@ -2850,6 +2867,8 @@ _t_saddr:
 	lsr.l	#8,d2
 	bra.s	_t_saddr
 _t_iblind:
+	; Fallback to blind mode (Hack #2) if tuple reading fails
+	; Uses hardcoded config address 0x200 instead of reading from CIS
 	btst	#1,CFU_OpenFlags+1(a3)
 	beq.w	_t_ibreak		;Hack #2 deactivated..
 
