@@ -22,6 +22,12 @@ The improvements to this driver are developed in my free time. If you’d like t
 
 #### Driver
 
+* **IDENTIFY-based card identification**
+  - Improved card detection reliability by using ATA IDENTIFY command instead of reading card CIS structure
+  - Issue was observed with Transcend CF 133 4GB
+  - Config address still read from card CIS when available, with automatic fallback to standard address
+  - Flags = 2 deprecated (no longer needed, fallback happens automatically)  - `Flags = 2` deprecated (no longer needed, fallback happens automatically)
+
 * **Autodetect multi-sector override capability**
   - Driver estimates by simple test during init if multi-sector override works
   - If test passes (DRQ clears properly), 256 sector mode is enabled for best performance
@@ -158,7 +164,7 @@ Set in CF0 mountlist. Flags can be combined (e.g., `Flags = 9` for cfd first + s
 | Flag | Value | Description |
 |------|-------|-------------|
 | `cfd first` | 1 | Enable "cfd first" hack for PCMCIA conflicts with other drivers |
-| `skip signature` | 2 | Skip invalid PCMCIA signature check for non-standard cards |
+| `skip signature` | 2 | **unused** (v1.37+) - was "skip invalid PCMCIA signature" as fallback happens automatically |
 | `compatibility` | 4 | Use CardResource OS API instead of direct chipset access |
 | `serial debug` | 8 | Output initialization messages to serial port at 9600 baud (v1.35+ full build) |
 | `enforce multi mode` | 16 | Force 256 sector transfers regardless of card's reported capability (v1.35+) |

@@ -13,6 +13,11 @@ compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. 
 CHANGES IN @VERSION@ (@DATE@)
 ============================
 Driver:
+* IDENTIFY-based card identification
+  - Improved card detection reliability by using ATA IDENTIFY command instead of reading card CIS structure
+  - Issue was observed with Transcend CF 133 4GB
+  - Config address still read from card CIS when available, with automatic fallback to standard address
+  - Flags = 2 deprecated (no longer needed, fallback happens automatically)
 * Autodetect multi-sector override capability
   - Driver estimates by simple test if multi-sector override works
   - If test passes, 256 sector mode auto-enabled for best performance
@@ -70,7 +75,7 @@ Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
 
   Flags = 0    /* default */
   Flags = 1    /* "cfd first" hack for PCMCIA conflicts with other drivers */
-  Flags = 2    /* skip invalid PCMCIA signature for non-standard cards */
+  Flags = 2    /* unused - was "skip invalid PCMCIA signature" (v1.37+) */
   Flags = 4    /* use CardResource API instead of direct chipset access */
   Flags = 8    /* output init messages to serial port at 9600 baud (v1.35+ full build) */
   Flags = 16   /* force 256 sector transfers regardless of card capability (v1.35+) */
@@ -89,6 +94,7 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
   [CFD] Voltage: 5V
   [CFD] Reading tuples
   [CFD] Tuple CISTPL_CONFIG found
+  (or: [CFD] CISTPL_CONFIG not available, using standard 0x200)
   [CFD] RW test
   [CFD] ..done
   [CFD] Transfer: WORD
