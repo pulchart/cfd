@@ -12,6 +12,10 @@ Read and write your digital photos, mp3 files etc. directly from CompactFlash ca
 
 The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
 
+## Support
+
+The improvements to this driver are developed in my free time. If you’d like to support ongoing maintenance and experimentation, you can do so on [Ko-fi](https://ko-fi.com/jaroslavpulchart)
+
 ## What's New in
 
 ### v1.37-dev

@@ -12,6 +12,7 @@
 
     @{"Download" link Download}
     @{"Purpose" link Purpose}
+    @{"Support" link Support}
     @{"What's New in" link What_s_New_in}
         @{"v1.37-dev" link v1_37_dev}
         @{"v1.36" link v1_36}
@@ -86,6 +87,7 @@
   @{"Requirements" link Requirements}
 @{b}S@{ub}
   @{"Speed Test Results" link Speed_Test_Results}
+  @{"Support" link Support}
   @{"System Requirements" link System_Requirements}
 @{b}T@{ub}
   @{"Tools" link Tools}
@@ -134,7 +136,19 @@ The OS supplied "carddisk.device" appeared to be unable to understand CF
 cards. This driver provides a suitable alternative.
 
 ----------------------------------------
-@{"<< Prev" link Download}  @{"Contents" link Main}  @{"Next >>" link What_s_New_in}
+@{"<< Prev" link Download}  @{"Contents" link Main}  @{"Next >>" link Support}
+
+@endnode
+
+@node Support "Support"
+@{b}Support@{ub}
+
+The improvements to this driver are developed in my free time. If you?d
+like to support ongoing maintenance and experimentation, you can do so
+on Ko-fi (https://ko-fi.com/jaroslavpulchart)
+
+----------------------------------------
+@{"<< Prev" link Purpose}  @{"Contents" link Main}  @{"Next >>" link What_s_New_in}
 
 @endnode
 
@@ -147,7 +161,7 @@ cards. This driver provides a suitable alternative.
   @{"  v1.34  " link v1_34}
 
 ----------------------------------------
-@{"<< Prev" link Purpose}  @{"Contents" link Main}  @{"Next >>" link v1_37_dev}
+@{"<< Prev" link Support}  @{"Contents" link Main}  @{"Next >>" link v1_37_dev}
 
 @endnode
 
