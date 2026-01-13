@@ -595,7 +595,7 @@ CFU_IOPtr	= 232			;PCMCIA I/O space base
 CFU_MultiSize	= 236			;sectors per interrupt (from card)
 CFU_OpenFlags	= 238			;mount Flags field
 				;  bit 0: "cfd first" hack
-				;  bit 1: skip PCMCIA signature
+				;  bit 1: unused, was "skip PCMCIA signature"
 				;  bit 2: compatibility mode
 				;  bit 3: serial debug output (Flags=8)
 				;  bit 4: enforce multi mode 256 sectors (Flags=16)
@@ -806,9 +806,11 @@ dbg_byte:
 dbg_voltage5v:
 	dc.b	"[CFD] Voltage: 5V",13,10,0
 dbg_tupleconfig:
-	dc.b	"[CFD] Tuple CISTPL_CONFIG found",13,10,0
-dbg_tuplenone:
-	dc.b	"[CFD] No tuples found",13,10,0
+	dc.b	"[CFD] Config address found: 0x",0
+dbg_tupleconfig_end:
+	dc.b	13,10,0
+dbg_tuplefallback:
+	dc.b	"[CFD] Config address not found, using default (0x200)",13,10,0
 dbg_idestatus:
 	dc.b	"[CFD] IDE status=",0
 dbg_multimax:
@@ -2729,129 +2731,32 @@ _t_i2:
 	lsl.l	#3,d1
 	move.l	d1,CFU_DTSpeed(a3)	;600ns = PIO 0
 
-	; Tuple Readings:
-	; CISTPL_DEVICE
-	; - Checks device type (0x0d = memory card)
-	; - Can be skipped; blind mode works without it
-	lea	CFU_ConfigBlock(a3),a0	;&tuple buffer
-	move.l	a2,a1
-	moveq.l	#1,d1			;CISTPL_DEVICE
-	moveq.l	#127,d0
-	CALLCARD CopyTuple
-	tst.w	d0
-	beq.w	_t_iblind
-
-	lea	CFU_ConfigBlock(a3),a0
-	lea	CFU_DTSize(a3),a1
-	CALLSAME DeviceTuple
-	cmp.b	#$0d,CFU_DTType(a3)
-	bne.w	_t_ibreak
-
-	cmp.l	#$800,CFU_DTSize(a3)
-	bcc.s	_t_ifuncid
-
-	; Tuple CISTPL_VERS_1:
-	; - Checks for "FREECOM" and "PCCARD-IDE" strings
-	DBGMSG	dbg_tuple
-	lea	CFU_ConfigBlock(a3),a0
-	move.l	a2,a1
-	moveq.l	#127,d0
-	moveq.l	#$15,d1			;CISTPL_VERS_1
-	CALLSAME CopyTuple
-	tst.w	d0
-	beq.w	_t_iblind
-
-	lea	CFU_ConfigBlock(a3),a0
-	addq.l	#1,a0
-	moveq.l	#0,d0
-	move.b	(a0)+,d0
-	add.l	d0,a0
-	move.b	#$ff,(a0)
-	lea	_t_fcstr1(pc),a0
-	bsr.w	CheckString
-	tst.w	d0
-	beq.w	_t_iblind
-
-	lea	_t_fcstr2(pc),a0
-	bsr.w	CheckString
-	tst.w	d0
-	beq.w	_t_iblind
-	bra.s	_t_icfg
-_t_ifuncid:
-	; Tuple CISTPL_FUNCID:
-	; - Checks function ID (0x04 = Fixed Disk)
-	lea	CFU_ConfigBlock(a3),a0
-	move.l	a2,a1
-	moveq.l	#$21,d1			;CISTPL_FUNCID
-	moveq.l	#127,d0
-	CALLCARD CopyTuple
-	tst.w	d0
-	beq.w	_t_iblind
-
-	lea	CFU_ConfigBlock(a3),a0
-	addq.l	#1,a0			;&TPL_Link
-	cmp.b	#1,(a0)+
-	bcs.w	_t_ibreak		;no tuple data
-
-	cmp.b	#4,(a0)			;"fixed disk"
-	bne.w	_t_ibreak
-
-	; Tuple CISTPL_FUNCEXT:
-	; - Checks interface type (ATA)
-	lea	CFU_ConfigBlock(a3),a0
-	move.l	a2,a1
-	moveq.l	#$22,d1			;CISTPL_FUNCEXT
-	moveq.l	#127,d0
-	CALLSAME CopyTuple
-	tst.w	d0
-	beq.w	_t_ibreak
-
-	lea	CFU_ConfigBlock(a3),a0
-	addq.l	#1,a0
-	cmp.b	#2,(a0)+
-	bcs.w	_t_ibreak
-
-	cmp.b	#1,(a0)+		;extension type 1
-	bne.w	_t_ibreak
-
-	cmp.b	#1,(a0)			;Interface = ATA
-	bne.w	_t_ibreak
-
-_t_icfg:
 	DBGMSG	dbg_voltage
 	moveq.l	#CARD_VOLTAGE_5V,d0
 	move.l	a2,a1
 	CALLCARD CardProgramVoltage
 	DBGMSG	dbg_voltage5v
 
-	; Tuple CISTPL_CONFIG - ESSENTIAL
-	; - Extracts configuration register address
-	; - Sets CFU_ConfigAddr used to:
-	;   - Switch between I/O and memory-mapped mode
-	;   - Acknowledge status changes
-	;   - Configure the card
+	; Try to read CISTPL_CONFIG tuple for config register address
+	; If CopyTuple fails (unreliable), fallback to standard 0x200 offset
 	DBGMSG	dbg_tuple
 	lea	CFU_ConfigBlock(a3),a0
 	move.l	a2,a1
 	moveq.l	#$1a,d1			;CISTPL_CONFIG
 	moveq.l	#127,d0
-	CALLSAME CopyTuple
+	CALLCARD CopyTuple
 	tst.w	d0
-	beq.s	_t_notuple
-	DBGMSG	dbg_tupleconfig
-	bra.s	_t_gottuple
-_t_notuple:
-	DBGMSG	dbg_tuplenone
-	bra.w	_t_ibreak
-_t_gottuple:
+	beq.s	_t_config_fallback	;CopyTuple failed, use fallback
+
+	; Parse CISTPL_CONFIG tuple to extract config register address
 	lea	CFU_ConfigBlock(a3),a0
-	addq.l	#1,a0
-	cmp.b	#4,(a0)+
-	bcs.w	_t_ibreak
+	addq.l	#1,a0			;skip tuple code
+	cmp.b	#4,(a0)+		;check tuple data length
+	bcs.s	_t_config_fallback	;invalid length, use fallback
 
 	moveq.l	#3,d0
-	and.b	(a0)+,d0		;address length
-	addq.l	#1,a0
+	and.b	(a0)+,d0		;address length (1-4 bytes)
+	addq.l	#1,a0			;skip reserved byte
 	move.l	d0,d1
 	moveq.l	#0,d2
 _t_raddr:
@@ -2862,19 +2767,29 @@ _t_raddr:
 _t_saddr:
 	addq.w	#1,d1
 	cmp.w	#4,d1
-	bcc.s	_t_faddr
+	bcc.s	_t_gotconfig
 
 	lsr.l	#8,d2
 	bra.s	_t_saddr
-_t_iblind:
-	; Fallback to blind mode (Hack #2) if tuple reading fails
-	; Uses hardcoded config address 0x200 instead of reading from CIS
-	btst	#1,CFU_OpenFlags+1(a3)
-	beq.w	_t_ibreak		;Hack #2 deactivated..
-
-	moveq.l	#$200>>3,d2		;..or try again without CIS
+_t_gotconfig:
+	ifd	DEBUG
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_t_gotconfig_skip
+	DBGMSG	dbg_tupleconfig
+	move.l	d2,d0			;output config address
+	bsr.w	_DebugHex
+	DBGMSG	dbg_tupleconfig_end
+_t_gotconfig_skip:
+	endc
+	bra.s	_t_faddr
+_t_config_fallback:
+	; Fallback to standard config address 0x200
+	; This is the standard PCMCIA configuration register address
+	; Used when CopyTuple fails or CISTPL_CONFIG is invalid
+	DBGMSG	dbg_tuplefallback
+	moveq.l	#$200>>3,d2
 	lsl.l	#3,d2
-	or.w	#1<<8,CFU_ActiveHacks(a3)
+	or.w	#1<<8,CFU_ActiveHacks(a3)	;mark as fallback config address
 _t_faddr:
 	cmp.l	#$00020000,d2
 	bcc.w	_t_ibreak		;address out of range
@@ -2935,7 +2850,35 @@ _t_itest:
 	bsr.w	_GetIDEID		;read ATA configuration block
 	DBGMSG	dbg_done
 	move.l	d0,d2
-	beq.s	_t_inodisk
+	beq.w	_t_inodisk		;IDENTIFY failed
+
+	; Skip CIS tuple validation - use IDENTIFY-based identification instead
+	; This avoids unreliable CopyTuple for device validation
+	;
+	; Originally used CIS tuples for validation:
+	; - CISTPL_DEVICE (0x01): checked device type (0x0d = memory card)
+	; - CISTPL_FUNCID (0x21): checked function ID (0x04 = Fixed Disk)
+	; - CISTPL_FUNCEXT (0x22): checked interface type (ATA)
+	; - CISTPL_VERS_1 (0x15): checked for "FREECOM" and "PCCARD-IDE" strings
+	;   (vendor-specific check for Freecom adapters - not needed with IDENTIFY
+
+	; Validate IDENTIFY data - ensure it's an ATA device (not ATAPI)
+	cmp.l	#1,d0
+	bne.w	_t_inodisk		;not ATA device (ATAPI or error)
+
+	; Optional: Verify CompactFlash signature in IDENTIFY word 0
+	; Bits 15:12 = 0x848x indicates CompactFlash card
+	move.w	CFU_ConfigBlock(a3),d0	;word 0: General configuration
+	and.w	#$fff0,d0		;mask bits 15:12
+	cmp.w	#$8480,d0		;CompactFlash signature?
+	beq.s	_t_icf_ok		;yes, CompactFlash card
+
+	; Not CompactFlash signature, but check if it's still ATA device
+	; Bit 15 = 0 means ATA device (1 = ATAPI)
+	btst	#15,CFU_ConfigBlock(a3)
+	bne.w	_t_inodisk		;ATAPI device, reject
+
+_t_icf_ok:
 	ifd	DEBUG
 	bsr.w	_DebugCardInfo		;show card details
 	bsr.w	_DebugIdentifyFields	;show labeled IDENTIFY fields
@@ -3069,53 +3012,6 @@ _t_fs2:
 _t_end:
 	sub.l	a1,a1
 	JMPEXEC RemTask
-
-_t_fcstr1:
-	dc.b	"FREECOM",0
-_t_fcstr2:
-	dc.b	"PCCARD-IDE",0
-	even
-
-;--- check for text patterns inside tuples -----------------
-; a0 <- &pattern
-; d0 -> 1 (found), 0 (not)
-
-CheckString:
-	movem.l	d2-d3,-(sp)
-	move.l	a0,d3			;&pattern
-	lea	CFU_ConfigBlock+4(a3),a1
-	cmp.b	#2,-3(a1)
-	bcs.s	cst_no			;no text
-cst_rescan:
-	move.l	d3,a0
-cst_scan:
-	move.b	(a0)+,d0
-	beq.s	cst_yes			;end of pattern --> Text found
-
-	move.b	(a1)+,d1
-	beq.s	cst_rescan		;end of Text
-
-	cmp.b	#$ff,d1
-	beq.s	cst_no			;end of tuple
-
-	eor.b	d0,d1
-	and.b	#$df,d1
-	beq.s	cst_scan		;on mismatch..
-cst_skip:
-	move.b	(a1)+,d1
-	beq.s	cst_rescan		;..skip remaining Text
-
-	addq.b	#1,d1
-	bne.s	cst_skip
-cst_no:
-	moveq.l	#0,d0
-cst_end:
-	movem.l	(sp)+,d2-d3
-	rts
-
-cst_yes:
-	moveq.l	#1,d0
-	bra.s	cst_end
 
 ;--- a Hack: cfd first -------------------------------------
 
