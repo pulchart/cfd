@@ -12,7 +12,8 @@
 
     @{"Download" link Download}
     @{"Purpose" link Purpose}
-    @{"Support" link Support}
+        @{"Personal Note" link Personal_Note}
+        @{"Community Links" link Community_Links}
     @{"What's New in" link What_s_New_in}
         @{"v1.37-dev" link v1_37_dev}
         @{"v1.36" link v1_36}
@@ -56,6 +57,7 @@
   @{"Building from Source" link Building_from_Source}
 @{b}C@{ub}
   @{"CFInfo" link CFInfo}
+  @{"Community Links" link Community_Links}
   @{"compactflash.device" link compactflash_device}
   @{"Cross-Compilation Notes" link Cross_Compilation_Notes}
 @{b}D@{ub}
@@ -80,6 +82,7 @@
 @{b}P@{ub}
   @{"pcmciacheck" link pcmciacheck}
   @{"pcmciaspeed" link pcmciaspeed}
+  @{"Personal Note" link Personal_Note}
   @{"Purpose" link Purpose}
 @{b}Q@{ub}
   @{"Quick Start" link Quick_Start}
@@ -87,7 +90,6 @@
   @{"Requirements" link Requirements}
 @{b}S@{ub}
   @{"Speed Test Results" link Speed_Test_Results}
-  @{"Support" link Support}
   @{"System Requirements" link System_Requirements}
 @{b}T@{ub}
   @{"Tools" link Tools}
@@ -128,27 +130,47 @@ Fork of the original driver by Torsten Jager.
 
 @node Purpose "Purpose"
 @{b}Purpose@{ub}
+@{i}Subsections:@{ui}
+  @{"  Personal Note  " link Personal_Note}
+  @{"  Community Links  " link Community_Links}
 
-Read and write your digital photos, mp3 files etc. directly from
-CompactFlash cards as used by many mobile devices.
+Read and wddrite your digital photos, MP3 files, and other media
+directly from CompactFlash cards, as used by many mobile devices.
 
-The OS supplied "carddisk.device" appeared to be unable to understand CF
-cards. This driver provides a suitable alternative.
+The AmigaOS-supplied @{fg shine}carddisk.device@{fg text} appeared to be unable to properly
+handle CF cards. This driver provides a suitable alternative.
 
 ----------------------------------------
-@{"<< Prev" link Download}  @{"Contents" link Main}  @{"Next >>" link Support}
+@{"<< Prev" link Download}  @{"Contents" link Main}  @{"Next >>" link Personal_Note}
 
 @endnode
 
-@node Support "Support"
-@{b}Support@{ub}
+@node Personal_Note "Personal Note"
+@{i}Personal Note@{ui}
 
-The improvements to this driver are developed in my free time. If you?d
-like to support ongoing maintenance and experimentation, you can do so
-on Ko-fi (https://ko-fi.com/jaroslavpulchart)
+Improvements to this driver are developed in my free time. If you?d like
+to support ongoing maintenance and experimentation, you can do so on
+Ko-fi (https://ko-fi.com/jaroslavpulchart).
+
+You can also follow project planning and updates here: Planning for 2026
+(https://ko-fi.com/post/Planning-for-2026-S6S81S7IZH).
 
 ----------------------------------------
-@{"<< Prev" link Purpose}  @{"Contents" link Main}  @{"Next >>" link What_s_New_in}
+@{"<< Prev" link Purpose}  @{"Contents" link Main}  @{"Next >>" link Community_Links}
+
+@endnode
+
+@node Community_Links "Community Links"
+@{i}Community Links@{ui}
+
+  * @{b}English Amiga Forum Thread:@{ub} Discussion Thread
+    (https://forum.example.com/thread) -- user questions and troubleshooting.
+  * @{b}Aminet CFD Advanced Search:@{ub} CFD releases (m68k, AmigaOS)
+    (https://aminet.net/search?type=advanced&name=cfd&q_path=AND&path%5B%5D=driver&q_date=AND&o_date=equal&date=&q_desc=OR&desc=&q_readme=AND&readme=&q_content=AND&content=&q_arch=AND&arch%5B%5D=m68k-amigaos&search=search)
+    -- shows all CFD packages, including v1.34+.
+
+----------------------------------------
+@{"<< Prev" link Personal_Note}  @{"Contents" link Main}  @{"Next >>" link What_s_New_in}
 
 @endnode
 
@@ -161,7 +183,7 @@ on Ko-fi (https://ko-fi.com/jaroslavpulchart)
   @{"  v1.34  " link v1_34}
 
 ----------------------------------------
-@{"<< Prev" link Support}  @{"Contents" link Main}  @{"Next >>" link v1_37_dev}
+@{"<< Prev" link Community_Links}  @{"Contents" link Main}  @{"Next >>" link v1_37_dev}
 
 @endnode
 

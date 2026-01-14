@@ -8,13 +8,20 @@ AmigaOS compactflash.device driver for CompactFlash cards in PCMCIA. Fork of the
 
 ## Purpose
 
-Read and write your digital photos, mp3 files etc. directly from CompactFlash cards as used by many mobile devices.
+Read and write your digital photos, MP3 files, and other media directly from CompactFlash cards, as used by many mobile devices.
 
-The OS supplied "carddisk.device" appeared to be unable to understand CF cards. This driver provides a suitable alternative.
+The AmigaOS-supplied `carddisk.device` appeared to be unable to properly handle CF cards. This driver provides a suitable alternative.
 
-## Support
+### Personal Note
 
-The improvements to this driver are developed in my free time. If you’d like to support ongoing maintenance and experimentation, you can do so on [Ko-fi](https://ko-fi.com/jaroslavpulchart)
+Improvements to this driver are developed in my free time. If you’d like to support ongoing maintenance and experimentation, you can do so on [Ko-fi](https://ko-fi.com/jaroslavpulchart).  
+
+You can also follow project planning and updates here: [Planning for 2026](https://ko-fi.com/post/Planning-for-2026-S6S81S7IZH).
+
+### Community Links
+
+- **English Amiga Forum Thread:** [Discussion Thread](https://forum.example.com/thread) — user questions and troubleshooting.  
+- **Aminet CFD Advanced Search:** [CFD releases (m68k, AmigaOS)](https://aminet.net/search?type=advanced&name=cfd&q_path=AND&path%5B%5D=driver&q_date=AND&o_date=equal&date=&q_desc=OR&desc=&q_readme=AND&readme=&q_content=AND&content=&q_arch=AND&arch%5B%5D=m68k-amigaos&search=search) — shows all CFD packages, including v1.34+.
 
 ## What's New in
 
