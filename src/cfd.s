@@ -42,9 +42,10 @@
 ;   selected during card identification based on card capabilities.
 ;
 ; BUILD VARIANTS:
-;   Full build (DEBUG=1): includes serial debug output (~10KB)
-;   Small build (no DEBUG): minimal size (~8KB)
-;   Fast PIO build (FASTPIO=1): enables PIO speed optimization (experimental)
+;   Full build (DEBUG=1): includes serial debug output (~10 KB)
+;   Small build (no DEBUG): minimal binary size (~8 KB)
+;   Gayle timing (FASTPIO=1): enables Gayle timing mapping based on CF PIO mode capabilities (experimental)
+;   Copy burst (COPYBURST=1): uses movem for PIO memory transfers
 ;
 ;===========================================================================
 
@@ -66,6 +67,10 @@ FILE_REVISION	= 37
 ; Set via assembler command line: -DFASTPIO=1
 ; Or uncomment the next line:
 ;FASTPIO	= 1
+
+; Optimization by MOVEM burst transfers
+; - Uses MOVEM.L for burst memory reads/writes (8 bytes at a time)
+;COPYBURST	= 1
 
 ;--- from exec.library -------------------------------------
 
@@ -713,7 +718,7 @@ s_idstring:
 	include	"version.i"
 	VERSION_STRING
 	dc.b	LF,0
-	dc.b	"� Torsten Jager",0
+	dc.b	"(c) Torsten Jager",0
 CardName:
 	dc.b	"card.resource",0
 TimerName:
@@ -834,6 +839,13 @@ dbg_multi_drq_issue:
 	dc.b	"[CFD] ..DRQ issue detected, using firmware value",13,10,0
 dbg_multi_skip:
 	dc.b	"[CFD] ..auto-detection skipped",13,10,0
+	ifnd	COPYBURST
+dbg_copyburst:
+	dc.b	"[CFD] Memory transfers: standard",13,10,0
+	else
+dbg_copyburst:
+	dc.b	"[CFD] Memory transfers: MOVEM burst (8-byte)",13,10,0
+	endc
 	endc
 	even
 
@@ -2737,6 +2749,9 @@ _t_i2:
 	CALLCARD CardProgramVoltage
 	DBGMSG	dbg_voltage5v
 
+	; Show memory transfer mode
+	DBGMSG	dbg_copyburst
+
 	; Try to read CISTPL_CONFIG tuple for config register address
 	; If CopyTuple fails (unreliable), fallback to standard 0x200 offset
 	DBGMSG	dbg_tuple
@@ -3376,7 +3391,7 @@ _r3:
 ; Notes:
 ;   - Polls IDE status register waiting for BSY to clear
 ;   - Selects master drive (DEVHEAD = $E0) before polling
-;   - 30-second timeout (100 iterations × 300ms delay)
+;   - 30-second timeout (100 iterations x 300ms delay)
 ;   - Acknowledges status changes via PCMCIA config register
 ;   - Frees interrupts when ready (bit 1 of register 14)
 ;   - Used during card initialization to wait for drive ready
@@ -3851,6 +3866,7 @@ _gid_end:
 ;   d4 = bytes per transfer chunk
 ;   d5 = total bytes (for return value)
 ;   d6 = sectors per interrupt
+;   d7 = MOVEM loop counter
 ;   a2 = buffer pointer
 ;
 ; Notes:
@@ -3860,7 +3876,7 @@ _gid_end:
 ;   - Retries up to 5 times on error
 ;
 _ReadBlocks:
-	movem.l	d2-d6/a2,-(sp)
+	movem.l	d2-d7/a2,-(sp)
 	move.l	a1,a2			;&buffer
 	move.l	d0,d2			;Block #
 	move.l	d1,d3			;total bytes
@@ -3932,12 +3948,13 @@ _rb_2:
 
 	move.l	CFU_IOPtr(a3),a0
 	addq.l	#8,a0
-	move.l	d6,d0
 	move.b	CFU_ReceiveMode(a3),d1
-	bne.s	_rb_lcheck
+	bne.w	_rb_lcheck
+	move.l	d6,d0
 
 	lsl.l	#5,d0
 	subq.l	#1,d0
+	ifnd	COPYBURST
 _rb_loop0:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
@@ -3948,11 +3965,34 @@ _rb_loop0:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
 	dbf	d0,_rb_loop0
+	else
+	move.l	d0,d7
+_rb_loop0:
+	; COPYBURST: PACK+MOVEM4 (single 16-byte store). Uses d2/d3 as temporaries.
+	movem.l	d2-d3,-(sp)
+_rb_loop0_burst:
+	move.w	(a0),d0			;w0
+	swap	d0
+	move.w	(a0),d0			;d0 = w0:w1
+	move.w	(a0),d1			;w2
+	swap	d1
+	move.w	(a0),d1			;d1 = w2:w3
+	move.w	(a0),d2			;w4
+	swap	d2
+	move.w	(a0),d2			;d2 = w4:w5
+	move.w	(a0),d3			;w6
+	swap	d3
+	move.w	(a0),d3			;d3 = w6:w7
+	movem.l	d0-d3,(a2)		;burst write 16 bytes
+	lea	16(a2),a2
+	dbf	d7,_rb_loop0_burst
+	movem.l	(sp)+,d2-d3
+	endc
 _rb_lnext:
 	add.l	d6,d2
 	sub.l	d6,d3
 	sub.l	d6,d4
-	bgt.s	_rb_block
+	bgt.w	_rb_block
 
 	tst.l	d3
 	bgt.w	_rb_swath
@@ -3976,7 +4016,7 @@ _rb_ready:
 	move.l	d5,d0
 	sub.l	d3,d0
 _rb_end:
-	movem.l	(sp)+,d2-d6/a2
+	movem.l	(sp)+,d2-d7/a2
 	rts
 
 _rb_lcheck:
@@ -4108,6 +4148,7 @@ pi_mode0:
 	subq.l	#1,d0
 	move.l	CFU_IOPtr(a3),a0
 	addq.l	#8,a0
+	ifnd	COPYBURST
 pi0_loop:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
@@ -4118,6 +4159,26 @@ pi0_loop:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
 	dbf	d0,pi0_loop
+	else
+	move.l	d0,d7
+pi0_loop:
+	move.w	(a0),d0
+	swap	d0
+	move.w	(a0),d0			;d0 = w0:w1
+	move.w	(a0),d1
+	swap	d1
+	move.w	(a0),d1			;d1 = w2:w3
+	movem.l	d0-d1,(a2)		;burst write 8 bytes
+	move.w	(a0),d0
+	swap	d0
+	move.w	(a0),d0			;d0 = w4:w5
+	move.w	(a0),d1
+	swap	d1
+	move.w	(a0),d1			;d1 = w6:w7
+	movem.l	d0-d1,8(a2)		;burst write 8 bytes
+	lea	16(a2),a2
+	dbf	d7,pi0_loop
+	endc
 	rts
 
 ; I/O Register 8 and Duplikates, word-wise
@@ -4290,6 +4351,7 @@ po_mode0:
 	subq.l	#1,d0
 	move.l	CFU_IOPtr(a3),a0
 	addq.l	#8,a0
+	ifnd	COPYBURST
 po0_loop:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
@@ -4300,6 +4362,30 @@ po0_loop:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
 	dbf	d0,po0_loop
+	else
+	move.l	d0,d7
+po0_loop:
+	movem.l	(a2),d0-d1		;burst read 8 bytes
+	swap	d0
+	move.w	d0,(a0)			;word 0
+	swap	d0
+	move.w	d0,(a0)			;word 1
+	swap	d1
+	move.w	d1,(a0)			;word 2
+	swap	d1
+	move.w	d1,(a0)			;word 3
+	movem.l	8(a2),d0-d1		;burst read 8 bytes
+	swap	d0
+	move.w	d0,(a0)			;word 4
+	swap	d0
+	move.w	d0,(a0)			;word 5
+	swap	d1
+	move.w	d1,(a0)			;word 6
+	swap	d1
+	move.w	d1,(a0)			;word 7
+	lea	16(a2),a2
+	dbf	d7,po0_loop
+	endc
 	rts
 
 ; I/O Register 8 and Duplikates, word-wise
@@ -4399,7 +4485,6 @@ po4_loop2:
 	move.w	(a2)+,(a0)+
 	move.w	(a2)+,(a0)+
 	dbf	d1,po4_loop2
-
 	tst.l	d0
 	bne.s	po4_loop1
 	rts
@@ -4422,6 +4507,7 @@ po4_loop2:
 ;   d4 = bytes per transfer chunk
 ;   d5 = total bytes (for return value)
 ;   d6 = sectors per interrupt
+;   d7 = MOVEM loop counter
 ;   a2 = buffer pointer
 ;
 ; Notes:
@@ -4434,7 +4520,7 @@ po4_loop2:
 _WB2:
 	move.l	a1,a0
 _WriteBlocks:
-	movem.l	d2-d6/a2,-(sp)
+	movem.l	d2-d7/a2,-(sp)
 	move.l	a0,a2			;&buffer
 	move.l	d0,d2			;Block #
 	move.l	d1,d3			;total bytes
@@ -4535,6 +4621,7 @@ _wb_w4:
 
 	lsl.l	#5,d0
 	subq.l	#1,d0
+	ifnd	COPYBURST
 _wb_loop0:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
@@ -4545,6 +4632,34 @@ _wb_loop0:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
 	dbf	d0,_wb_loop0
+	else
+	move.l	d0,d7
+_wb_loop0:
+	; COPYBURST write: single 16-byte MOVEM load (d0-d3), then 8 word writes.
+	; Uses d2/d3 as temporaries, preserve them across the loop.
+	movem.l	d2-d3,-(sp)
+_wb_loop0_burst:
+	movem.l	(a2),d0-d3		;burst read 16 bytes
+	swap	d0
+	move.w	d0,(a0)			;word 0
+	swap	d0
+	move.w	d0,(a0)			;word 1
+	swap	d1
+	move.w	d1,(a0)			;word 2
+	swap	d1
+	move.w	d1,(a0)			;word 3
+	swap	d2
+	move.w	d2,(a0)			;word 4
+	swap	d2
+	move.w	d2,(a0)			;word 5
+	swap	d3
+	move.w	d3,(a0)			;word 6
+	swap	d3
+	move.w	d3,(a0)			;word 7
+	lea	16(a2),a2
+	dbf	d7,_wb_loop0_burst
+	movem.l	(sp)+,d2-d3
+	endc
 _wb_lnext:
 	bsr.w	WaitReady
 	add.l	d6,d2
@@ -4572,7 +4687,7 @@ _wb_ready:
 	move.l	a2,a0
 	move.l	d5,d0
 	sub.l	d3,d0
-	movem.l	(sp)+,d2-d6/a2
+	movem.l	(sp)+,d2-d7/a2
 	rts
 
 _wb_l1:

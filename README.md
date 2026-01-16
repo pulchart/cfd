@@ -29,11 +29,10 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 #### Driver
 
-* **IDENTIFY-based card identification**
-  - Improved card detection reliability by using ATA IDENTIFY command instead of reading card CIS structure
-  - Issue was observed with Transcend CF 133 4GB
-  - Config address still read from card CIS when available, with automatic fallback to standard address
-  - Flags = 2 deprecated (no longer needed, fallback happens automatically)  - `Flags = 2` deprecated (no longer needed, fallback happens automatically)
+* **Improved card detection reliability**
+  - Fixes unreliable CopyTuple CIS reads by using the card’s ATA IDENTIFY data instead. Seen with Transcend CF 133 4GB and/or ACA1234.
+  - The config address is still read from the card CIS when available, with an automatic fallback to the standard address.
+  - `Flags = 2` is deprecated (the fallback is now automatic).
 
 * **Autodetect multi-sector override capability**
   - Driver estimates by simple test during init if multi-sector override works
@@ -49,12 +48,11 @@ You can also follow project planning and updates here: [Planning for 2026](https
 #### Tools
 
 * **CFInfo shows driver configuration**
-  - Displays mount flags, multi-sector settings (firmware vs actual), transfer modes
+  - Displays mount flags, multi-sector settings (firmware vs actual)
   - Requires driver v1.37+ for config display (card info still works with v1.36+)
 
 * **pcmciacheck tests all 5 transfer modes**
   - Added mode 4 (MMAP) memory-mapped transfer testing
-  - Tests use proper PCMCIA configuration switching for memory-mapped access
 
 #### Others
 
@@ -233,11 +231,11 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 
 ### Enforce Multi Mode (Flag 16)
 
-**Note:** As of v1.37, the driver automatically detects multi-sector capability and enables 256 sector mode when safe. This flag is now only needed as a manual override if auto-detection fails for your specific card.
-
 Read and Write IO path will use 256 sectors for single IO regardless of what the card supports in Multiple Sector Mode if this flag is set (same behaviour as v1.33). The IO sector count can be limited by `MaxTransfer` (0x200 = 1 sector per IO) value in CF0 file.
 
 **Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:cfd.s`). The content should not contain repeating 32-byte pattern after first 512 bytes. See [images/multimode-issue.jpg](images/multimode-issue.jpg) for an example of what broken output looks like on unsupported cards.
+
+**Note:** As of v1.37, the driver uses a simple initialization test to automatically detect multi-sector operation and enables it when test pass. This flag is now only needed as a manual override if auto-detection fails for your specific card. Set Flags = 32 if detection does not work correctly with your card to disable auto-detection entirely.
 
 ```
 Flags = 16
@@ -296,12 +294,7 @@ Most CF cards work with WORD mode. The driver tests write/read patterns during i
 
 ### CFInfo
 
-Display card information (requires v1.36+ driver). See [CFInfo.md](docs/CFInfo.md) for detailed field reference.
-
-With driver v1.37+, CFInfo also shows driver configuration including:
-- **Mount Flags**: Active flags from CF0 mountlist
-- **Multi-sect**: Firmware-reported vs actual multi-sector value used
-- **R/W Mode**: Data transfer mode (see [Transfer Modes](#transfer-modes))
+Displays card information (requires driver v1.36+). With driver v1.37+, it also shows the driver configuration. See [CFInfo.md](docs/CFInfo.md) for a detailed field reference.
 
 ### pcmciaspeed
 
@@ -348,7 +341,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.37 | 01/2026 | Autodetect multi-sector override capability |
+| v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
 | v1.35 | 12/2025 | Serial debug (Flags=8), enforce multi mode (Flags=16), SD-to-CF support simplification |
 | v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
@@ -419,6 +412,8 @@ make V=1
 | Option | Description |
 |--------|-------------|
 | `V=1` | Verbose output (show full compiler messages) |
+| `FASTPIO=1` | Enable Gayle timing optimization (experimental) |
+| `COPYBURST=1` | Enable MOVEM transfers (experimental) |
 | `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
 | `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |
 
@@ -429,8 +424,8 @@ make V=1
 | `make` | Build driver (full + small) and CFInfo |
 | `make full` | Build full version only (with debug support) |
 | `make small` | Build small version only (no debug) |
-| `make cfinfo` | Build CFInfo utility (requires vbcc + NDK) |
-| `make fastpio` | Build with Fast PIO support (experimental) |
+| `make tools` | Build utilitties (requires vbcc + NDK) |
+| `make fastpio` | Build with Gayle timing optimization (experimental) |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |
 | `make clean` | Remove built files |

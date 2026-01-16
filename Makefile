@@ -8,7 +8,7 @@
 VERSION_MAJOR = 1
 VERSION_MINOR = 37
 VERSION_SUFFIX = -dev
-DATE = 13.01.2026
+DATE = 16.01.2026
 DATE_SHORT = 01/2026
 
 # Tool-specific versions
@@ -39,11 +39,27 @@ else
   DEFINITIONS = -quiet
 endif
 
-# Gayle PCMCIA timing based on PIO modes (experimental)
+# FASTPIO: Gayle timing optimization
+# Maps CF card PIO modes to optimal Gayle PCMCIA timing
+# Default" disabled (experimental, set FASTPIO=1 to enable)
 TEXT=""
+FASTPIO ?= 0
 ifeq ($(FASTPIO),1)
-  TEXT="+gayletiming"
+  TEXT=", +gayletiming"
   DEFINITIONS += -DFASTPIO=$(FASTPIO)
+else
+  TEXT=", -gayletiming"
+endif
+
+# COPYBURST: Enable MOVEM burst transfers for memory operations
+# Uses MOVEM.L for 8-byte burst reads/writes
+# Default" disabled (experimental, set COPYBURST=1 to enable)
+COPYBURST ?= 0
+ifeq ($(COPYBURST),1)
+  TEXT:="$(TEXT), +copyburst"
+  DEFINITIONS += -DCOPYBURST=$(COPYBURST)
+else
+  TEXT:="$(TEXT), -copyburst"
 endif
 
 # Tools (override these for different installations)
@@ -322,7 +338,8 @@ help:
 	@echo ""
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
-	@echo "  FASTPIO=1           - Driver setup Gayle timing based on CF's supported PIO modes"
+	@echo "  FASTPIO=1           - Enable Gayle timing optimization (experimental)"
+	@echo "  COPYBURST=1         - Enable MOVEM burst transfers (experimental)"
 	@echo "  VASM_HOME=/opt/vbcc - vasm installation path"
 	@echo "  VBCC_HOME=/opt/vbcc - vbcc installation path"
 	@echo ""
