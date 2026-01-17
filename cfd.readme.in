@@ -12,12 +12,14 @@ compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. 
 
 CHANGES IN @VERSION@ (@DATE@)
 ============================
+
 Driver:
-* IDENTIFY-based card identification
-  - Improved card detection reliability by using ATA IDENTIFY command instead of reading card CIS structure
-  - Issue was observed with Transcend CF 133 4GB
-  - Config address still read from card CIS when available, with automatic fallback to standard address
-  - Flags = 2 deprecated (no longer needed, fallback happens automatically)
+* Improved card detection reliability
+  - Fixes unreliable CopyTuple CIS reads by using the card’s ATA IDENTIFY
+    data instead. Seen with Transcend CF 133 4GB and/or ACA1234.
+  - The config address is still read from the card CIS when available,
+    with an automatic fallback to the standard address.
+  - `Flags = 2` is deprecated (the fallback is now automatic).
 * Autodetect multi-sector override capability
   - Driver estimates by simple test if multi-sector override works
   - If test passes, 256 sector mode auto-enabled for best performance
@@ -25,9 +27,11 @@ Driver:
   - Flags = 16 still available as manual override to force 256
   - Flags = 32 skips auto-detection, uses firmware value directly
 * CFD_GETCONFIG command (0xED) to retrieve driver internal configuration
+
 Tools:
 * CFInfo shows driver configuration (flags, multi-sector, transfer modes)
 * pcmciacheck tests all 5 transfer modes including memory-mapped (mode 4)
+
 Others:
 * Typo fixes throughout documentation
 
@@ -135,10 +139,6 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
 
 ENFORCE MULTI MODE (FLAG 16)
 ============================
-NOTE: As of v1.37, the driver automatically detects multi-sector
-override capability and enables 256 sector mode when safe. This flag
-is now only needed as a manual override if auto-detection fails.
-
 Forces 256 sector reads/writes per IO regardless of card firmware
 support to improve IO performance. Same behaviour as v1.33 and
 earlier versions.
@@ -147,6 +147,10 @@ WARNING: Verify your card is capable before using for real data!
 Set the flag and read any text file from CF card. The content should
 not contain repeating 32-byte pattern after first 512 bytes.
 See images/multimode-issue.jpg for example of broken output.
+
+NOTE: Since v1.37, the driver auto-detects multi-sector override
+capability and enables 256 sector mode when safe. This flag is now
+only needed as a manual override if auto-detection fails.
 
 Can be combined with MaxTransfer to limit sectors per IO:
   Flags = 16
