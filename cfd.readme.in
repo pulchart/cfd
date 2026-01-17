@@ -4,7 +4,7 @@ Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by 
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
-Replaces:     driver/media/cfd135.lha, driver/media/cfd136.lha
+Replaces:     driver/media/cfd135.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
@@ -15,8 +15,8 @@ CHANGES IN @VERSION@ (@DATE@)
 
 Driver:
 * Improved card detection reliability
-  - Fixes unreliable CopyTuple CIS reads by using the card’s ATA IDENTIFY
-    data instead. Seen with Transcend CF 133 4GB and/or ACA1234.
+  - Fixes unreliable CopyTuple CIS reads by using the card's ATA IDENTIFY
+    data instead. Seen with Transcend CF 133 4GB (Firmware 20110407) and ACA1234
   - The config address is still read from the card CIS when available,
     with an automatic fallback to the standard address.
   - `Flags = 2` is deprecated (the fallback is now automatic).
@@ -56,7 +56,7 @@ INSTALLATION
 ============
 Two versions of the driver are included:
 
-  compactflash.device         @FULL_SIZE@ bytes  Driver with debug to serial console flag support
+  compactflash.device      @FULL_SIZE@ bytes  Driver with debug to serial console flag support
   compactflash.device.small @SMALL_SIZE@ bytes  Driver without debug to serial console support
 
 Choose based on your needs:
