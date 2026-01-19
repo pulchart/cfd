@@ -6,9 +6,9 @@
 
 # Driver Version (update these for new releases)
 VERSION_MAJOR = 1
-VERSION_MINOR = 37
-VERSION_SUFFIX =
-DATE = 17.01.2026
+VERSION_MINOR = 38
+VERSION_SUFFIX = -dev
+DATE = 19.01.2026
 DATE_SHORT = 01/2026
 
 # Tool-specific versions
