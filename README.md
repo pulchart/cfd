@@ -14,23 +14,23 @@ The AmigaOS-supplied `carddisk.device` appeared to be unable to properly handle 
 
 ### Personal Note
 
-Improvements to this driver are developed in my free time. If you’d like to support ongoing maintenance and experimentation, you can do so on [Ko-fi](https://ko-fi.com/jaroslavpulchart).  
+Improvements to this driver are developed in my free time. If you'd like to support ongoing maintenance and experimentation, you can do so on [Ko-fi](https://ko-fi.com/jaroslavpulchart).
 
 You can also follow project planning and updates here: [Planning for 2026](https://ko-fi.com/post/Planning-for-2026-S6S81S7IZH).
 
 ### Community Links
 
-- **English Amiga Forum Thread:** [Discussion Thread](https://eab.abime.net/showthread.php?t=121575) user questions and troubleshooting.  
+- **English Amiga Forum Thread:** [Discussion Thread](https://eab.abime.net/showthread.php?t=121575) user questions and troubleshooting.
 - **Aminet CFD Advanced Search:** [CFD releases (m68k, AmigaOS)](https://aminet.net/search?type=advanced&name=cfd&q_path=AND&path%5B%5D=driver&q_date=AND&o_date=equal&date=&q_desc=OR&desc=&q_readme=AND&readme=&q_content=AND&content=&q_arch=AND&arch%5B%5D=m68k-amigaos&search=search) shows all CFD packages, including v1.34+.
 
 ## What's New in
 
-### v1.37-dev
+### v1.37
 
 #### Driver
 
 * **Improved card detection reliability**
-  - Fixes unreliable CopyTuple CIS reads by using the card’s ATA IDENTIFY data instead. Seen with Transcend CF 133 4GB and/or ACA1234.
+  - Fixes unreliable CopyTuple CIS reads by using the card's ATA IDENTIFY data instead. Seen with Transcend CF 133 4GB (Firmware 20110407) and ACA1234.
   - The config address is still read from the card CIS when available, with an automatic fallback to the standard address.
   - `Flags = 2` is deprecated (the fallback is now automatic).
 
@@ -169,7 +169,7 @@ Set in CF0 mountlist. Flags can be combined (e.g., `Flags = 9` for cfd first + s
 | Flag | Value | Description |
 |------|-------|-------------|
 | `cfd first` | 1 | Enable "cfd first" hack for PCMCIA conflicts with other drivers |
-| `skip signature` | 2 | **unused** (v1.37+) - was "skip invalid PCMCIA signature" as fallback happens automatically |
+| `skip signature` | 2 | **unused** (v1.37+) - was "skip invalid PCMCIA signature" - as fallback happens automatically |
 | `compatibility` | 4 | Use CardResource OS API instead of direct chipset access |
 | `serial debug` | 8 | Output initialization messages to serial port at 9600 baud (v1.35+ full build) |
 | `enforce multi mode` | 16 | Force 256 sector transfers regardless of card's reported capability (v1.35+) |
