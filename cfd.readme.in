@@ -14,26 +14,13 @@ CHANGES IN @VERSION@ (@DATE@)
 ============================
 
 Driver:
-* Improved card detection reliability
-  - Fixes unreliable CopyTuple CIS reads by using the card's ATA IDENTIFY
-    data instead. Seen with Transcend CF 133 4GB (Firmware 20110407) and ACA1234
-  - The config address is still read from the card CIS when available,
-    with an automatic fallback to the standard address.
-  - `Flags = 2` is deprecated (the fallback is now automatic).
-* Autodetect multi-sector override capability
-  - Driver estimates by simple test if multi-sector override works
-  - If test passes, 256 sector mode auto-enabled for best performance
-  - If test fails, falls back to firmware-reported value
-  - Flags = 16 still available as manual override to force 256
-  - Flags = 32 skips auto-detection, uses firmware value directly
-* CFD_GETCONFIG command (0xED) to retrieve driver internal configuration
+* TBD
 
 Tools:
-* CFInfo shows driver configuration (flags, multi-sector, transfer modes)
-* pcmciacheck tests all 5 transfer modes including memory-mapped (mode 4)
+* TBD
 
 Others:
-* Typo fixes throughout documentation
+* TBD
 
 FEATURES
 ========

@@ -25,7 +25,21 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 ## What's New in
 
-### v1.37
+### v1.38-dev
+
+#### Driver
+
+TBD
+
+#### Tools
+
+TBD
+
+#### Others
+
+TBD
+
+### v1.37-dev
 
 #### Driver
 
