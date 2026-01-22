@@ -109,10 +109,11 @@ Test completed successfully.
 ```
 pcmciacheck 1.36 - Testing card...
 Testing read modes...
-  Testing read mode 0... (DRQ still set - multi-sector issue) WARNING (512 bytes)
-  Testing read mode 1... (DRQ still set - multi-sector issue) WARNING (512 bytes)
-  Testing read mode 2... (DRQ still set - multi-sector issue) WARNING (512 bytes)
-  Testing read mode 3... (DRQ still set - multi-sector issue) WARNING (512 bytes)
+  Testing read mode 0... OK (512 bytes) - WARNING: multi-sector issue detected
+  Testing read mode 1... OK (512 bytes) - WARNING: multi-sector issue detected
+  Testing read mode 2... OK (512 bytes) - WARNING: multi-sector issue detected
+  Testing read mode 3... OK (512 bytes) - WARNING: multi-sector issue detected
+  Testing read mode 4 (MMAP)... OK (512 bytes)
   Working read mode: 0
 Testing transfer mode patterns (cfd.s style)...
   Pattern test modes: 0xBBBB

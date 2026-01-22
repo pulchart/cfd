@@ -54,7 +54,7 @@
 FILE_VERSION	= 1
 	endc
 	ifnd	FILE_REVISION
-FILE_REVISION	= 37
+FILE_REVISION	= 38
 	endc
 
 ;--- Conditional compilation ---
