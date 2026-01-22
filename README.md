@@ -29,7 +29,14 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 #### Driver
 
-TBD
+Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. WiFi) and restores PCMCIA (Gayle) timing setup.
+
+* **CIS gate (PCMCIA card type filter)** ([#25](https://github.com/pulchart/cfd/issues/25))
+  - Reads `CISTPL_FUNCID` (when available) and rejects non-disk cards early to avoid interfering with other PCMCIA devices (e.g. WiFi).
+  - If `CISTPL_FUNCID` is missing/unreadable, the driver continues for compatibility (some CF cards/adapters do not provide reliable CIS tuples).
+
+* **PCMCIA (Gayle) timing setup**
+  - Restores access timing setup from `CISTPL_DEVICE` via `CardAccessSpeed` (v1.37 didn't program timing based on CIS speed).
 
 #### Tools
 
@@ -202,8 +209,12 @@ Then monitor serial port (e.g., `screen /dev/ttyUSB0 9600` or `minicom -b 9600 -
 [CFD] ..done
 [CFD] Setting voltage
 [CFD] Voltage: 5V
-[CFD] Reading tuples
-[CFD] Tuple CISTPL_CONFIG found
+[CFD] CIS gate
+[CFD] ..DEVICE: type=0x0D speed=400ns size=0x00000800
+[CFD] ..FUNCID: 0x04
+[CFD] ..RESULT: accept
+[CFD] ..CONFIG: addr=0x00000200
+(or: [CFD] ..CONFIG: default (0x200))
 [CFD] RW test
 [CFD] ..done
 [CFD] Transfer: WORD

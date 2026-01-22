@@ -471,6 +471,11 @@ DeviceTuple	= -78
 CardChangeCount	= -96
 CardInterface	= -102
 
+; Tuple codes used for CIS-gate
+CISTPL_DEVICE	= $01
+CISTPL_CONFIG	= $1a
+CISTPL_FUNCID	= $21
+
 ;ReadStatus()
 CARD_STATUSF_CCDET	= 64
 CARD_STATUSF_BVD1	= 32
@@ -740,8 +745,6 @@ dbg_reset:
 	dc.b	"[CFD] Reset",13,10,0
 dbg_config:
 	dc.b	"[CFD] Configuring HBA",13,10,0
-dbg_tuple:
-	dc.b	"[CFD] Reading tuples",13,10,0
 dbg_voltage:
 	dc.b	"[CFD] Setting voltage",13,10,0
 dbg_rwtest:
@@ -810,12 +813,30 @@ dbg_byte:
 	dc.b	"BYTE",13,10,0
 dbg_voltage5v:
 	dc.b	"[CFD] Voltage: 5V",13,10,0
-dbg_tupleconfig:
-	dc.b	"[CFD] Config address found: 0x",0
-dbg_tupleconfig_end:
+dbg_cis_scan:
+	dc.b	"[CFD] CIS gate",13,10,0
+dbg_cis_funcid:
+	dc.b	"[CFD] ..FUNCID: 0x",0
+dbg_cis_funcid_missing:
+	dc.b	"[CFD] ..FUNCID: missing (compat)",13,10,0
+dbg_cis_device:
+	dc.b	"[CFD] ..DEVICE: type=0x",0
+dbg_cis_device_speed:
+	dc.b	" speed=",0
+dbg_cis_device_size:
+	dc.b	"ns size=0x",0
+dbg_cis_gate_accept:
+	dc.b	"[CFD] ..RESULT: accept",13,10,0
+dbg_cis_gate_reject:
+	dc.b	"[CFD] ..RESULT: reject -> ReleaseCard",13,10,0
+dbg_cis_config:
+	dc.b	"[CFD] ..CONFIG: addr=0x",0
+dbg_cis_config_end:
 	dc.b	13,10,0
-dbg_tuplefallback:
-	dc.b	"[CFD] Config address not found, using default (0x200)",13,10,0
+dbg_cis_config_fallback:
+	dc.b	"[CFD] ..CONFIG: default (0x200)",13,10,0
+dbg_identify_failed_release:
+	dc.b	"[CFD] IDENTIFY failed -> ReleaseCard",13,10,0
 dbg_idestatus:
 	dc.b	"[CFD] IDE status=",0
 dbg_multimax:
@@ -2291,14 +2312,18 @@ _dhd_end:
 
 ;--- _DebugHexByte: output d0.b as 2-digit hex ---
 _DebugHexByte:
-	movem.l	d0-d2,-(sp)
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dhb_end
+	movem.l	d0-d2/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
 	move.b	d0,d2
 	lsr.b	#4,d0
 	bsr.s	_dhb_digit
 	move.b	d2,d0
 	and.b	#$0f,d0
 	bsr.s	_dhb_digit
-	movem.l	(sp)+,d0-d2
+	movem.l	(sp)+,d0-d2/a6
+_dhb_end:
 	rts
 _dhb_digit:
 	cmp.b	#10,d0
@@ -2453,6 +2478,70 @@ _dd_ones:
 	
 	movem.l	(sp)+,d0-d3/a6
 _dd_end:
+	rts
+
+;--- _DebugDecimal32: output d0.l as unsigned decimal ---
+; Prints 0..4294967295 using repeated /10.
+; (Uses two DIVU steps to get a full 32-bit quotient.)
+_DebugDecimal32:
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.s	_dd32_end
+	movem.l	d1-d5/a0/a6,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+
+	move.l	sp,a0			;marker for digit stack (after saved regs)
+	tst.l	d0
+	bne.s	_dd32_loop
+	; special case: 0
+	moveq.l	#'0',d1
+	move.l	d1,d0
+	jsr	RawPutChar(a6)
+	bra.s	_dd32_restore
+
+_dd32_loop:
+	; compute q = d0 / 10, r = d0 % 10
+	; step 1: divide high word by 10 -> quotient_hi (16), rem_hi (0..9)
+	move.l	d0,d1
+	swap	d1			;d1.w = high word
+	and.l	#$0000ffff,d1
+	divu	#10,d1			;d1 = (rem_hi<<16) | quot_hi
+	move.w	d1,d2			;quot_hi
+	swap	d1
+	move.w	d1,d3			;rem_hi
+
+	; step 2: divide (rem_hi<<16 | low word) by 10 -> quotient_lo, remainder
+	moveq.l	#0,d1
+	move.w	d3,d1
+	swap	d1			;rem_hi<<16
+	move.w	d0,d1			;add low word
+	divu	#10,d1			;d1 = (rem<<16) | quot_lo
+	move.w	d1,d4			;quot_lo
+	swap	d1
+	move.w	d1,d5			;remainder (0..9)
+
+	; new d0 = (quot_hi<<16) | quot_lo
+	move.w	d2,d0
+	swap	d0
+	move.w	d4,d0
+
+	; push digit character
+	add.b	#'0',d5
+	move.b	d5,-(sp)
+
+	tst.l	d0
+	bne.s	_dd32_loop
+
+_dd32_out:
+	cmp.l	sp,a0
+	beq.s	_dd32_restore
+	moveq.l	#0,d0
+	move.b	(sp)+,d0
+	jsr	RawPutChar(a6)
+	bra.s	_dd32_out
+
+_dd32_restore:
+	movem.l	(sp)+,d1-d5/a0/a6
+_dd32_end:
 	rts
 
 ;--- _DebugIDEStatus: show IDE status and error registers ---
@@ -2752,25 +2841,109 @@ _t_i2:
 	; Show memory transfer mode
 	DBGMSG	dbg_copyburst
 
-	; Try to read CISTPL_CONFIG tuple for config register address
-	; If CopyTuple fails (unreliable), fallback to standard 0x200 offset
-	DBGMSG	dbg_tuple
+	; CIS gate report
+	DBGMSG	dbg_cis_scan
+
+	; Read CISTPL_DEVICE
 	lea	CFU_ConfigBlock(a3),a0
-	move.l	a2,a1
-	moveq.l	#$1a,d1			;CISTPL_CONFIG
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#CISTPL_DEVICE,d1
 	moveq.l	#127,d0
 	CALLCARD CopyTuple
 	tst.w	d0
-	beq.s	_t_config_fallback	;CopyTuple failed, use fallback
+	beq.s	_t_devtuple_skip
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_DTSize(a3),a1
+	CALLCARD DeviceTuple
+	; DeviceTuple fills CFU_DTType/CFU_DTSpeed/CFU_DTSize.
+	; We use CFU_DTSpeed later for CardAccessSpeed (timing setup).
+	ifd	DEBUG
+	; CFU_DTType(a3) values (CISTPL_DEVICE "device type" nibble):
+	;  0x0 = NULL (no device / hole)
+	;  0x1 = ROM
+	;  0x2 = OTPROM (one-time programmable ROM)
+	;  0x3 = EPROM
+	;  0x4 = EEPROM
+	;  0x5 = FLASH
+	;  0x6 = SRAM
+	;  0x7 = DRAM
+	;  0xD = FUNCSPEC (function-specific memory)
+	;  0xE = EXTEND (extended device type follows)
+	; Note: CFcards show 0xD and 0x5
+	DBGMSG	dbg_cis_device
+	moveq.l	#0,d0
+	move.b	CFU_DTType(a3),d0
+	bsr.w	_DebugHexByte
+	DBGMSG	dbg_cis_device_speed
+	move.l	CFU_DTSpeed(a3),d0
+	bsr.w	_DebugDecimal32
+	DBGMSG	dbg_cis_device_size
+	move.l	CFU_DTSize(a3),d0
+	bsr.w	_DebugHex
+	bsr.w	_DebugNewline
+	endc
+_t_devtuple_skip:
 
-	; Parse CISTPL_CONFIG tuple to extract config register address
+	; CIS gate filter non storage cards (tolerant on missing):
+	; - if FUNCID missing/unreadable => continue
+	; - if FUNCID == 0x04 => continue
+	; - otherwise => reject early (e.g. WiFi/LAN)
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#CISTPL_FUNCID,d1
+	moveq.l	#127,d0
+	CALLCARD CopyTuple
+	tst.w	d0
+	beq.s	_t_cis_funcid_missing	;missing/unreadable => continue
+
+	lea	CFU_ConfigBlock(a3),a0
+	addq.l	#1,a0			;-> link
+	cmp.b	#1,(a0)+		;need at least 1 byte of data
+	bcs.s	_t_cis_funcid_missing
+	moveq.l	#0,d2
+	move.b	(a0),d2			;FUNCID
+	ifd	DEBUG
+	DBGMSG	dbg_cis_funcid
+	move.l	d2,d0
+	bsr.w	_DebugHexByte
+	bsr.w	_DebugNewline
+	endc
+	cmp.b	#4,d2			;0x04 = Fixed Disk
+	beq.s	_t_cis_funcid_ok
+	bra.w	_t_cis_reject
+
+_t_cis_funcid_missing:
+	DBGMSG	dbg_cis_funcid_missing
+	nop
+
+_t_cis_funcid_ok:
+	DBGMSG	dbg_cis_gate_accept
+
+	bra.s	_t_cis_gate_end
+
+_t_cis_reject:
+	DBGMSG	dbg_cis_gate_reject
+	bra.w	_t_ibreak
+
+_t_cis_gate_end:
+	; Try to locate CISTPL_CONFIG tuple for config register address.
+	; If tuple is missing/invalid, fallback to standard 0x200 offset.
+	moveq.l	#CISTPL_CONFIG,d1
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#127,d0
+	CALLCARD CopyTuple
+	tst.w	d0
+	beq.s	_t_config_fallback	;CopyTuple failed use fallback
+
+	; Parse CopyTuple buffer: [0]=code [1]=link [2..]=data
 	lea	CFU_ConfigBlock(a3),a0
 	addq.l	#1,a0			;skip tuple code
 	cmp.b	#4,(a0)+		;check tuple data length
 	bcs.s	_t_config_fallback	;invalid length, use fallback
 
 	moveq.l	#3,d0
-	and.b	(a0)+,d0		;address length (1-4 bytes)
+	and.b	(a0)+,d0		;address length (1-4 bytes) - 1
 	addq.l	#1,a0			;skip reserved byte
 	move.l	d0,d1
 	moveq.l	#0,d2
@@ -2790,10 +2963,10 @@ _t_gotconfig:
 	ifd	DEBUG
 	btst	#3,CFU_OpenFlags+1(a3)
 	beq.s	_t_gotconfig_skip
-	DBGMSG	dbg_tupleconfig
+	DBGMSG	dbg_cis_config
 	move.l	d2,d0			;output config address
 	bsr.w	_DebugHex
-	DBGMSG	dbg_tupleconfig_end
+	DBGMSG	dbg_cis_config_end
 _t_gotconfig_skip:
 	endc
 	bra.s	_t_faddr
@@ -2801,7 +2974,7 @@ _t_config_fallback:
 	; Fallback to standard config address 0x200
 	; This is the standard PCMCIA configuration register address
 	; Used when CopyTuple fails or CISTPL_CONFIG is invalid
-	DBGMSG	dbg_tuplefallback
+	DBGMSG	dbg_cis_config_fallback
 	moveq.l	#$200>>3,d2
 	lsl.l	#3,d2
 	or.w	#1<<8,CFU_ActiveHacks(a3)	;mark as fallback config address
@@ -2865,7 +3038,8 @@ _t_itest:
 	bsr.w	_GetIDEID		;read ATA configuration block
 	DBGMSG	dbg_done
 	move.l	d0,d2
-	beq.w	_t_inodisk		;IDENTIFY failed
+	tst.l	d2
+	beq.w	_t_identify_failed	;IDENTIFY failed -> release card (avoid blocking others)
 
 	; Skip CIS tuple validation - use IDENTIFY-based identification instead
 	; This avoids unreliable CopyTuple for device validation
@@ -2942,6 +3116,10 @@ _t_iok:
 	DBGMSG	dbg_notify
 	bsr.w	NotifyClients
 	bra.w	_t_check
+
+_t_identify_failed:
+	DBGMSG	dbg_identify_failed_release
+	bra.w	_t_ibreak
 
 _t_ibreak:
 	DBGMSG	dbg_identify_fail
