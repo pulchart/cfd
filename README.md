@@ -25,6 +25,20 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 ## What's New in
 
+### v1.38-dev
+
+#### Driver
+
+TBD
+
+#### Tools
+
+* **pcmciacheck simplifies test output**
+
+#### Others
+
+TBD
+
 ### v1.37
 
 #### Driver
@@ -341,6 +355,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.38 | 01/2026 | TBD |
 | v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
 | v1.35 | 12/2025 | Serial debug (Flags=8), enforce multi mode (Flags=16), SD-to-CF support simplification |

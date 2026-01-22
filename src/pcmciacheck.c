@@ -425,9 +425,6 @@ int TestReadModes(int *working_mode)
 
         /* Check for multi-sector read issue */
         BOOL has_multisector_issue = (chunks_read == 2 && (status & STATUS_DRQ));
-        if (has_multisector_issue) {
-            printf(" (DRQ still set - multi-sector issue)");
-        }
 
         /* Calculate chunk size and write header */
         {
@@ -440,18 +437,21 @@ int TestReadModes(int *working_mode)
             /* Remember first working mode */
             if (size == 512 && *working_mode < 0) {
                 *working_mode = mode;
-                if (has_multisector_issue) {
-                    printf(" WARNING (%lu bytes)\r\n", (unsigned long)size);
-                } else {
-                    printf(" OK (%lu bytes)\r\n", (unsigned long)size);
-                }
-            } else {
-                if (has_multisector_issue && size == 512) {
-                    printf(" WARNING (%lu bytes)\r\n", (unsigned long)size);
-                } else {
-                    printf(" %s (%lu bytes)\r\n", (size == 512) ? "OK" : "PARTIAL", (unsigned long)size);
-                }
             }
+
+            /* Print status based on bytes read */
+            if (size == 512) {
+                printf(" OK (%lu bytes)", (unsigned long)size);
+            } else {
+                printf(" PARTIAL (%lu bytes)", (unsigned long)size);
+            }
+
+            /* Append multi-sector warning if detected */
+            if (has_multisector_issue) {
+                printf(" - WARNING: multi-sector issue detected");
+            }
+
+            printf("\r\n");
         }
     }
 
