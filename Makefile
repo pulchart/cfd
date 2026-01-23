@@ -25,8 +25,7 @@ PCMCIACHECK_DATE = 22.01.2026
 VERSION = $(VERSION_MAJOR).$(VERSION_MINOR)$(VERSION_SUFFIX)
 VERSION_NODOT = $(VERSION_MAJOR)$(VERSION_MINOR)
 
-# Version string for assembler
-# Generate version include file to avoid shell quoting issues
+# Version string for assembler# Generate version include file for assembler
 VERSION_INC = src/version.i
 
 # Verbose mode (V=1 for verbose output)

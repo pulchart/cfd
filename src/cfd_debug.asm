@@ -25,6 +25,31 @@ DBGNUM	macro
 	bsr.w	_DebugHex
 	endm
 
+;--- Common debug entry/exit macros ---
+; DBG_ENTRY <end_label>,<regs> - Check debug flag, load ExecBase, save registers
+;                                  If debug disabled, branches to end_label
+; DBG_EXIT <regs>                - Restore registers and exit
+DBG_ENTRY	macro
+	btst	#3,CFU_OpenFlags+1(a3)
+	beq.w	\1
+	movem.l	\2,-(sp)
+	move.l	CFD_ExecBase(a4),a6
+	endm
+
+DBG_EXIT	macro
+	movem.l	(sp)+,\1
+	endm
+
+;--- DBGMSG_HEX: output label + hex word + newline ---
+; Usage: DBGMSG_HEX <label>, <offset>
+;        where offset is relative to a2 (config block pointer)
+DBGMSG_HEX	macro
+	DBGMSG	\1
+	move.w	\2(a2),d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	endm
+
 	else
 
 DBGMSG	macro
@@ -36,10 +61,19 @@ DBGCHR	macro
 DBGNUM	macro
 	endm
 
+DBG_ENTRY	macro
+	endm
+
+DBG_EXIT	macro
+	endm
+
+DBGMSG_HEX	macro
+	endm
+
 	endc
 
 	ifd	DEBUG
-;--- _DebugChar: output single char in d0 if debug enabled ---
+;--- _DebugChar: output single char in d0 ---
 ; d0 = character to output
 ; a3 = unit, a4 = device
 ; preserves all registers
@@ -78,24 +112,16 @@ _ds_end:
 ; a3 = unit, a4 = device
 ; preserves all registers
 _DebugHex:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dh_end
-	movem.l	d0-d3/a0-a1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_dh_end,d0-d3/a0-a1/a6
 	move.l	d0,d2
 	moveq.l	#7,d3			;8 digits
 _dh_loop:
 	rol.l	#4,d2
 	moveq.l	#$0f,d0
 	and.l	d2,d0
-	cmp.b	#10,d0
-	bcs.s	_dh_digit
-	addq.b	#'A'-'0'-10,d0
-_dh_digit:
-	add.b	#'0',d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugHexDigit
 	dbra	d3,_dh_loop
-	movem.l	(sp)+,d0-d3/a0-a1/a6
+	DBG_EXIT	d0-d3/a0-a1/a6
 _dh_end:
 	rts
 
@@ -106,18 +132,30 @@ _DebugNewline:
 	moveq.l	#10,d0
 	bra.s	_DebugChar
 
+;--- _DebugHexDigit: convert 4-bit value in d0.b to ASCII hex digit ---
+; d0.b = 4-bit value (0-15) to convert
+; a6 = ExecBase (must be set up)
+; Outputs character via RawPutChar, preserves d0-d1/a0-a1/a6
+_DebugHexDigit:
+	cmp.b	#10,d0
+	bcs.s	_dhd_09
+	add.b	#'A'-10,d0
+	bra.s	_dhd_out
+_dhd_09:
+	add.b	#'0',d0
+_dhd_out:
+	jsr	RawPutChar(a6)
+	rts
+
 ;--- _DebugATAStr: output ATA string ---
 ; a0 = pointer to ATA string
 ; d1 = length in bytes
-; Note: uses d2 for loop counter since RawPutChar clobbers d0-d1
+; Note: uses d2 for loop counter since _DebugChar clobbers d0-d1
 ; Spaces are shown as dots for visibility
 _DebugATAStr:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_das_end
-	movem.l	d0-d2/a0-a1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_das_end,d0-d2/a0-a1/a6
 	subq.w	#1,d1
-	move.w	d1,d2			;use d2 as loop counter (RawPutChar clobbers d1)
+	move.w	d1,d2			;use d2 as loop counter (_DebugChar clobbers d1)
 _das_loop:
 	moveq.l	#0,d0
 	move.b	(a0)+,d0		;read byte in normal order
@@ -127,19 +165,17 @@ _das_loop:
 	bne.s	_das_print		;print if > space
 	moveq.l	#'.',d0			;replace space with dot
 _das_print:
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 _das_skip:
-	dbra	d2,_das_loop		;d2 is safe from RawPutChar
-	movem.l	(sp)+,d0-d2/a0-a1/a6
+	dbra	d2,_das_loop		;d2 is safe from _DebugChar
+	DBG_EXIT	d0-d2/a0-a1/a6
 _das_end:
 	rts
 
 ;--- _DebugCardInfo: output card identification ---
 ; Call after successful _GetIDEID
 _DebugCardInfo:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dci_end
-	movem.l	d0-d1/a0,-(sp)
+	DBG_ENTRY	_dci_end,d0-d1/a0
 
 	;Model name (words 27-46, offset 54, 40 bytes)
 	DBGMSG	dbg_model
@@ -162,20 +198,17 @@ _DebugCardInfo:
 	bsr.w	_DebugATAStr
 	bsr.w	_DebugNewline
 
-	movem.l	(sp)+,d0-d1/a0
+	DBG_EXIT	d0-d1/a0
 _dci_end:
 	rts
 
 ;--- _DebugHexDump: dump IDENTIFY structure (512 bytes) ---
 ; Outputs 32 lines of 16 bytes each with offset
 _DebugHexDump:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.w	_dhd_end
-	movem.l	d0-d4/a0-a1/a6,-(sp)
+	DBG_ENTRY	_dhd_end,d0-d4/a0-a1/a6
 
 	DBGMSG	dbg_identify_raw
 
-	move.l	CFD_ExecBase(a4),a6
 	lea	CFU_ConfigBlock(a3),a0
 	moveq.l	#0,d3			;word counter (0,8,16,...248)
 	moveq.l	#31,d4			;32 lines (0-31)
@@ -183,13 +216,13 @@ _DebugHexDump:
 _dhd_line:
 	;print word offset (W0, W8, W16... W248)
 	moveq.l	#'W',d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 	move.w	d3,d0
 	bsr.w	_DebugDecimal		;output decimal number
 	moveq.l	#':',d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 	moveq.l	#' ',d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 
 	;print 8 words per line
 	moveq.l	#7,d2
@@ -197,74 +230,48 @@ _dhd_word:
 	move.w	(a0)+,d0
 	bsr.w	_DebugHexWord
 	moveq.l	#' ',d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 	dbra	d2,_dhd_word
 	addq.w	#8,d3			;next line starts at word+8
 
 	;newline
-	moveq.l	#13,d0
-	jsr	RawPutChar(a6)
-	moveq.l	#10,d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugNewline
 
 	dbra	d4,_dhd_line
 
-	movem.l	(sp)+,d0-d4/a0-a1/a6
+	DBG_EXIT	d0-d4/a0-a1/a6
 _dhd_end:
 	rts
 
 ;--- _DebugHexByte: output d0.b as 2-digit hex ---
 _DebugHexByte:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dhb_end
-	movem.l	d0-d2/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_dhb_end,d0-d2/a6
 	move.b	d0,d2
 	lsr.b	#4,d0
-	bsr.s	_dhb_digit
+	bsr.w	_DebugHexDigit
 	move.b	d2,d0
 	and.b	#$0f,d0
-	bsr.s	_dhb_digit
-	movem.l	(sp)+,d0-d2/a6
+	bsr.w	_DebugHexDigit
+	DBG_EXIT	d0-d2/a6
 _dhb_end:
 	rts
-_dhb_digit:
-	cmp.b	#10,d0
-	bcs.s	_dhb_09
-	add.b	#'A'-10,d0
-	jmp	RawPutChar(a6)
-_dhb_09:
-	add.b	#'0',d0
-	jmp	RawPutChar(a6)
 
 ;--- _DebugIdentifyFields: show labeled IDENTIFY fields ---
 ; Note: uses a2 for config block pointer (DBGMSG clobbers a0)
 _DebugIdentifyFields:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.w	_dif_end
-	movem.l	d0/a0/a2/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_dif_end,d0/a0/a2/a6
 	lea	CFU_ConfigBlock(a3),a2
 
 	DBGMSG	dbg_identify_dump
 
 	;Word 47: Max multi-sector
-	DBGMSG	dbg_id_maxmulti
-	move.w	94(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	DBGMSG_HEX	dbg_id_maxmulti,94
 
 	;Word 49: Capabilities
-	DBGMSG	dbg_id_caps
-	move.w	98(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	DBGMSG_HEX	dbg_id_caps,98
 
 	;Word 59: Multi-sector setting
-	DBGMSG	dbg_id_multisect
-	move.w	118(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	DBGMSG_HEX	dbg_id_multisect,118
 
 	;Words 60-61: LBA capacity (swap words for display)
 	DBGMSG	dbg_id_lba
@@ -275,39 +282,27 @@ _DebugIdentifyFields:
 	bsr.w	_DebugNewline
 
 	;Word 63: Multiword DMA
-	DBGMSG	dbg_id_dma
-	move.w	126(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	DBGMSG_HEX	dbg_id_dma,126
 
 	;Word 64: PIO modes
-	DBGMSG	dbg_id_pio
-	move.w	128(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	DBGMSG_HEX	dbg_id_pio,128
 
 	;Word 88: Ultra DMA
-	DBGMSG	dbg_id_udma
-	move.w	176(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	DBGMSG_HEX	dbg_id_udma,176
 
-	movem.l	(sp)+,d0/a0/a2/a6
+	DBG_EXIT	d0/a0/a2/a6
 _dif_end:
 	rts
 
 ;--- _DebugHexWord: output d0.w as 4-digit hex ---
 _DebugHexWord:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dhw_end
-	movem.l	d0-d1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_dhw_end,d0-d1/a6
 	move.w	d0,d1
 	lsr.w	#8,d0
 	bsr.w	_DebugHexByte
 	move.w	d1,d0
 	bsr.w	_DebugHexByte
-	movem.l	(sp)+,d0-d1/a6
+	DBG_EXIT	d0-d1/a6
 _dhw_end:
 	rts
 
@@ -326,12 +321,8 @@ _dtm_end:
 	rts
 
 ;--- _DebugDecimal: output d0.w as decimal (0-255) ---
-; Uses stack to preserve values across RawPutChar calls
 _DebugDecimal:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dd_end
-	movem.l	d0-d3/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_dd_end,d0-d3/a6
 	moveq.l	#0,d2
 	move.w	d0,d2			;d2 = value (preserved)
 	moveq.l	#0,d3			;d3 = leading zero flag
@@ -349,7 +340,7 @@ _dd_h_done:
 	beq.s	_dd_tens
 	add.b	#'0',d0
 	move.w	d2,-(sp)		;save d2
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 	move.w	(sp)+,d2		;restore d2
 	moveq.l	#1,d3			;set leading flag
 
@@ -370,16 +361,16 @@ _dd_t_done:
 _dd_t_print:
 	add.b	#'0',d0
 	move.w	d2,-(sp)		;save d2
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 	move.w	(sp)+,d2		;restore d2
 
 _dd_ones:
 	;ones digit (always print)
 	move.w	d2,d0
 	add.b	#'0',d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 
-	movem.l	(sp)+,d0-d3/a6
+	DBG_EXIT	d0-d3/a6
 _dd_end:
 	rts
 
@@ -387,18 +378,14 @@ _dd_end:
 ; Prints 0..4294967295 using repeated /10.
 ; (Uses two DIVU steps to get a full 32-bit quotient.)
 _DebugDecimal32:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dd32_end
-	movem.l	d1-d5/a0/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
+	DBG_ENTRY	_dd32_end,d1-d5/a0/a6
 
 	move.l	sp,a0			;marker for digit stack (after saved regs)
 	tst.l	d0
 	bne.s	_dd32_loop
 	; special case: 0
-	moveq.l	#'0',d1
-	move.l	d1,d0
-	jsr	RawPutChar(a6)
+	moveq.l	#'0',d0
+	bsr.w	_DebugChar
 	bra.s	_dd32_restore
 
 _dd32_loop:
@@ -439,20 +426,18 @@ _dd32_out:
 	beq.s	_dd32_restore
 	moveq.l	#0,d0
 	move.b	(sp)+,d0
-	jsr	RawPutChar(a6)
+	bsr.w	_DebugChar
 	bra.s	_dd32_out
 
 _dd32_restore:
-	movem.l	(sp)+,d1-d5/a0/a6
+	DBG_EXIT	d1-d5/a0/a6
 _dd32_end:
 	rts
 
 ;--- _DebugIDEStatus: show IDE status and error registers ---
 ; d0 = status register value
 _DebugIDEStatus:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dis_end
-	movem.l	d0-d1/a0,-(sp)
+	DBG_ENTRY	_dis_end,d0-d1/a0
 	move.l	d0,d1			;save status
 	DBGMSG	dbg_idestatus
 	move.l	d1,d0
@@ -465,7 +450,7 @@ _DebugIDEStatus:
 	move.b	2(a0),d0		;error register at offset 2
 	bsr.w	_DebugHex
 	bsr.w	_DebugNewline
-	movem.l	(sp)+,d0-d1/a0
+	DBG_EXIT	d0-d1/a0
 _dis_end:
 	rts
 	endc
