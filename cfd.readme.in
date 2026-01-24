@@ -4,7 +4,6 @@ Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by 
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
-Replaces:     driver/media/cfd135.lha
 Architecture: m68k-amigaos
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
@@ -14,7 +13,19 @@ CHANGES IN @VERSION@ (@DATE@)
 ============================
 
 Driver:
-* TBD
+
+Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. WiFi) and restores PCMCIA (Gayle) timing setup.
+
+* **CIS gate (PCMCIA card type filter)** (github issue #25)
+  - Reads `CISTPL_FUNCID` (when available) and rejects non-disk cards
+    early to avoid interfering with other PCMCIA devices (e.g. WiFi).
+  - If `CISTPL_FUNCID` is missing/unreadable, the driver continues
+    for compatibility (some CF cards/adapters do not provide reliable
+    CIS tuples).
+
+* **PCMCIA (Gayle) timing setup**
+  - Restores access timing setup from CISTPL_DEVICE via CardAccessSpeed
+    (v1.37 didn't program timing based on CIS speed).
 
 Tools:
 * pcmciacheck: Simplified test output
@@ -83,9 +94,13 @@ With Flags = 8, connect serial cable and monitor at 9600 baud:
   [CFD] ..done
   [CFD] Setting voltage
   [CFD] Voltage: 5V
-  [CFD] Reading tuples
-  [CFD] Tuple CISTPL_CONFIG found
-  (or: [CFD] CISTPL_CONFIG not available, using standard 0x200)
+  [CFD] CIS gate
+  [CFD] ..DEVICE: type=0x0D speed=720ns size=0x00000000
+  [CFD] ..FUNCID: missing (compat)
+  (or: [CFD] ..FUNCID: 0x04)
+  [CFD] ..RESULT: accept
+  [CFD] ..CONFIG: addr=0x00000200
+  (or: [CFD] ..CONFIG: default (0x200))
   [CFD] RW test
   [CFD] ..done
   [CFD] Transfer: WORD

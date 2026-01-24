@@ -49,14 +49,6 @@
 ;
 ;===========================================================================
 
-;--- Version (defined by Makefile, with defaults for standalone assembly) ---
-	ifnd	FILE_VERSION
-FILE_VERSION	= 1
-	endc
-	ifnd	FILE_REVISION
-FILE_REVISION	= 38
-	endc
-
 ;--- Conditional compilation ---
 ; Define DEBUG symbol to include serial debug support
 ; Set via assembler command line: -DDEBUG=1
@@ -71,6 +63,10 @@ FILE_REVISION	= 38
 ; Optimization by MOVEM burst transfers
 ; - Uses MOVEM.L for burst memory reads/writes (8 bytes at a time)
 ;COPYBURST	= 1
+
+; --- Includes ---
+	include	"version.i"
+	include	"cfd_debug.asm"
 
 ;--- from exec.library -------------------------------------
 
@@ -471,6 +467,11 @@ DeviceTuple	= -78
 CardChangeCount	= -96
 CardInterface	= -102
 
+; Tuple codes used for CIS-gate
+CISTPL_DEVICE	= $01
+CISTPL_CONFIG	= $1a
+CISTPL_FUNCID	= $21
+
 ;ReadStatus()
 CARD_STATUSF_CCDET	= 64
 CARD_STATUSF_BVD1	= 32
@@ -715,7 +716,6 @@ s_name:
 	dc.b	"$VER: "
 s_idstring:
 	;Version string from Makefile-generated include
-	include	"version.i"
 	VERSION_STRING
 	dc.b	LF,0
 	dc.b	"(c) Torsten Jager",0
@@ -740,8 +740,6 @@ dbg_reset:
 	dc.b	"[CFD] Reset",13,10,0
 dbg_config:
 	dc.b	"[CFD] Configuring HBA",13,10,0
-dbg_tuple:
-	dc.b	"[CFD] Reading tuples",13,10,0
 dbg_voltage:
 	dc.b	"[CFD] Setting voltage",13,10,0
 dbg_rwtest:
@@ -810,12 +808,30 @@ dbg_byte:
 	dc.b	"BYTE",13,10,0
 dbg_voltage5v:
 	dc.b	"[CFD] Voltage: 5V",13,10,0
-dbg_tupleconfig:
-	dc.b	"[CFD] Config address found: 0x",0
-dbg_tupleconfig_end:
+dbg_cis_scan:
+	dc.b	"[CFD] CIS gate",13,10,0
+dbg_cis_funcid:
+	dc.b	"[CFD] ..FUNCID: 0x",0
+dbg_cis_funcid_missing:
+	dc.b	"[CFD] ..FUNCID: missing (compat)",13,10,0
+dbg_cis_device:
+	dc.b	"[CFD] ..DEVICE: type=0x",0
+dbg_cis_device_speed:
+	dc.b	" speed=",0
+dbg_cis_device_size:
+	dc.b	"ns size=0x",0
+dbg_cis_gate_accept:
+	dc.b	"[CFD] ..RESULT: accept",13,10,0
+dbg_cis_gate_reject:
+	dc.b	"[CFD] ..RESULT: reject -> ReleaseCard",13,10,0
+dbg_cis_config:
+	dc.b	"[CFD] ..CONFIG: addr=0x",0
+dbg_cis_config_end:
 	dc.b	13,10,0
-dbg_tuplefallback:
-	dc.b	"[CFD] Config address not found, using default (0x200)",13,10,0
+dbg_cis_config_fallback:
+	dc.b	"[CFD] ..CONFIG: default (0x200)",13,10,0
+dbg_identify_failed_release:
+	dc.b	"[CFD] IDENTIFY failed -> ReleaseCard",13,10,0
 dbg_idestatus:
 	dc.b	"[CFD] IDE status=",0
 dbg_multimax:
@@ -2080,404 +2096,6 @@ _gs_tab:
 	dc.b	2, $3a, 0,   0, 0, 0	;no disk
 	dc.b	5, $21, 0, $c0, 0, 2	;invalid block #
 
-;*** Serial Debug *******************************************
-;
-; Serial debug output via RawPutChar (directly to serial port)
-; Enable with mount Flags = 8
-;
-; Usage:
-;   DBGMSG <string_label>    - output string if debug enabled
-;   DBGCHR <char>            - output single char if debug enabled
-;   DBGNUM                   - output d0.l as hex if debug enabled
-;
-
-	ifd	DEBUG
-DBGMSG	macro
-	lea	\1(pc),a0
-	bsr.w	_DebugStr
-	endm
-
-DBGCHR	macro
-	moveq.l	#\1,d0
-	bsr.w	_DebugChar
-	endm
-
-DBGNUM	macro
-	bsr.w	_DebugHex
-	endm
-	else
-DBGMSG	macro
-	endm
-DBGCHR	macro
-	endm
-DBGNUM	macro
-	endm
-	endc
-
-	ifd	DEBUG
-;--- _DebugChar: output single char in d0 if debug enabled ---
-; d0 = character to output
-; a3 = unit, a4 = device
-; preserves all registers
-_DebugChar:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dc_end
-	movem.l	d0-d1/a0-a1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-	jsr	RawPutChar(a6)
-	movem.l	(sp)+,d0-d1/a0-a1/a6
-_dc_end:
-	rts
-
-;--- _DebugStr: output null-terminated string ---
-; a0 = pointer to string
-; a3 = unit, a4 = device
-; preserves all registers
-_DebugStr:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_ds_end
-	movem.l	d0-d1/a0-a1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-_ds_loop:
-	moveq.l	#0,d0
-	move.b	(a0)+,d0
-	beq.s	_ds_done
-	jsr	RawPutChar(a6)
-	bra.s	_ds_loop
-_ds_done:
-	movem.l	(sp)+,d0-d1/a0-a1/a6
-_ds_end:
-	rts
-
-;--- _DebugHex: output d0.l as 8-digit hex ---
-; d0 = value to output
-; a3 = unit, a4 = device
-; preserves all registers
-_DebugHex:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dh_end
-	movem.l	d0-d3/a0-a1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-	move.l	d0,d2
-	moveq.l	#7,d3			;8 digits
-_dh_loop:
-	rol.l	#4,d2
-	moveq.l	#$0f,d0
-	and.l	d2,d0
-	cmp.b	#10,d0
-	bcs.s	_dh_digit
-	addq.b	#'A'-'0'-10,d0
-_dh_digit:
-	add.b	#'0',d0
-	jsr	RawPutChar(a6)
-	dbra	d3,_dh_loop
-	movem.l	(sp)+,d0-d3/a0-a1/a6
-_dh_end:
-	rts
-
-;--- _DebugNewline: output CR+LF ---
-_DebugNewline:
-	moveq.l	#13,d0
-	bsr.s	_DebugChar
-	moveq.l	#10,d0
-	bra.s	_DebugChar
-
-;--- _DebugATAStr: output ATA string ---
-; a0 = pointer to ATA string
-; d1 = length in bytes
-; Note: uses d2 for loop counter since RawPutChar clobbers d0-d1
-; Spaces are shown as dots for visibility
-_DebugATAStr:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_das_end
-	movem.l	d0-d2/a0-a1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-	subq.w	#1,d1
-	move.w	d1,d2			;use d2 as loop counter (RawPutChar clobbers d1)
-_das_loop:
-	moveq.l	#0,d0
-	move.b	(a0)+,d0		;read byte in normal order
-	beq.s	_das_skip
-	cmp.b	#' ',d0
-	bcs.s	_das_skip		;skip if < space
-	bne.s	_das_print		;print if > space
-	moveq.l	#'.',d0			;replace space with dot
-_das_print:
-	jsr	RawPutChar(a6)
-_das_skip:
-	dbra	d2,_das_loop		;d2 is safe from RawPutChar
-	movem.l	(sp)+,d0-d2/a0-a1/a6
-_das_end:
-	rts
-
-;--- _DebugCardInfo: output card identification ---
-; Call after successful _GetIDEID
-_DebugCardInfo:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dci_end
-	movem.l	d0-d1/a0,-(sp)
-	
-	;Model name (words 27-46, offset 54, 40 bytes)
-	DBGMSG	dbg_model
-	lea	CFU_ConfigBlock+54(a3),a0
-	moveq.l	#40,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
-	
-	;Serial number (words 10-19, offset 20, 20 bytes)
-	DBGMSG	dbg_serial
-	lea	CFU_ConfigBlock+20(a3),a0
-	moveq.l	#20,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
-	
-	;Firmware (words 23-26, offset 46, 8 bytes)
-	DBGMSG	dbg_firmware
-	lea	CFU_ConfigBlock+46(a3),a0
-	moveq.l	#8,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
-	
-	movem.l	(sp)+,d0-d1/a0
-_dci_end:
-	rts
-
-;--- _DebugHexDump: dump IDENTIFY structure (512 bytes) ---
-; Outputs 32 lines of 16 bytes each with offset
-_DebugHexDump:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.w	_dhd_end
-	movem.l	d0-d4/a0-a1/a6,-(sp)
-	
-	DBGMSG	dbg_identify_raw
-	
-	move.l	CFD_ExecBase(a4),a6
-	lea	CFU_ConfigBlock(a3),a0
-	moveq.l	#0,d3			;word counter (0,8,16,...248)
-	moveq.l	#31,d4			;32 lines (0-31)
-	
-_dhd_line:
-	;print word offset (W0, W8, W16... W248)
-	moveq.l	#'W',d0
-	jsr	RawPutChar(a6)
-	move.w	d3,d0
-	bsr.w	_DebugDecimal		;output decimal number
-	moveq.l	#':',d0
-	jsr	RawPutChar(a6)
-	moveq.l	#' ',d0
-	jsr	RawPutChar(a6)
-	
-	;print 8 words per line
-	moveq.l	#7,d2
-_dhd_word:
-	move.w	(a0)+,d0
-	bsr.w	_DebugHexWord
-	moveq.l	#' ',d0
-	jsr	RawPutChar(a6)
-	dbra	d2,_dhd_word
-	addq.w	#8,d3			;next line starts at word+8
-	
-	;newline
-	moveq.l	#13,d0
-	jsr	RawPutChar(a6)
-	moveq.l	#10,d0
-	jsr	RawPutChar(a6)
-	
-	dbra	d4,_dhd_line
-	
-	movem.l	(sp)+,d0-d4/a0-a1/a6
-_dhd_end:
-	rts
-
-;--- _DebugHexByte: output d0.b as 2-digit hex ---
-_DebugHexByte:
-	movem.l	d0-d2,-(sp)
-	move.b	d0,d2
-	lsr.b	#4,d0
-	bsr.s	_dhb_digit
-	move.b	d2,d0
-	and.b	#$0f,d0
-	bsr.s	_dhb_digit
-	movem.l	(sp)+,d0-d2
-	rts
-_dhb_digit:
-	cmp.b	#10,d0
-	bcs.s	_dhb_09
-	add.b	#'A'-10,d0
-	jmp	RawPutChar(a6)
-_dhb_09:
-	add.b	#'0',d0
-	jmp	RawPutChar(a6)
-
-;--- _DebugIdentifyFields: show labeled IDENTIFY fields ---
-; Note: uses a2 for config block pointer (DBGMSG clobbers a0)
-_DebugIdentifyFields:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.w	_dif_end
-	movem.l	d0/a0/a2/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-	lea	CFU_ConfigBlock(a3),a2
-	
-	DBGMSG	dbg_identify_dump
-	
-	;Word 47: Max multi-sector
-	DBGMSG	dbg_id_maxmulti
-	move.w	94(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	;Word 49: Capabilities
-	DBGMSG	dbg_id_caps
-	move.w	98(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	;Word 59: Multi-sector setting
-	DBGMSG	dbg_id_multisect
-	move.w	118(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	;Words 60-61: LBA capacity (swap words for display)
-	DBGMSG	dbg_id_lba
-	move.w	122(a2),d0		;Word 61 (high)
-	bsr.w	_DebugHexWord
-	move.w	120(a2),d0		;Word 60 (low)
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	;Word 63: Multiword DMA
-	DBGMSG	dbg_id_dma
-	move.w	126(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	;Word 64: PIO modes
-	DBGMSG	dbg_id_pio
-	move.w	128(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	;Word 88: Ultra DMA
-	DBGMSG	dbg_id_udma
-	move.w	176(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
-	
-	movem.l	(sp)+,d0/a0/a2/a6
-_dif_end:
-	rts
-
-;--- _DebugHexWord: output d0.w as 4-digit hex ---
-_DebugHexWord:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dhw_end
-	movem.l	d0-d1/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-	move.w	d0,d1
-	lsr.w	#8,d0
-	bsr.w	_DebugHexByte
-	move.w	d1,d0
-	bsr.w	_DebugHexByte
-	movem.l	(sp)+,d0-d1/a6
-_dhw_end:
-	rts
-
-;--- _DebugTransferMode: show transfer mode (WORD/BYTE) ---
-_DebugTransferMode:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dtm_end
-	DBGMSG	dbg_transfer
-	tst.b	CFU_WriteMode(a3)
-	bne.s	_dtm_byte
-	DBGMSG	dbg_word
-	bra.s	_dtm_end
-_dtm_byte:
-	DBGMSG	dbg_byte
-_dtm_end:
-	rts
-
-;--- _DebugDecimal: output d0.w as decimal (0-255) ---
-; Uses stack to preserve values across RawPutChar calls
-_DebugDecimal:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dd_end
-	movem.l	d0-d3/a6,-(sp)
-	move.l	CFD_ExecBase(a4),a6
-	moveq.l	#0,d2
-	move.w	d0,d2			;d2 = value (preserved)
-	moveq.l	#0,d3			;d3 = leading zero flag
-	
-	;hundreds digit
-	moveq.l	#0,d0
-_dd_h_loop:
-	cmp.w	#100,d2
-	bcs.s	_dd_h_done
-	sub.w	#100,d2
-	addq.w	#1,d0
-	bra.s	_dd_h_loop
-_dd_h_done:
-	tst.w	d0
-	beq.s	_dd_tens
-	add.b	#'0',d0
-	move.w	d2,-(sp)		;save d2
-	jsr	RawPutChar(a6)
-	move.w	(sp)+,d2		;restore d2
-	moveq.l	#1,d3			;set leading flag
-	
-_dd_tens:
-	;tens digit
-	moveq.l	#0,d0
-_dd_t_loop:
-	cmp.w	#10,d2
-	bcs.s	_dd_t_done
-	sub.w	#10,d2
-	addq.w	#1,d0
-	bra.s	_dd_t_loop
-_dd_t_done:
-	tst.w	d0
-	bne.s	_dd_t_print
-	tst.w	d3
-	beq.s	_dd_ones		;skip leading zero
-_dd_t_print:
-	add.b	#'0',d0
-	move.w	d2,-(sp)		;save d2
-	jsr	RawPutChar(a6)
-	move.w	(sp)+,d2		;restore d2
-	
-_dd_ones:
-	;ones digit (always print)
-	move.w	d2,d0
-	add.b	#'0',d0
-	jsr	RawPutChar(a6)
-	
-	movem.l	(sp)+,d0-d3/a6
-_dd_end:
-	rts
-
-;--- _DebugIDEStatus: show IDE status and error registers ---
-; d0 = status register value
-_DebugIDEStatus:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dis_end
-	movem.l	d0-d1/a0,-(sp)
-	move.l	d0,d1			;save status
-	DBGMSG	dbg_idestatus
-	move.l	d1,d0
-	bsr.w	_DebugHex
-	bsr.w	_DebugNewline
-	DBGMSG	dbg_ideerr
-	;Read error register
-	move.l	CFU_IDEAddr(a3),a0
-	moveq.l	#0,d0
-	move.b	2(a0),d0		;error register at offset 2
-	bsr.w	_DebugHex
-	bsr.w	_DebugNewline
-	movem.l	(sp)+,d0-d1/a0
-_dis_end:
-	rts
-	endc
-
 Wait40:
 	lea	CFU_TimeReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
@@ -2752,25 +2370,109 @@ _t_i2:
 	; Show memory transfer mode
 	DBGMSG	dbg_copyburst
 
-	; Try to read CISTPL_CONFIG tuple for config register address
-	; If CopyTuple fails (unreliable), fallback to standard 0x200 offset
-	DBGMSG	dbg_tuple
+	; CIS gate report
+	DBGMSG	dbg_cis_scan
+
+	; Read CISTPL_DEVICE
 	lea	CFU_ConfigBlock(a3),a0
-	move.l	a2,a1
-	moveq.l	#$1a,d1			;CISTPL_CONFIG
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#CISTPL_DEVICE,d1
 	moveq.l	#127,d0
 	CALLCARD CopyTuple
 	tst.w	d0
-	beq.s	_t_config_fallback	;CopyTuple failed, use fallback
+	beq.s	_t_devtuple_skip
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_DTSize(a3),a1
+	CALLCARD DeviceTuple
+	; DeviceTuple fills CFU_DTType/CFU_DTSpeed/CFU_DTSize.
+	; We use CFU_DTSpeed later for CardAccessSpeed (timing setup).
+	ifd	DEBUG
+	; CFU_DTType(a3) values (CISTPL_DEVICE "device type" nibble):
+	;  0x0 = NULL (no device / hole)
+	;  0x1 = ROM
+	;  0x2 = OTPROM (one-time programmable ROM)
+	;  0x3 = EPROM
+	;  0x4 = EEPROM
+	;  0x5 = FLASH
+	;  0x6 = SRAM
+	;  0x7 = DRAM
+	;  0xD = FUNCSPEC (function-specific memory)
+	;  0xE = EXTEND (extended device type follows)
+	; Note: CFcards show 0xD and 0x5
+	DBGMSG	dbg_cis_device
+	moveq.l	#0,d0
+	move.b	CFU_DTType(a3),d0
+	bsr.w	_DebugHexByte
+	DBGMSG	dbg_cis_device_speed
+	move.l	CFU_DTSpeed(a3),d0
+	bsr.w	_DebugDecimal32
+	DBGMSG	dbg_cis_device_size
+	move.l	CFU_DTSize(a3),d0
+	bsr.w	_DebugHex
+	bsr.w	_DebugNewline
+	endc
+_t_devtuple_skip:
 
-	; Parse CISTPL_CONFIG tuple to extract config register address
+	; CIS gate filter non storage cards (tolerant on missing):
+	; - if FUNCID missing/unreadable => continue
+	; - if FUNCID == 0x04 => continue
+	; - otherwise => reject early (e.g. WiFi/LAN)
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#CISTPL_FUNCID,d1
+	moveq.l	#127,d0
+	CALLCARD CopyTuple
+	tst.w	d0
+	beq.s	_t_cis_funcid_missing	;missing/unreadable => continue
+
+	lea	CFU_ConfigBlock(a3),a0
+	addq.l	#1,a0			;-> link
+	cmp.b	#1,(a0)+		;need at least 1 byte of data
+	bcs.s	_t_cis_funcid_missing
+	moveq.l	#0,d2
+	move.b	(a0),d2			;FUNCID
+	ifd	DEBUG
+	DBGMSG	dbg_cis_funcid
+	move.l	d2,d0
+	bsr.w	_DebugHexByte
+	bsr.w	_DebugNewline
+	endc
+	cmp.b	#4,d2			;0x04 = Fixed Disk
+	beq.s	_t_cis_funcid_ok
+	bra.w	_t_cis_reject
+
+_t_cis_funcid_missing:
+	DBGMSG	dbg_cis_funcid_missing
+	nop
+
+_t_cis_funcid_ok:
+	DBGMSG	dbg_cis_gate_accept
+
+	bra.s	_t_cis_gate_end
+
+_t_cis_reject:
+	DBGMSG	dbg_cis_gate_reject
+	bra.w	_t_ibreak
+
+_t_cis_gate_end:
+	; Try to locate CISTPL_CONFIG tuple for config register address.
+	; If tuple is missing/invalid, fallback to standard 0x200 offset.
+	moveq.l	#CISTPL_CONFIG,d1
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#127,d0
+	CALLCARD CopyTuple
+	tst.w	d0
+	beq.s	_t_config_fallback	;CopyTuple failed use fallback
+
+	; Parse CopyTuple buffer: [0]=code [1]=link [2..]=data
 	lea	CFU_ConfigBlock(a3),a0
 	addq.l	#1,a0			;skip tuple code
 	cmp.b	#4,(a0)+		;check tuple data length
 	bcs.s	_t_config_fallback	;invalid length, use fallback
 
 	moveq.l	#3,d0
-	and.b	(a0)+,d0		;address length (1-4 bytes)
+	and.b	(a0)+,d0		;address length (1-4 bytes) - 1
 	addq.l	#1,a0			;skip reserved byte
 	move.l	d0,d1
 	moveq.l	#0,d2
@@ -2790,10 +2492,10 @@ _t_gotconfig:
 	ifd	DEBUG
 	btst	#3,CFU_OpenFlags+1(a3)
 	beq.s	_t_gotconfig_skip
-	DBGMSG	dbg_tupleconfig
+	DBGMSG	dbg_cis_config
 	move.l	d2,d0			;output config address
 	bsr.w	_DebugHex
-	DBGMSG	dbg_tupleconfig_end
+	DBGMSG	dbg_cis_config_end
 _t_gotconfig_skip:
 	endc
 	bra.s	_t_faddr
@@ -2801,7 +2503,7 @@ _t_config_fallback:
 	; Fallback to standard config address 0x200
 	; This is the standard PCMCIA configuration register address
 	; Used when CopyTuple fails or CISTPL_CONFIG is invalid
-	DBGMSG	dbg_tuplefallback
+	DBGMSG	dbg_cis_config_fallback
 	moveq.l	#$200>>3,d2
 	lsl.l	#3,d2
 	or.w	#1<<8,CFU_ActiveHacks(a3)	;mark as fallback config address
@@ -2865,7 +2567,8 @@ _t_itest:
 	bsr.w	_GetIDEID		;read ATA configuration block
 	DBGMSG	dbg_done
 	move.l	d0,d2
-	beq.w	_t_inodisk		;IDENTIFY failed
+	tst.l	d2
+	beq.w	_t_identify_failed	;IDENTIFY failed -> release card (avoid blocking others)
 
 	; Skip CIS tuple validation - use IDENTIFY-based identification instead
 	; This avoids unreliable CopyTuple for device validation
@@ -2942,6 +2645,10 @@ _t_iok:
 	DBGMSG	dbg_notify
 	bsr.w	NotifyClients
 	bra.w	_t_check
+
+_t_identify_failed:
+	DBGMSG	dbg_identify_failed_release
+	bra.w	_t_ibreak
 
 _t_ibreak:
 	DBGMSG	dbg_identify_fail
