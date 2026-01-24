@@ -44,7 +44,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 
 #### Others
 
-TBD
+* documentation improvements
 
 ### v1.37
 
@@ -129,7 +129,7 @@ TBD
 
 ### v1.34
 
-* Improved compatibility with >4GB CF cards
+* Improved compatibility with >=2014 Firmware CF cards
   - Workaround for "get IDE ID" on large capacity cards
   - Multi-sector IO uses firmware reported value to improve compatibility
 
@@ -196,11 +196,48 @@ Set in CF0 mountlist. Flags can be combined (e.g., `Flags = 9` for cfd first + s
 | `enforce multi mode` | 16 | Force 256 sector transfers regardless of card's reported capability (v1.35+) |
 | `skip override auto-detect` | 32 | Skip multi-sector override auto-detection, use firmware value (v1.37+) |
 
-### Example: Enable serial debug
-```
-Flags = 8
-```
-Then monitor serial port (e.g., `screen /dev/ttyUSB0 9600` or `minicom -b 9600 -o -D /dev/ttyUSB0`) to see:
+### Debug via serial line (Flag 8)
+
+#### Requirements
+
+The driver can use your Amiga's serial port to report debug messages to a remote computer when serial debug output is enabled with `Flags = 8`.
+You can monitor these messages on your laptop/PC via an RS232-to-USB converter. These converters typically use either a DB-9 Male or DB-9 Female connector. Since the Amiga uses a DB-25 Male connector for RS232 serial communication, you'll need an adapter to convert from DB-25 Female to DB-9 (either Male or Female, depending on your USB-to-RS232 converter type), as follows:
+
+**Option 1: DB-9 M(ale) RS232 to USB Converter**
+
+Use a adapter `DB-25 Female to DB-9 Female`, the adapter uses NULL MODEM connections between pins (7 wires):
+
+| DB-25 Female (to Amiga side) | DB-9 Female (to USB Converter side) |
+|------------------------------|-------------------------------------|
+| n/a                          | Pin 1 (DCD) + Pin 6 (DSR)           |
+| Pin 2 (TXD)                  | Pin 2 (RXD)                         |
+| Pin 3 (RXD)                  | Pin 3 (TXD)                         |
+| Pin 4 (RTS)                  | Pin 8 (CTS)                         |
+| Pin 5 (CTS)                  | Pin 7 (RTS)                         |
+| Pin 6 (DSR)                  | Pin 4 (DTR)                         |
+| Pin 7 (GND)                  | Pin 5 (GND)                         |
+| Pin 8 (DCD) + Pin 6 (DSR)    | n/a                                 |
+| Pin 20 (DTR)                 | Pin 6 (DSR)                         |
+
+**Option 2: DB-9 F(emale) RS232 to USB Converter**
+
+Use a adapter `DB-25 Female to DB-9 Male`, the adapter uses Straight-Through connections between pins (9 wires):
+
+| DB-25 Female (to Amiga side) | DB-9 Male (to USB Converter side) |
+|------------------------------|-----------------------------------|
+| Pin 2 (TXD)                  | Pin 3 (TXD)                       |
+| Pin 3 (RXD)                  | Pin 2 (RXD)                       |
+| Pin 4 (RTS)                  | Pin 7 (RTS)                       |
+| Pin 5 (CTS)                  | Pin 8 (CTS)                       |
+| Pin 6 (DSR)                  | Pin 6 (DSR)                       |
+| Pin 7 (GND)                  | Pin 5 (GND)                       |
+| Pin 8 (DCD)                  | Pin 1 (DCD)                       |
+| Pin 20 (DTR)                 | Pin 4 (DTR)                       |
+| Pin 22 (RI)                  | Pin 9 (RI)                        |
+
+#### Monitoring Serial Output
+
+Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyUSB0 9600`, `minicom -b 9600 -o -D /dev/ttyUSB0`, `putty`) on remote computer to see online initialization process:
 ```
 [CFD] Card inserted
 [CFD] Identifying card...
@@ -289,7 +326,13 @@ MaxTransfer = 0x10000   /* debug + enforce mode, 128 sectors per IO */
 | CF cards | ≤4GB | ✓ Works |
 | CF cards | >4GB | ✗ Not working |
 
-### Speed Test Results
+**Specific card examples:**
+| Card Model | Firmware | Multisector Override |
+|------------|----------|---------------------|
+| Transcend 4GB CF 133x (TS4GCF133) | 20110407 | ✓ Works |
+| Transcend 4GB CF 133x (TS4GCF133) | 20140121 | ✗ Does not work |
+
+## Speed Test Results
 
 Retaken from readme of version 1.32/1.33. Those versions behave as if **Enforce Multi Mode** is enabled.
 
@@ -366,11 +409,11 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.38 | 01/2026 | TBD |
+| v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards |
 | v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
 | v1.35 | 12/2025 | Serial debug (Flags=8), enforce multi mode (Flags=16), SD-to-CF support simplification |
-| v1.34 | 10/2025 | Improved compatibility with >4GB CF cards (Jaroslav Pulchart) |
+| v1.34 | 10/2025 | Improved compatibility with >=2014 Firmwares CF cards (Jaroslav Pulchart) |
 | v1.33 | 1/2017 | Init reliability fix, SD card adapter support (Paul Carter) |
 | v1.32 | 11/2009 | Error messages, open source release (Torsten Jager) |
 | v1.31 | 11/2009 | Fixed "memory mapped" mode bug |
