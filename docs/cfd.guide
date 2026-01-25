@@ -794,7 +794,9 @@ Report issues at: https://github.com/pulchart/cfd/issues
   -------  -------  -------------------------  
   v1.38    01/2026  CIS gate filter to avoid   
                     interfering with           
-                    non-storage PCMCIA cards   
+                    non-storage PCMCIA cards,  
+                    PCMCIA timing setup        
+                    restored                   
   v1.37    01/2026  IDENTIFY-based detection,  
                     auto multi-sector          
                     override, CFInfo mount     

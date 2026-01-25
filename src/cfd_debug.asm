@@ -4,9 +4,9 @@
 ; Enable with mount Flags = 8
 ;
 ; Usage:
-;   DBGMSG <string_label>    - output string if debug enabled
-;   DBGCHR <char>            - output single char if debug enabled
-;   DBGNUM                   - output d0.l as hex if debug enabled
+;   DBGMSG <string_label> - output string if debug enabled
+;   DBGCHR <char>         - output single char if debug enabled
+;   DBGNUM                - output d0.l as hex if debug enabled
 ;
 
 	ifd	DEBUG
@@ -27,8 +27,8 @@ DBGNUM	macro
 
 ;--- Common debug entry/exit macros ---
 ; DBG_ENTRY <end_label>,<regs> - Check debug flag, load ExecBase, save registers
-;                                  If debug disabled, branches to end_label
-; DBG_EXIT <regs>                - Restore registers and exit
+;                                If debug disabled, branches to end_label
+; DBG_EXIT <regs>              - Restore registers and exit
 DBG_ENTRY	macro
 	btst	#3,CFU_OpenFlags+1(a3)
 	beq.w	\1
@@ -50,6 +50,17 @@ DBGMSG_HEX	macro
 	bsr.w	_DebugNewline
 	endm
 
+;--- DBGMSG_ATA: output label + ATA string + newline ---
+; Usage: DBGMSG_ATA <label>, <offset>, <length>
+;        where offset is relative to a3 (unit), length is in bytes
+DBGMSG_ATA	macro
+	DBGMSG	\1
+	lea	\2(a3),a0
+	moveq.l	#\3,d1
+	bsr.w	_DebugATAStr
+	bsr.w	_DebugNewline
+	endm
+
 	else
 
 DBGMSG	macro
@@ -68,6 +79,9 @@ DBG_EXIT	macro
 	endm
 
 DBGMSG_HEX	macro
+	endm
+
+DBGMSG_ATA	macro
 	endm
 
 	endc
@@ -108,7 +122,7 @@ _ds_end:
 	rts
 
 ;--- _DebugHex: output d0.l as 8-digit hex ---
-; d0 = value to output
+; d0.l = value to output
 ; a3 = unit, a4 = device
 ; preserves all registers
 _DebugHex:
@@ -137,12 +151,10 @@ _DebugNewline:
 ; a6 = ExecBase (must be set up)
 ; Outputs character via RawPutChar, preserves d0-d1/a0-a1/a6
 _DebugHexDigit:
-	cmp.b	#10,d0
-	bcs.s	_dhd_09
-	add.b	#'A'-10,d0
-	bra.s	_dhd_out
-_dhd_09:
-	add.b	#'0',d0
+	add.b	#'0',d0			;convert to '0'-'9' or ':'-'?'
+	cmp.b	#'9'+1,d0
+	bcs.s	_dhd_out		;if <= '9', done
+	add.b	#'A'-'9'-1,d0		;adjust ':'-'?' to 'A'-'F'
 _dhd_out:
 	jsr	RawPutChar(a6)
 	rts
@@ -150,12 +162,11 @@ _dhd_out:
 ;--- _DebugATAStr: output ATA string ---
 ; a0 = pointer to ATA string
 ; d1 = length in bytes
-; Note: uses d2 for loop counter since _DebugChar clobbers d0-d1
 ; Spaces are shown as dots for visibility
 _DebugATAStr:
 	DBG_ENTRY	_das_end,d0-d2/a0-a1/a6
 	subq.w	#1,d1
-	move.w	d1,d2			;use d2 as loop counter (_DebugChar clobbers d1)
+	move.w	d1,d2			;use d2 as loop counter
 _das_loop:
 	moveq.l	#0,d0
 	move.b	(a0)+,d0		;read byte in normal order
@@ -178,25 +189,13 @@ _DebugCardInfo:
 	DBG_ENTRY	_dci_end,d0-d1/a0
 
 	;Model name (words 27-46, offset 54, 40 bytes)
-	DBGMSG	dbg_model
-	lea	CFU_ConfigBlock+54(a3),a0
-	moveq.l	#40,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
+	DBGMSG_ATA	dbg_model,CFU_ConfigBlock+54,40
 
 	;Serial number (words 10-19, offset 20, 20 bytes)
-	DBGMSG	dbg_serial
-	lea	CFU_ConfigBlock+20(a3),a0
-	moveq.l	#20,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
+	DBGMSG_ATA	dbg_serial,CFU_ConfigBlock+20,20
 
 	;Firmware (words 23-26, offset 46, 8 bytes)
-	DBGMSG	dbg_firmware
-	lea	CFU_ConfigBlock+46(a3),a0
-	moveq.l	#8,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
+	DBGMSG_ATA	dbg_firmware,CFU_ConfigBlock+46,8
 
 	DBG_EXIT	d0-d1/a0
 _dci_end:
@@ -215,22 +214,18 @@ _DebugHexDump:
 
 _dhd_line:
 	;print word offset (W0, W8, W16... W248)
-	moveq.l	#'W',d0
-	bsr.w	_DebugChar
+	DBGCHR	'W'
 	move.w	d3,d0
 	bsr.w	_DebugDecimal		;output decimal number
-	moveq.l	#':',d0
-	bsr.w	_DebugChar
-	moveq.l	#' ',d0
-	bsr.w	_DebugChar
+	DBGCHR	':'
+	DBGCHR	' '
 
 	;print 8 words per line
 	moveq.l	#7,d2
 _dhd_word:
 	move.w	(a0)+,d0
 	bsr.w	_DebugHexWord
-	moveq.l	#' ',d0
-	bsr.w	_DebugChar
+	DBGCHR	' '
 	dbra	d2,_dhd_word
 	addq.w	#8,d3			;next line starts at word+8
 
@@ -244,6 +239,9 @@ _dhd_end:
 	rts
 
 ;--- _DebugHexByte: output d0.b as 2-digit hex ---
+; d0.b = value to output
+; a3 = unit, a4 = device
+; preserves all registers
 _DebugHexByte:
 	DBG_ENTRY	_dhb_end,d0-d2/a6
 	move.b	d0,d2
@@ -295,6 +293,9 @@ _dif_end:
 	rts
 
 ;--- _DebugHexWord: output d0.w as 4-digit hex ---
+; d0.w = value to output
+; a3 = unit, a4 = device
+; preserves all registers
 _DebugHexWord:
 	DBG_ENTRY	_dhw_end,d0-d1/a6
 	move.w	d0,d1
@@ -308,19 +309,19 @@ _dhw_end:
 
 ;--- _DebugTransferMode: show transfer mode (WORD/BYTE) ---
 _DebugTransferMode:
-	btst	#3,CFU_OpenFlags+1(a3)
-	beq.s	_dtm_end
 	DBGMSG	dbg_transfer
 	tst.b	CFU_WriteMode(a3)
 	bne.s	_dtm_byte
 	DBGMSG	dbg_word
-	bra.s	_dtm_end
+	rts
 _dtm_byte:
 	DBGMSG	dbg_byte
-_dtm_end:
 	rts
 
 ;--- _DebugDecimal: output d0.w as decimal (0-255) ---
+; d0.w = value to output (0-255)
+; a3 = unit, a4 = device
+; preserves all registers
 _DebugDecimal:
 	DBG_ENTRY	_dd_end,d0-d3/a6
 	moveq.l	#0,d2
@@ -339,9 +340,7 @@ _dd_h_done:
 	tst.w	d0
 	beq.s	_dd_tens
 	add.b	#'0',d0
-	move.w	d2,-(sp)		;save d2
 	bsr.w	_DebugChar
-	move.w	(sp)+,d2		;restore d2
 	moveq.l	#1,d3			;set leading flag
 
 _dd_tens:
@@ -360,9 +359,7 @@ _dd_t_done:
 	beq.s	_dd_ones		;skip leading zero
 _dd_t_print:
 	add.b	#'0',d0
-	move.w	d2,-(sp)		;save d2
 	bsr.w	_DebugChar
-	move.w	(sp)+,d2		;restore d2
 
 _dd_ones:
 	;ones digit (always print)
