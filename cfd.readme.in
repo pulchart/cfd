@@ -16,14 +16,14 @@ Driver:
 
 Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. WiFi) and restores PCMCIA (Gayle) timing setup.
 
-* **CIS gate (PCMCIA card type filter)** (github issue #25)
+* CIS gate (PCMCIA card type filter) fixes github issue #25
   - Reads `CISTPL_FUNCID` (when available) and rejects non-disk cards
     early to avoid interfering with other PCMCIA devices (e.g. WiFi).
   - If `CISTPL_FUNCID` is missing/unreadable, the driver continues
     for compatibility (some CF cards/adapters do not provide reliable
     CIS tuples).
 
-* **PCMCIA (Gayle) timing setup**
+* PCMCIA (Gayle) timing setup
   - Restores access timing setup from CISTPL_DEVICE via CardAccessSpeed
     (v1.37 didn't program timing based on CIS speed).
 

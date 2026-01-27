@@ -25,7 +25,7 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 ## What's New in
 
-### v1.38-dev
+### v1.38
 
 #### Driver
 
