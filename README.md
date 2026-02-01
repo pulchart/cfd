@@ -25,6 +25,20 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 ## What's New in
 
+### v1.39-dev
+
+#### Driver
+
+* Rebuild by vasm 2.0d
+
+#### Tools
+
+TBD
+
+#### Others
+
+TBD
+
 ### v1.38
 
 #### Driver
@@ -409,6 +423,8 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.39 | 02/2026 | TBD |
+| v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
 | v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
 | v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |

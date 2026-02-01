@@ -6,10 +6,10 @@
 
 # Driver Version (update these for new releases)
 VERSION_MAJOR = 1
-VERSION_MINOR = 38
-VERSION_SUFFIX =
-DATE = 27.01.2026
-DATE_SHORT = 01/2026
+VERSION_MINOR = 39
+VERSION_SUFFIX = -dev
+DATE = 01.02.2026
+DATE_SHORT = 02/2026
 
 # Tool-specific versions
 CFINFO_VERSION = 1.37
@@ -61,7 +61,7 @@ else
 endif
 
 # Tools (override these for different installations)
-VASM_HOME = /opt/vbcc
+VASM_HOME = /opt/vasm
 VBCC_HOME = /opt/vbcc
 VASM = $(VASM_HOME)/bin/vasmm68k_mot
 VBCC = $(VBCC_HOME)/bin/vc
