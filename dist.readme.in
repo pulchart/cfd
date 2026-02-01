@@ -14,30 +14,21 @@ CHANGES IN @VERSION@ (@DATE@)
 
 Driver:
 
-Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. WiFi) and restores PCMCIA (Gayle) timing setup.
-
-* CIS gate (PCMCIA card type filter) fixes github issue #25
-  - Reads `CISTPL_FUNCID` (when available) and rejects non-disk cards
-    early to avoid interfering with other PCMCIA devices (e.g. WiFi).
-  - If `CISTPL_FUNCID` is missing/unreadable, the driver continues
-    for compatibility (some CF cards/adapters do not provide reliable
-    CIS tuples).
-
-* PCMCIA (Gayle) timing setup
-  - Restores access timing setup from CISTPL_DEVICE via CardAccessSpeed
-    (v1.37 didn't program timing based on CIS speed).
+* Rebuild by vasm 2.0d
 
 Tools:
-* pcmciacheck: Simplified test output
+
+TBD
 
 Others:
-* documentation improvements
+
+* git repository restructured
 
 FEATURES
 ========
 * Supports CompactFlash, MicroDrive, and various adapters (SD, MemoryStick, SmartMedia)
 * TD64 and SCSI emulation support
-* Works with fat95 filesystem for FAT32 support
+* Works with fat95 filesystem for FAT32 support, not excluding Amiga native (ffs, sfs, pfs) filesystems
 * Serial debug output for troubleshooting (Flags = 8)
 * Transfer speeds up to 2.2 MB/s read, 1.9 MB/s write
   (in multi-sector mode if firmware supports it or with Flags = 16 override)
@@ -209,8 +200,8 @@ R/W Mode indicates how the driver accesses the PCMCIA:
 
 SOURCE CODE
 ===========
-Source code available at:
-https://github.com/pulchart/cfd
+
+Source code available at: https://github.com/pulchart/cfd
 
 Licensed under GNU LGPL v2.1
 

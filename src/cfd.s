@@ -65,8 +65,8 @@
 ;COPYBURST	= 1
 
 ; --- Includes ---
-	include	"version.i"
-	include	"cfd_debug.asm"
+	include	"cfd_version.i"
+	include	"cfd_debug.i"
 
 ;--- from exec.library -------------------------------------
 

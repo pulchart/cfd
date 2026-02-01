@@ -37,7 +37,7 @@ TBD
 
 #### Others
 
-TBD
+* git repository restructured
 
 ### v1.38
 
@@ -152,7 +152,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 * Amiga 1200 or 600 (A1200 tested)
 * AmigaOS 2.0+ (tested with 3.2.3)
 * CF-to-PCMCIA adapter or SD-to-CF adapter (see [Hardware Notes](#hardware-notes))
-* fat95 file system (disk/misc/fat95.lha)
+* Works with fat95 filesystem for FAT32 support (disk/misc/fat95.lha) or native (FFS, SFS, PFS) filesystems if RDB partition table is used
 
 ## Installation
 

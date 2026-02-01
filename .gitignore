@@ -2,6 +2,5 @@ NDK
 *.o
 *.py[co]
 *.lha
+*.readme
 .version-stamp
-cfd*.readme
-cfd*.readme.info
