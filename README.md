@@ -25,6 +25,20 @@ You can also follow project planning and updates here: [Planning for 2026](https
 
 ## What's New in
 
+### v1.39-dev
+
+#### Driver
+
+* Rebuild by vasm 2.0d
+
+#### Tools
+
+TBD
+
+#### Others
+
+* git repository restructured
+
 ### v1.38
 
 #### Driver
@@ -138,7 +152,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 * Amiga 1200 or 600 (A1200 tested)
 * AmigaOS 2.0+ (tested with 3.2.3)
 * CF-to-PCMCIA adapter or SD-to-CF adapter (see [Hardware Notes](#hardware-notes))
-* fat95 file system (disk/misc/fat95.lha)
+* Works with fat95 filesystem for FAT32 support (disk/misc/fat95.lha) or native (FFS, SFS, PFS) filesystems if RDB partition table is used
 
 ## Installation
 
@@ -409,6 +423,8 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.39 | 02/2026 | TBD |
+| v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
 | v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
 | v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
