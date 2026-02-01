@@ -37,7 +37,7 @@ import sys
 import os
 from datetime import datetime
 
-SCRIPT_VERSION = '1.1 (11.01.2026)'
+SCRIPT_VERSION = '1.2 (01.02.2026)'
 
 # Constants for text formatting
 DEFAULT_WRAP_WIDTH = 72
@@ -718,10 +718,13 @@ def generate_table_of_contents(title, nodes):
         ''
     ]
     
-    # Generate hierarchical TOC from H2 and H3 headings
+    # Generate hierarchical TOC from H1, H2 and H3 headings
     current_h2 = None
     for level, heading, node_name in nodes:
-        if level == 2:
+        if level == 1:
+            # H1 heading - include as top-level link
+            toc.append(f'    @{{"{heading}" link {node_name}}}')
+        elif level == 2:
             toc.append(f'    @{{"{heading}" link {node_name}}}')
             current_h2 = node_name
         elif level == 3 and current_h2:

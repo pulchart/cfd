@@ -28,7 +28,8 @@ FEATURES
 ========
 * Supports CompactFlash, MicroDrive, and various adapters (SD, MemoryStick, SmartMedia)
 * TD64 and SCSI emulation support
-* Works with fat95 filesystem for FAT32 support, not excluding Amiga native (ffs, sfs, pfs) filesystems
+* Works with fat95 filesystem for FAT32 support, not excluding Amiga native
+  (ffs, sfs, pfs) filesystems
 * Serial debug output for troubleshooting (Flags = 8)
 * Transfer speeds up to 2.2 MB/s read, 1.9 MB/s write
   (in multi-sector mode if firmware supports it or with Flags = 16 override)
