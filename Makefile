@@ -154,9 +154,9 @@ tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 # Generate AmigaGuide documentation from Markdown
 guides:
 	$(Q)echo "  GUIDE   dist/docs/*.guide"
-	$(Q)tools/md2guide.py dist/docs/CFInfo.md --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
-	$(Q)tools/md2guide.py dist/docs/pcmciaspeed.md --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
-	$(Q)tools/md2guide.py dist/docs/pcmciacheck.md --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
+	$(Q)tools/md2guide.py docs/CFInfo.md dist/docs/CFInfo.guide --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
+	$(Q)tools/md2guide.py docs/pcmciaspeed.md dist/docs/pcmciaspeed.guide --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
+	$(Q)tools/md2guide.py docs/pcmciacheck.md dist/docs/pcmciacheck.guide --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
 	$(Q)tools/md2guide.py README.md dist/docs/cfd.guide --version $(VERSION) --date $(DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
 
 # CFInfo utility (requires vbcc)
@@ -239,8 +239,8 @@ release: version-readme $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) guides che
 	@# Source code
 	@cp src/*.* "$(STAGING)/cfd/src/"
 	@# Documentation and license
-	@cp $(README_NAME) "$(STAGING)/cfd/"
-	@cp $(README_INFO) "$(STAGING)/cfd/$(README_NAME).info"
+	@cp $(README_NAME) "$(STAGING)/cfd/cfd.readme"
+	@cp $(README_INFO) "$(STAGING)/cfd/cfd.readme.info"
 	@cp LICENSE "$(STAGING)/cfd/"
 	@# Drawer icon
 	@cp dist.info "$(STAGING)/cfd.info"
