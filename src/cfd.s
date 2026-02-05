@@ -746,6 +746,8 @@ dbg_rwtest:
 	dc.b	"[CFD] RW test",13,10,0
 dbg_getid:
 	dc.b	"[CFD] Getting IDE ID",13,10,0
+dbg_identify_garbage:
+	dc.b	"[CFD] ..card rejected, repeated pattern: ",0
 dbg_spinup:
 	dc.b	"[CFD] Spinup",13,10,0
 dbg_multimode:
@@ -3520,6 +3522,25 @@ _gid_swap:
 	subq.w	#1,d2
 	bgt.s	_gid_swap
 
+	; Validate IDENTIFY - detect stuck FIFO (all words identical)
+	lea	CFU_ConfigBlock(a3),a0
+	move.w	(a0),d0			;Word 0
+	cmp.w	20(a0),d0		;Compare with Word 10
+	bne.s	_gid_valid		;Different = valid data
+	cmp.w	120(a0),d0		;Compare with Word 60
+	bne.s	_gid_valid		;Different = valid data
+	; All three words identical = garbage IDENTIFY data
+	ifd	DEBUG
+	move.w	d0,-(sp)		;save stuck value
+	DBGMSG	dbg_identify_garbage
+	move.w	(sp)+,d0		;restore stuck value
+	bsr.w	_DebugHexWord		;print the stuck word
+	bsr.w	_DebugNewline
+	endc
+	moveq.l	#0,d2			;mark as failed
+	bra.s	_gid_end		;reject card
+
+_gid_valid:
 	cmp.w	#$a0a1,d5
 	beq.s	_gid_atapi
 
@@ -3545,7 +3566,7 @@ _gid_a1:
 ; If retries exhausted, try ATAPI IDENTIFY PACKET DEVICE.
 _gid_check_retry:
 	subq.l	#1,d6
-	beq.s	_gid_break		;ATA exhausted, try ATAPI
+	beq.w	_gid_break		;ATA exhausted, try ATAPI
 	bsr.w	Wait40			;delay before retry
 	bra.w	_gid_retry
 

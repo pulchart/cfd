@@ -25,15 +25,18 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 #### Driver
 
-* Rebuild by vasm 2.0d
+* **Rejecting cards returning repeated data pattern** ([#33](https://github.com/pulchart/cfd/issues/33))
+  - Detects and rejects cards returning repeated data pattern early with debug message: `card rejected, repeated pattern: XXXX`
+  - Prevents driver from showing them as Uninitialized as OS cannot manage (initialize) them in any way
 
 #### Tools
 
-TBD
+* n/a
 
 #### Others
 
 * git repository restructured
+* Rebuild by vasm 2.0d
 
 ### v1.38
 
