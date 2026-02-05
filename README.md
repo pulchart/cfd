@@ -182,11 +182,9 @@ Copy def_CF0.info env:sys
 
 ## Hardware Notes
 
-You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side (see [images/cf-pcmcia-adapter.jpg](images/cf-pcmcia-adapter.jpg)).
-
-There are two types of such adapters:
-* **CF Type 1** - for standard thickness CF cards
-* **CF Type 2** - also supports thicker cards like MicroDrive (costs more)
+You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side. There are two types of such adapters:
+* **CF Type 1** - for standard thickness CF cards (see [images/cf-type-1.jpg](images/cf-type-1.jpg))
+* **CF Type 2** - also supports thicker cards like MicroDrive (see [images/cf-type-2.jpg](images/cf-type-2.jpg))
 
 Alternatively, you can use an SD-to-CF adapter with SD cards (see [images/sd-cf-adapter.jpg](images/sd-cf-adapter.jpg)).
 
