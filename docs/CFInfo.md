@@ -161,7 +161,7 @@ PCMCIA memory and I/O timing modes (what Amiga Gayle chip controls):
 - **I/O Mode max**: Fastest I/O timing card supports
 - **I/O Mode current**: Currently configured I/O timing
 
-**Note:** If `current < max`, the card could potentially run faster if the host (Gayle) supports it. The experimental `FASTPIO=1` compile option attempts to optimize this.
+**Note:** If `current < max`, the card could potentially run faster if the host (Gayle) supports it. The experimental `GTIMING=1` compile option attempts to optimize this.
 
 ## Driver Configuration (v1.37+)
 

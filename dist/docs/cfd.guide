@@ -311,7 +311,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards
   * @{b}AmigaGuide documentation@{ub}
     * Native Amiga .guide files included in release
   * @{b}Gayle memory timing@{ub}
-    * Experimental: disabled by default, compile with @{fg shine}FASTPIO=1@{fg text} to enable
+    * Experimental: disabled by default, compile with @{fg shine}GTIMING=1@{fg text} to enable
     * Maps card's ATA PIO mode to Gayle PCMCIA memory timing
   * @{b}Improved code documentation@{ub}
     * Architecture overview with register conventions
@@ -944,7 +944,7 @@ Extract NDK to project directory:
   -----------  -------------------------------------  
   @{fg shine}V=1@{fg text}          Verbose output (show full compiler     
                messages)                              
-  @{fg shine}FASTPIO=1@{fg text}    Enable Gayle timing optimization       
+  @{fg shine}GTIMING=1@{fg text}    Enable Gayle timing optimization       
                (experimental)                         
   @{fg shine}COPYBURST=1@{fg text}  Enable MOVEM transfers (experimental)  
   @{fg shine}VASM_HOME=@{fg text}   vasm installation path (default:       

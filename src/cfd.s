@@ -44,7 +44,7 @@
 ; BUILD VARIANTS:
 ;   Full build (DEBUG=1): includes serial debug output (~10 KB)
 ;   Small build (no DEBUG): minimal binary size (~8 KB)
-;   Gayle timing (FASTPIO=1): enables Gayle timing mapping based on CF PIO mode capabilities (experimental)
+;   Gayle timing (GTIMING=1): enables Gayle timing mapping based on CF PIO mode capabilities (experimental)
 ;   Copy burst (COPYBURST=1): uses movem for PIO memory transfers
 ;
 ;===========================================================================
@@ -55,10 +55,10 @@
 ; Or uncomment the next line:
 ;DEBUG	= 1
 
-; Define FASTPIO symbol to enable PIO speed optimization
-; Set via assembler command line: -DFASTPIO=1
+; Define GTIMING symbol to enable PIO speed optimization
+; Set via assembler command line: -DGTIMING=1
 ; Or uncomment the next line:
-;FASTPIO	= 1
+;GTIMING	= 1
 
 ; Optimization by MOVEM burst transfers
 ; - Uses MOVEM.L for burst memory reads/writes (8 bytes at a time)
@@ -759,7 +759,7 @@ dbg_spinup:
 	dc.b	"[CFD] Spinup",13,10,0
 dbg_multimode:
 	dc.b	"[CFD] Init multi mode",13,10,0
-	ifd	FASTPIO
+	ifd	GTIMING
 dbg_card_pio:
 	dc.b	"[CFD] ..Card PIO: ",0
 dbg_gayle_speed:
@@ -4827,7 +4827,7 @@ _tms_end:
 	rts
 
 ;--- PIO Mode to Memory Timing Mapping ---------------------
-; Compile-time option: FASTPIO
+; Compile-time option: GTIMING
 ;
 ; Maps card's ATA PIO mode capability to Gayle PCMCIA memory
 ; access timing. This sets the memory bus speed based on what
@@ -4852,7 +4852,7 @@ _tms_end:
 ;   PIO 0 (600ns) -> Gayle 720ns (default)
 ;
 _OptimizePIOSpeed:
-	ifd	FASTPIO
+	ifd	GTIMING
 	DBGMSG	dbg_gayle_timing
 
 	;Check Word 64 for advanced PIO modes (3/4)
@@ -4984,7 +4984,7 @@ _ops_show_actual:
 _ops_end:
 	rts
 	else
-	;FASTPIO not compiled - read and show current Gayle speed
+	;GTIMING not compiled - read and show current Gayle speed
 	ifd	DEBUG
 	DBGMSG	dbg_gayle_timing
 	DBGMSG	dbg_gayle_current

@@ -121,7 +121,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 * **AmigaGuide documentation**
   - Native Amiga .guide files included in release
 * **Gayle memory timing**
-  - Experimental: disabled by default, compile with `FASTPIO=1` to enable
+  - Experimental: disabled by default, compile with `GTIMING=1` to enable
   - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
 * **Improved code documentation**
   - Architecture overview with register conventions
@@ -485,7 +485,7 @@ make V=1
 | Option | Description |
 |--------|-------------|
 | `V=1` | Verbose output (show full compiler messages) |
-| `FASTPIO=1` | Enable Gayle timing optimization (experimental) |
+| `GTIMING=1` | Enable Gayle timing optimization (experimental) |
 | `COPYBURST=1` | Enable MOVEM transfers (experimental) |
 | `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
 | `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |
