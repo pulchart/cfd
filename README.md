@@ -25,15 +25,16 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 #### Driver
 
-* Rebuild by vasm 2.0d
+* **Checking stability of I/O port access** ([#33](https://github.com/pulchart/cfd/issues/33)) -- Cards with unreliable data transfer are now detected and rejected to prevent data corruption. Thanks to [Freddy](https://www.amigaportal.cz/member/2607-freddy) for sending the CF card for analysis.
 
 #### Tools
 
-TBD
+* n/a
 
 #### Others
 
 * git repository restructured
+* Rebuild by vasm 2.0d
 
 ### v1.38
 
@@ -120,7 +121,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 * **AmigaGuide documentation**
   - Native Amiga .guide files included in release
 * **Gayle memory timing**
-  - Experimental: disabled by default, compile with `FASTPIO=1` to enable
+  - Experimental: disabled by default, compile with `GTIMING=1` to enable
   - Maps card's ATA PIO mode to Gayle PCMCIA memory timing
 * **Improved code documentation**
   - Architecture overview with register conventions
@@ -179,11 +180,9 @@ Copy def_CF0.info env:sys
 
 ## Hardware Notes
 
-You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side (see [images/cf-pcmcia-adapter.jpg](images/cf-pcmcia-adapter.jpg)).
-
-There are two types of such adapters:
-* **CF Type 1** - for standard thickness CF cards
-* **CF Type 2** - also supports thicker cards like MicroDrive (costs more)
+You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side. There are two types of such adapters:
+* **CF Type 1** - for standard thickness CF cards (see [images/cf-type-1.jpg](images/cf-type-1.jpg))
+* **CF Type 2** - also supports thicker cards like MicroDrive (see [images/cf-type-2.jpg](images/cf-type-2.jpg))
 
 Alternatively, you can use an SD-to-CF adapter with SD cards (see [images/sd-cf-adapter.jpg](images/sd-cf-adapter.jpg)).
 
@@ -263,21 +262,19 @@ Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyU
 [CFD] ..CONFIG: addr=0x00000200
 (or: [CFD] ..CONFIG: default (0x200))
 [CFD] RW test
-[CFD] ..done
-[CFD] Transfer: WORD
+[CFD] ..done, transfer mode: WORD
 [CFD] Getting IDE ID
 [CFD] ..done
-[CFD] Model: TS4GCF133...............................
-[CFD] Serial: G68120052383AC0700C7
-[CFD] FW: 20110407
-[CFD] IDENTIFY:
-  Max Multi (W47):      8001
-  Capabilities (W49):   0200
-  Multi Setting (W59):  0100
+  Model: TS4GCF133...............................
+  Serial: G68120052383AC0700C7
+  FW: 20110407
+  Max Multi (W47): 8001
+  Capabilities (W49): 0200
+  Multi Setting (W59): 0100
   LBA Sectors (W60-61): 00777E70
-  DMA Modes (W63):      0000
-  PIO Modes (W64):      0003
-  UDMA Modes (W88):     0000
+  DMA Modes (W63): 0000
+  PIO Modes (W64): 0003
+  UDMA Modes (W88): 0000
 [CFD] IDENTIFY (raw):
 W0: 848A 1E59 0000 0010 0000 0240 003F 0077 
 W8: 7E70 0000 4736 3831 3230 3035 3233 3833 
@@ -288,14 +285,10 @@ W40: 2020 2020 2020 2020 2020 2020 2020 8001
 ...
 W248: 0000 0000 0000 0000 0000 0000 0000 0000 
 [CFD] Init multi mode
-[CFD] ..card supports max multi: 1
-[CFD] ..setting multi mode to: 1
-[CFD] ..OK
-[CFD] ..testing multi-sector capability...
-[CFD] ..DRQ issue not detected
-[CFD] ..auto-enabling 256 sector mode
-[CFD] ..multi-sector RW size: 256
-[CFD] ..done
+[CFD] ..max multi: 1
+[CFD] ..set multi: 1, OK
+[CFD] ..override test: OK
+[CFD] ..done, multi RW: 256
 [CFD] Card identified OK
 [CFD] Notify clients
 [CFD] Card removed
@@ -419,8 +412,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.39 | 02/2026 | TBD |
-| v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
+| v1.39 | 02/2026 | I/O port access reliability check |
 | v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
 | v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |
 | v1.36 | 01/2026 | CFInfo tool, pcmciacheck/pcmciaspeed tools, MuForce fix, stale data cleanup |
@@ -493,7 +485,7 @@ make V=1
 | Option | Description |
 |--------|-------------|
 | `V=1` | Verbose output (show full compiler messages) |
-| `FASTPIO=1` | Enable Gayle timing optimization (experimental) |
+| `GTIMING=1` | Enable Gayle timing optimization (experimental) |
 | `COPYBURST=1` | Enable MOVEM transfers (experimental) |
 | `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
 | `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |

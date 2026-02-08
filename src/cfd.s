@@ -44,7 +44,7 @@
 ; BUILD VARIANTS:
 ;   Full build (DEBUG=1): includes serial debug output (~10 KB)
 ;   Small build (no DEBUG): minimal binary size (~8 KB)
-;   Gayle timing (FASTPIO=1): enables Gayle timing mapping based on CF PIO mode capabilities (experimental)
+;   Gayle timing (GTIMING=1): enables Gayle timing mapping based on CF PIO mode capabilities (experimental)
 ;   Copy burst (COPYBURST=1): uses movem for PIO memory transfers
 ;
 ;===========================================================================
@@ -55,10 +55,10 @@
 ; Or uncomment the next line:
 ;DEBUG	= 1
 
-; Define FASTPIO symbol to enable PIO speed optimization
-; Set via assembler command line: -DFASTPIO=1
+; Define GTIMING symbol to enable PIO speed optimization
+; Set via assembler command line: -DGTIMING=1
 ; Or uncomment the next line:
-;FASTPIO	= 1
+;GTIMING	= 1
 
 ; Optimization by MOVEM burst transfers
 ; - Uses MOVEM.L for burst memory reads/writes (8 bytes at a time)
@@ -67,6 +67,7 @@
 ; --- Includes ---
 	include	"cfd_version.i"
 	include	"cfd_debug.i"
+	;include	"cfd_cis.i"
 
 ;--- from exec.library -------------------------------------
 
@@ -467,8 +468,9 @@ DeviceTuple	= -78
 CardChangeCount	= -96
 CardInterface	= -102
 
-; Tuple codes used for CIS-gate
+; Tuple codes
 CISTPL_DEVICE	= $01
+CISTPL_CFTABLE	= $1b
 CISTPL_CONFIG	= $1a
 CISTPL_FUNCID	= $21
 
@@ -730,27 +732,34 @@ dbg_card_insert:
 	dc.b	"[CFD] Card inserted",13,10,0
 dbg_card_remove:
 	dc.b	"[CFD] Card removed",13,10,0
-dbg_identify:
+dbg_id:
 	dc.b	"[CFD] Identifying card...",13,10,0
-dbg_identify_ok:
+dbg_id_ok:
 	dc.b	"[CFD] Card identified OK",13,10,0
-dbg_identify_fail:
-	dc.b	"[CFD] Card identify FAILED",13,10,0
+
 dbg_reset:
 	dc.b	"[CFD] Reset",13,10,0
 dbg_config:
 	dc.b	"[CFD] Configuring HBA",13,10,0
 dbg_voltage:
 	dc.b	"[CFD] Setting voltage",13,10,0
+
 dbg_rwtest:
 	dc.b	"[CFD] RW test",13,10,0
-dbg_getid:
-	dc.b	"[CFD] Getting IDE ID",13,10,0
+dbg_transfer:
+	dc.b	"[CFD] ..done, transfer mode: ",0
+dbg_word:
+	dc.b	"WORD",0
+dbg_byte:
+	dc.b	"BYTE",0
+dbg_rwtest_nomode:
+	dc.b	" (no working mode)",0
+
 dbg_spinup:
 	dc.b	"[CFD] Spinup",13,10,0
 dbg_multimode:
 	dc.b	"[CFD] Init multi mode",13,10,0
-	ifd	FASTPIO
+	ifd	GTIMING
 dbg_card_pio:
 	dc.b	"[CFD] ..Card PIO: ",0
 dbg_gayle_speed:
@@ -772,42 +781,41 @@ dbg_notify:
 	dc.b	"[CFD] Notify clients",13,10,0
 dbg_done:
 	dc.b	"[CFD] ..done",13,10,0
-dbg_model:
-	dc.b	"[CFD] Model: ",0
-dbg_serial:
-	dc.b	"[CFD] Serial: ",0
-dbg_firmware:
-	dc.b	"[CFD] FW: ",0
 dbg_ideerr:
 	dc.b	"[CFD] IDE err=",0
-dbg_space:
-	dc.b	" ",0
-dbg_identify_dump:
-	dc.b	"[CFD] IDENTIFY:",13,10,0
-dbg_identify_raw:
+
+dbg_id_get:
+	dc.b	"[CFD] Getting IDE ID",13,10,0
+dbg_id_garbage:
+	dc.b	"[CFD] ..verify: repeated pattern: ",0
+dbg_id_mismatch:
+	dc.b	"[CFD] ..verify: data mismatch",13,10,0
+dbg_id_model:
+	dc.b	"  Model: ",0
+dbg_id_serial:
+	dc.b	"  Serial: ",0
+dbg_id_firmware:
+	dc.b	"  FW: ",0
+dbg_id_raw:
 	dc.b	"[CFD] IDENTIFY (raw):",13,10,0
 dbg_id_maxmulti:
-	dc.b	"  Max Multi (W47):      ",0
+	dc.b	"  Max Multi (W47): ",0
 dbg_id_caps:
-	dc.b	"  Capabilities (W49):   ",0
+	dc.b	"  Capabilities (W49): ",0
 dbg_id_multisect:
-	dc.b	"  Multi Setting (W59):  ",0
+	dc.b	"  Multi Setting (W59): ",0
 dbg_id_lba:
 	dc.b	"  LBA Sectors (W60-61): ",0
 dbg_id_dma:
-	dc.b	"  DMA Modes (W63):      ",0
+	dc.b	"  DMA Modes (W63): ",0
 dbg_id_pio:
-	dc.b	"  PIO Modes (W64):      ",0
+	dc.b	"  PIO Modes (W64): ",0
 dbg_id_udma:
-	dc.b	"  UDMA Modes (W88):     ",0
-dbg_transfer:
-	dc.b	"[CFD] Transfer: ",0
-dbg_word:
-	dc.b	"WORD",13,10,0
-dbg_byte:
-	dc.b	"BYTE",13,10,0
+	dc.b	"  UDMA Modes (W88): ",0
+
 dbg_voltage5v:
 	dc.b	"[CFD] Voltage: 5V",13,10,0
+
 dbg_cis_scan:
 	dc.b	"[CFD] CIS gate",13,10,0
 dbg_cis_funcid:
@@ -830,31 +838,29 @@ dbg_cis_config_end:
 	dc.b	13,10,0
 dbg_cis_config_fallback:
 	dc.b	"[CFD] ..CONFIG: default (0x200)",13,10,0
-dbg_identify_failed_release:
+
+dbg_id_failed_release:
 	dc.b	"[CFD] IDENTIFY failed -> ReleaseCard",13,10,0
 dbg_idestatus:
 	dc.b	"[CFD] IDE status=",0
 dbg_multimax:
-	dc.b	"[CFD] ..card supports max multi: ",0
+	dc.b	"[CFD] ..max multi: ",0
 dbg_multiset:
-	dc.b	"[CFD] ..setting multi mode to: ",0
+	dc.b	"[CFD] ..set multi: ",0
 dbg_multiok:
-	dc.b	"[CFD] ..OK",13,10,0
+	dc.b	", OK",13,10,0
 dbg_multifail:
-	dc.b	"[CFD] ..FAILED (using 1)",13,10,0
+	dc.b	", FAILED",13,10,0
 dbg_multinosup:
 	dc.b	"[CFD] ..not supported",13,10,0
-dbg_multisizerw:
-	dc.b	"[CFD] ..multi-sector RW size: ",0
-dbg_multi_test:
-	dc.b	"[CFD] ..testing multi-sector capability...",13,10,0
-dbg_multi_ok256:
-	dc.b	"[CFD] ..DRQ issue not detected",13,10
-	dc.b	"[CFD] ..auto-enabling 256 sector mode",13,10,0
-dbg_multi_drq_issue:
-	dc.b	"[CFD] ..DRQ issue detected, using firmware value",13,10,0
-dbg_multi_skip:
-	dc.b	"[CFD] ..auto-detection skipped",13,10,0
+dbg_multirw:
+	dc.b	"[CFD] ..done, multi RW: ",0
+dbg_multi_ovr_ok:
+	dc.b	"[CFD] ..override test: OK",13,10,0
+dbg_multi_ovr_fail:
+	dc.b	"[CFD] ..override test: failed",13,10,0
+dbg_multi_ovr_skip:
+	dc.b	"[CFD] ..override test: skipped",13,10,0
 	ifnd	COPYBURST
 dbg_copyburst:
 	dc.b	"[CFD] Memory transfers: standard",13,10,0
@@ -2306,7 +2312,7 @@ _t_identify:
 	and.b	#CARD_STATUSF_CCDET,d0
 	beq.w	_t_ibreak		;false alert
 
-	DBGMSG	dbg_identify
+	DBGMSG	dbg_id
 	clr.b	CFU_ActiveHacks(a3)
 	clr.l	CFU_ReadErrors(a3)
 	clr.l	CFU_WriteErrors(a3)
@@ -2514,6 +2520,11 @@ _t_faddr:
 	move.l	CFU_AttrPtr(a3),a2
 	add.l	d2,a2
 	move.l	a2,CFU_ConfigAddr(a3)
+
+	;ifd	DEBUG
+	;bsr.w	_DebugCISCftable
+	;endc
+
 	btst	#2,CFU_OpenFlags+1(a3)
 	beq.s	_t_i4
 
@@ -2559,13 +2570,11 @@ _t_iswap:
 _t_itest:
 	DBGMSG	dbg_rwtest
 	bsr.w	RWTest			;find a working transfer mode
-	DBGMSG	dbg_done
 	ifd	DEBUG
-	bsr.w	_DebugTransferMode	;show which transfer mode
+	bsr.w	_DebugTransferMode	;d0 = RWTest result, show which transfer mode
 	endc
-	DBGMSG	dbg_getid
+	DBGMSG	dbg_id_get
 	bsr.w	_GetIDEID		;read ATA configuration block
-	DBGMSG	dbg_done
 	move.l	d0,d2
 	tst.l	d2
 	beq.w	_t_identify_failed	;IDENTIFY failed -> release card (avoid blocking others)
@@ -2632,7 +2641,6 @@ _t_i8:
 
 	DBGMSG	dbg_multimode
 	bsr.w	_InitMultipleMode
-	DBGMSG	dbg_done
 	bsr.w	_OptimizePIOSpeed	;set faster PIO if flag set
 	bra.s	_t_iok
 _t_iatapi:
@@ -2641,17 +2649,16 @@ _t_iatapi:
 _t_inodisk:
 	clr.l	CFU_DriveSize(a3)
 _t_iok:
-	DBGMSG	dbg_identify_ok
+	DBGMSG	dbg_id_ok
 	DBGMSG	dbg_notify
 	bsr.w	NotifyClients
 	bra.w	_t_check
 
 _t_identify_failed:
-	DBGMSG	dbg_identify_failed_release
+	DBGMSG	dbg_id_failed_release
 	bra.w	_t_ibreak
 
 _t_ibreak:
-	DBGMSG	dbg_identify_fail
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
 	moveq.l	#0,d0
 	move.l	a2,a1
@@ -3377,6 +3384,80 @@ _idec_end:
 	move.l	(sp)+,a2
 	rts
 
+;--- _PatternCheck: detect stuck FIFO pattern ---------------
+; Checks if IDENTIFY data contains a repeated word pattern
+; (stuck data register returning same value for every read).
+;
+; Input:
+;   a0 = pointer to 512-byte IDENTIFY block
+;
+; Output:
+;   d0 = 1 (valid, words differ) or 0 (stuck pattern)
+;
+_PatternCheck:
+	move.w	(a0),d0
+	cmp.w	20(a0),d0		;compare Word 0 with Word 10
+	bne.s	_pc_ok
+	cmp.w	120(a0),d0		;compare Word 0 with Word 60
+	bne.s	_pc_ok
+	moveq.l	#0,d0			;all three identical = stuck
+	rts
+_pc_ok:
+	moveq.l	#1,d0
+	rts
+
+;--- _XORChecksum: XOR checksum of 256-word block -----------
+; Computes XOR of all 256 words in a 512-byte block.
+;
+; Input:
+;   a0 = pointer to 512-byte block
+;
+; Output:
+;   d0 = XOR of all 256 words
+;
+_XORChecksum:
+	movem.l	d1-d2/a0,-(sp)
+	moveq.l	#0,d0
+	move.w	#256-1,d1
+_xc_loop:
+	move.w	(a0)+,d2
+	eor.w	d2,d0
+	dbf	d1,_xc_loop
+	movem.l	(sp)+,d1-d2/a0
+	rts
+
+;--- _ReadIdentify: issue IDENTIFY and read 512 bytes -------
+; Sends ATA IDENTIFY DEVICE (or IDENTIFY PACKET DEVICE)
+; command and reads 512 bytes into CFU_ConfigBlock.
+;
+; Input:
+;   d5 = command word (e.g. $e0ec for IDENTIFY DEVICE)
+;   a3 = CFU pointer
+;
+; Output:
+;   d0 = 1 (success) or 0 (failure)
+;
+_ReadIdentify:
+	clr.l	CFU_IDESet+2(a3)
+	move.w	d5,CFU_IDESet+6(a3)
+	bsr.w	_IDECmd
+	tst.w	d0
+	beq.s	_ri_fail
+	bsr.w	WaitReady
+	moveq.l	#$29,d0			;DF, DRQ, ERR
+	and.b	CFU_IDEStatus(a3),d0
+	subq.b	#8,d0			;DRQ
+	bne.s	_ri_fail
+	lea	CFU_ConfigBlock(a3),a2
+	moveq.l	#512>>8,d0
+	lsl.l	#8,d0
+	bsr.w	_pio_in
+	moveq.l	#1,d0
+	rts
+_ri_fail:
+	moveq.l	#0,d0
+	rts
+
 ;--- read drive configuration ------------------------------
 ; Identify the connected CF/ATA/ATAPI device
 ;
@@ -3509,9 +3590,51 @@ _gid_found:
 	CALLEXEC WaitIO
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
 	move.l	d5,d2
-	beq.s	_gid_end
+	beq.w	_gid_end
 
-	lea	CFU_ConfigBlock(a3),a0	;fix..
+	; Step 1: Check for stuck FIFO
+	lea	CFU_ConfigBlock(a3),a0
+	bsr.w	_PatternCheck
+	tst.w	d0
+	beq.s	_gid_stuck
+
+	; Step 2: XOR checksum of first read
+	lea	CFU_ConfigBlock(a3),a0
+	bsr.w	_XORChecksum
+	move.w	d0,d4			;save checksum
+
+	; Step 3: Second read for verification
+	bsr.w	_ReadIdentify
+	tst.w	d0
+	beq.s	_gid_verify_fail
+
+	; Step 4: XOR checksum of second read and compare
+	lea	CFU_ConfigBlock(a3),a0
+	bsr.w	_XORChecksum
+	cmp.w	d4,d0
+	beq.s	_gid_verified
+
+_gid_verify_fail:
+	DBGMSG	dbg_id_mismatch
+	moveq.l	#0,d2
+	bra.w	_gid_end
+
+_gid_stuck:
+	ifd	DEBUG
+	lea	CFU_ConfigBlock(a3),a0
+	move.w	(a0),d0
+	move.w	d0,-(sp)
+	DBGMSG	dbg_id_garbage
+	move.w	(sp)+,d0
+	bsr.w	_DebugHexWord
+	bsr.w	_DebugNewline
+	endc
+	moveq.l	#0,d2
+	bra.w	_gid_end
+
+_gid_verified:
+	DBGMSG	dbg_done
+	lea	CFU_ConfigBlock(a3),a0
 	move.w	#512/2,d2
 _gid_swap:
 	move.w	(a0),d0
@@ -3520,6 +3643,7 @@ _gid_swap:
 	subq.w	#1,d2
 	bgt.s	_gid_swap
 
+_gid_valid:
 	cmp.w	#$a0a1,d5
 	beq.s	_gid_atapi
 
@@ -3545,7 +3669,7 @@ _gid_a1:
 ; If retries exhausted, try ATAPI IDENTIFY PACKET DEVICE.
 _gid_check_retry:
 	subq.l	#1,d6
-	beq.s	_gid_break		;ATA exhausted, try ATAPI
+	beq.w	_gid_break		;ATA exhausted, try ATAPI
 	bsr.w	Wait40			;delay before retry
 	bra.w	_gid_retry
 
@@ -4533,7 +4657,6 @@ _InitMultipleMode:
 	DBGMSG	dbg_multiset
 	move.l	(sp),d0
 	bsr.w	_DebugDecimal
-	bsr.w	_DebugNewline
 	move.l	(sp)+,d1
 	endc
 	lea	CFU_IDESet+2(a3),a0
@@ -4555,7 +4678,7 @@ _InitMultipleMode:
 	and.b	CFU_IDEStatus(a3),d1
 	bne.w	_imm_error		;error or unsupported
 
-	DBGMSG	dbg_multiok
+	DBGMSG	dbg_multiok		;", OK"
 
 	bsr.w	_IDEStop
 	moveq.l	#0,d0
@@ -4581,18 +4704,18 @@ _imm_auto_detect:
 	bsr.w	_TestMultiSectorIssue
 	tst.b	d0
 	bne.s	_imm_rw_drq_issue		;DRQ issue detected, use firmware value
-	DBGMSG	dbg_multi_ok256
+	DBGMSG	dbg_multi_ovr_ok
 	move.w	#256,CFU_MultiSizeRW(a3)	;auto-detected: card works, use 256
 	bra.s	_imm_rw_debug
 
 _imm_rw_skip_auto:
-	DBGMSG	dbg_multi_skip
+	DBGMSG	dbg_multi_ovr_skip
 	ifd	DEBUG
 	bra.s	_imm_rw_firmware
 	endc
 
 _imm_rw_drq_issue:
-	DBGMSG	dbg_multi_drq_issue
+	DBGMSG	dbg_multi_ovr_fail
 	;fall through to _imm_rw_firmware
 
 _imm_rw_firmware:
@@ -4602,7 +4725,7 @@ _imm_rw_firmware:
 _imm_rw_debug:
 	ifd	DEBUG
 	move.l	d0,-(sp)
-	DBGMSG	dbg_multisizerw
+	DBGMSG	dbg_multirw
 	moveq.l	#0,d0
 	move.w	CFU_MultiSizeRW(a3),d0
 	bsr.w	_DebugDecimal
@@ -4617,12 +4740,12 @@ _imm_nosup:
 	bra.w	_imm_end
 
 _imm_error:
+	DBGMSG	dbg_multifail		;", FAILED" (appends to set multi line)
 	ifd	DEBUG
 	moveq.l	#0,d0
 	move.b	CFU_IDEStatus(a3),d0
 	bsr.w	_DebugIDEStatus		;show what went wrong
 	endc
-	DBGMSG	dbg_multifail
 	moveq.l	#1,d0			;default to single blocks
 	bra.w	_imm_end
 
@@ -4650,7 +4773,6 @@ _imm_error:
 ;
 _TestMultiSectorIssue:
 	movem.l	d1-d2/a0-a1,-(sp)
-	DBGMSG	dbg_multi_test
 
 	;--- Start IDE access ---
 	bsr.w	_IDEStart
@@ -4705,7 +4827,7 @@ _tms_end:
 	rts
 
 ;--- PIO Mode to Memory Timing Mapping ---------------------
-; Compile-time option: FASTPIO
+; Compile-time option: GTIMING
 ;
 ; Maps card's ATA PIO mode capability to Gayle PCMCIA memory
 ; access timing. This sets the memory bus speed based on what
@@ -4730,7 +4852,7 @@ _tms_end:
 ;   PIO 0 (600ns) -> Gayle 720ns (default)
 ;
 _OptimizePIOSpeed:
-	ifd	FASTPIO
+	ifd	GTIMING
 	DBGMSG	dbg_gayle_timing
 
 	;Check Word 64 for advanced PIO modes (3/4)
@@ -4862,7 +4984,7 @@ _ops_show_actual:
 _ops_end:
 	rts
 	else
-	;FASTPIO not compiled - read and show current Gayle speed
+	;GTIMING not compiled - read and show current Gayle speed
 	ifd	DEBUG
 	DBGMSG	dbg_gayle_timing
 	DBGMSG	dbg_gayle_current

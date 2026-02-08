@@ -189,13 +189,13 @@ _DebugCardInfo:
 	DBG_ENTRY	_dci_end,d0-d1/a0
 
 	;Model name (words 27-46, offset 54, 40 bytes)
-	DBGMSG_ATA	dbg_model,CFU_ConfigBlock+54,40
+	DBGMSG_ATA	dbg_id_model,CFU_ConfigBlock+54,40
 
 	;Serial number (words 10-19, offset 20, 20 bytes)
-	DBGMSG_ATA	dbg_serial,CFU_ConfigBlock+20,20
+	DBGMSG_ATA	dbg_id_serial,CFU_ConfigBlock+20,20
 
 	;Firmware (words 23-26, offset 46, 8 bytes)
-	DBGMSG_ATA	dbg_firmware,CFU_ConfigBlock+46,8
+	DBGMSG_ATA	dbg_id_firmware,CFU_ConfigBlock+46,8
 
 	DBG_EXIT	d0-d1/a0
 _dci_end:
@@ -206,7 +206,7 @@ _dci_end:
 _DebugHexDump:
 	DBG_ENTRY	_dhd_end,d0-d4/a0-a1/a6
 
-	DBGMSG	dbg_identify_raw
+	DBGMSG	dbg_id_raw
 
 	lea	CFU_ConfigBlock(a3),a0
 	moveq.l	#0,d3			;word counter (0,8,16,...248)
@@ -260,8 +260,6 @@ _DebugIdentifyFields:
 	DBG_ENTRY	_dif_end,d0/a0/a2/a6
 	lea	CFU_ConfigBlock(a3),a2
 
-	DBGMSG	dbg_identify_dump
-
 	;Word 47: Max multi-sector
 	DBGMSG_HEX	dbg_id_maxmulti,94
 
@@ -307,15 +305,24 @@ _DebugHexWord:
 _dhw_end:
 	rts
 
-;--- _DebugTransferMode: show transfer mode (WORD/BYTE) ---
+;--- _DebugTransferMode: show RW test result ---
+; d0 = RWTest return (bitfield, 0 = no working mode)
 _DebugTransferMode:
+	move.l	d0,-(sp)		;save RWTest result
 	DBGMSG	dbg_transfer
 	tst.b	CFU_WriteMode(a3)
 	bne.s	_dtm_byte
 	DBGMSG	dbg_word
-	rts
+	bra.s	_dtm_check
 _dtm_byte:
 	DBGMSG	dbg_byte
+_dtm_check:
+	move.l	(sp)+,d0		;restore RWTest result
+	tst.w	d0			;any working modes?
+	bne.s	_dtm_end
+	DBGMSG	dbg_rwtest_nomode	;" (no working mode)"
+_dtm_end:
+	bsr.w	_DebugNewline
 	rts
 
 ;--- _DebugDecimal: output d0.w as decimal (0-255) ---
