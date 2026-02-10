@@ -37,7 +37,7 @@ import sys
 import os
 from datetime import datetime
 
-SCRIPT_VERSION = '1.2 (01.02.2026)'
+SCRIPT_VERSION = '1.3 (10.02.2026)'
 
 # Constants for text formatting
 DEFAULT_WRAP_WIDTH = 72
@@ -178,6 +178,12 @@ def convert_markdown_link(text, url):
         return f'@{{"{text}" link {node}}}'
     # External URL -> just show text and URL
     else:
+        # Image paths: normalize to images/xxx.jpg for archive (no dist/), show once
+        if url.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+            path = url.replace('dist/images/', 'images/')
+            return path
+        if text.strip() == url.strip():
+            return text
         return f'{text} ({url})'
 
 

@@ -21,15 +21,11 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### v1.39-dev
+### v1.39
 
 #### Driver
 
 * **Checking stability of I/O port access** ([#33](https://github.com/pulchart/cfd/issues/33)) -- Cards with unreliable data transfer are now detected and rejected to prevent data corruption. Thanks to [Freddy](https://www.amigaportal.cz/member/2607-freddy) for sending the CF card for analysis.
-
-#### Tools
-
-* n/a
 
 #### Others
 
@@ -181,10 +177,10 @@ Copy def_CF0.info env:sys
 ## Hardware Notes
 
 You will need a special adapter card labelled "CompactFlash to PCMCIA", "PC Card" or "ATA". It looks like a normal 5mm PCMCIA card with a smaller slot for CF cards at the front side. There are two types of such adapters:
-* **CF Type 1** - for standard thickness CF cards (see [images/cf-type-1.jpg](images/cf-type-1.jpg))
-* **CF Type 2** - also supports thicker cards like MicroDrive (see [images/cf-type-2.jpg](images/cf-type-2.jpg))
+* **CF Type 1** - for standard thickness CF cards (see [images/cf-type-1.jpg](dist/images/cf-type-1.jpg))
+* **CF Type 2** - also supports thicker cards like MicroDrive (see [images/cf-type-2.jpg](dist/images/cf-type-2.jpg))
 
-Alternatively, you can use an SD-to-CF adapter with SD cards (see [images/sd-cf-adapter.jpg](images/sd-cf-adapter.jpg)).
+Alternatively, you can use an SD-to-CF adapter with SD cards (see [images/sd-cf-adapter.jpg](dist/images/sd-cf-adapter.jpg)).
 
 Tested with CompactFlash cards (16MB, 4GB, 8GB, 16GB, 32GB, 64GB) and SD cards via SD-to-CF adapter (SanDisk, Samsung MicroSD).
 
@@ -298,7 +294,7 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 
 Read and Write IO path will use 256 sectors for single IO regardless of what the card supports in Multiple Sector Mode if this flag is set (same behaviour as v1.33). The IO sector count can be limited by `MaxTransfer` (0x200 = 1 sector per IO) value in CF0 file.
 
-**Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:cfd.s`). The content should not contain repeating 32-byte pattern after first 512 bytes. See [images/multimode-issue.jpg](images/multimode-issue.jpg) for an example of what broken output looks like on unsupported cards.
+**Warning:** Verify your card is capable before using for real data. Set the flag and read any text file from CF card (e.g., `type CF0:cfd.s`). The content should not contain repeating 32-byte pattern after first 512 bytes. See [images/multimode-issue.jpg](dist/images/multimode-issue.jpg) for an example of what broken output looks like on unsupported cards.
 
 **Note:** As of v1.37, the driver uses a simple initialization test to automatically detect multi-sector operation and enables it when test pass. This flag is now only needed as a manual override if auto-detection fails for your specific card. Set Flags = 32 if detection does not work correctly with your card to disable auto-detection entirely.
 

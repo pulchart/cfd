@@ -14,14 +14,10 @@ CHANGES IN @VERSION@ (@DATE@)
 
 Driver:
 
-* Checking stability of I/O port access (github issue #33) --
+* Checking stability of I/O port access (github issue #33)
   Cards with unreliable data transfer are now detected and rejected
   to prevent data corruption. Thanks to Freddy (amigaportal.cz)
   for sending the CF card for analysis.
-
-Tools:
-
-* n/a
 
 Others:
 
@@ -42,7 +38,7 @@ REQUIREMENTS
 ============
 * Amiga 600 or 1200 with PCMCIA slot (A1200 tested)
 * AmigaOS 2.0 or higher (3.2.3 tested)
-* "CompactFlash to PCMCIA/ATA" adapter card (see images/cf-pcmcia-adapter.jpg)
+* "CompactFlash to PCMCIA/ATA" adapter card (see images/cf-type-1.jpg, images/cf-type-2.jpg)
   or SD-to-CF adapter (see images/sd-cf-adapter.jpg)
 * fat95 filesystem (disk/misc/fat95.lha) recommended
 
@@ -253,9 +249,10 @@ cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation (AmigaGuide)
 
 cfd/src/ - Full source code (assembler + C)
 
-cfd/images/cf-pcmcia-adapter.jpg - CF-to-PCMCIA adapter photo
-cfd/images/sd-cf-adapter.jpg     - SD-to-CF adapter photo
-cfd/images/multimode-issue.jpg   - Example of broken output with unsupported enforce multi mode
+cfd/images/cf-type-1.jpg        - CF Type 1 adapter photo
+cfd/images/cf-type-2.jpg        - CF Type 2 adapter photo (also MicroDrive)
+cfd/images/sd-cf-adapter.jpg    - SD-to-CF adapter photo
+cfd/images/multimode-issue.jpg  - Example of broken output with unsupported enforce multi mode
 
 cfd/LICENSE - GNU LGPL v2.1
 
