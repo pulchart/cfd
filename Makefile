@@ -6,10 +6,10 @@
 
 # Driver Version (update these for new releases)
 VERSION_MAJOR = 1
-VERSION_MINOR = 39
+VERSION_MINOR = 40
 VERSION_SUFFIX =
-DATE = 10.02.2026
-DATE_SHORT = 02/2026
+DATE = 12.04.2026
+DATE_SHORT = 04/2026
 
 # Tool-specific versions
 CFINFO_VERSION = 1.37
@@ -64,6 +64,7 @@ VBCC_HOME = /opt/vbcc
 VASM = $(VASM_HOME)/bin/vasmm68k_mot
 VBCC = $(VBCC_HOME)/bin/vc
 LHA = lha
+EXPECTED_VASM_VERSION = 2.0e
 
 # Flags
 VASMFLAGS = -Fhunkexe -m68020 -nosym $(DEFINITIONS)
@@ -99,12 +100,12 @@ README_INFO = dist/cfd.readme.info
 # ============================================================
 
 # Default target - build both versions and tools
-all: version-readme $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+all: check-vasm version-readme $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Generate version include file (always check, only update if changed)
 # Uses a stamp file to track the current version string
 VERSION_STAMP = .version-stamp
-.PHONY: FORCE
+.PHONY: FORCE check-vasm check-lha
 FORCE:
 
 $(VERSION_STAMP): FORCE
@@ -143,10 +144,10 @@ $(TARGET_SMALL): $(SOURCE) $(VERSION_INC)
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # Build only full version
-full: $(TARGET_FULL)
+full: check-vasm $(TARGET_FULL)
 
 # Build only small version
-small: $(TARGET_SMALL)
+small: check-vasm $(TARGET_SMALL)
 
 # Tools only target
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
@@ -227,7 +228,7 @@ $(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINF
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: version-readme $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) guides check-lha
+release: check-vasm version-readme $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) guides check-lha
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
 	@echo "=================================="
 	$(eval STAGING := $(shell mktemp -d))
@@ -261,6 +262,25 @@ release: version-readme $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) guides che
 	@echo "  2. $(README_NAME)"
 	@echo ""
 	@echo "Upload to: ftp://main.aminet.net/new"
+
+# Check if vasm is installed and expected version
+check-vasm:
+	@[ -x "$(VASM)" ] || { \
+		echo "ERROR: vasm command not found: $(VASM)"; \
+		echo "Set VASM_HOME to your vasm installation (expected $(EXPECTED_VASM_VERSION))"; \
+		exit 1; \
+	}
+	@version_output="$$( $(VASM) -v 2>&1 )"; \
+	detected_version="$$( printf '%s\n' "$$version_output" | sed '/./!d' | sed -n '1p' )"; \
+	case "$$version_output" in \
+		*"$(EXPECTED_VASM_VERSION)"*) ;; \
+		*) \
+			echo "ERROR: unsupported vasm version!"; \
+			echo "Expected: $(EXPECTED_VASM_VERSION)"; \
+			echo "Detected: $${detected_version:-<no output>}"; \
+			exit 1; \
+			;; \
+	esac
 
 # Check if lha is installed
 check-lha:

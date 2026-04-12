@@ -2404,7 +2404,19 @@ _t_i2:
 	;  0x7 = DRAM
 	;  0xD = FUNCSPEC (function-specific memory)
 	;  0xE = EXTEND (extended device type follows)
+    ;
 	; Note: CFcards show 0xD and 0x5
+	;
+	; CIS gate decision flow:
+	;   CISTPL_DEVICE known?
+	;     yes -> type in {0x0D, 0x05} ?
+	;              yes -> ACCEPT
+	;              no  -> REJECT
+	;     no  -> CISTPL_FUNCID known?
+	;              no  -> ACCEPT (compat)
+	;              yes -> FUNCID == 0x04 ?
+	;                        yes -> ACCEPT
+	;                        no  -> REJECT
 	DBGMSG	dbg_cis_device
 	moveq.l	#0,d0
 	move.b	CFU_DTType(a3),d0
@@ -2417,9 +2429,18 @@ _t_i2:
 	bsr.w	_DebugHex
 	bsr.w	_DebugNewline
 	endc
+
+	; Accept only whitelisted CISTPL_DEVICE types expected to behave
+	; like ATA devices: 0x0D (FUNCSPEC) and 0x05 (FLASH).
+	; Only if CISTPL_DEVICE is unavailable do we fall back to FUNCID.
+	cmp.b	#$0d,CFU_DTType(a3)	;FUNCSPEC
+	beq.s	_t_cis_gate_accept
+	cmp.b	#$05,CFU_DTType(a3)	;FLASH
+	beq.s	_t_cis_gate_accept
+	bra.w	_t_cis_reject
 _t_devtuple_skip:
 
-	; CIS gate filter non storage cards (tolerant on missing):
+	; Fallback CIS gate by FUNCID if CISTPL_DEVICE is unavailable:
 	; - if FUNCID missing/unreadable => continue
 	; - if FUNCID == 0x04 => continue
 	; - otherwise => reject early (e.g. WiFi/LAN)
@@ -2452,6 +2473,7 @@ _t_cis_funcid_missing:
 	nop
 
 _t_cis_funcid_ok:
+_t_cis_gate_accept:
 	DBGMSG	dbg_cis_gate_accept
 
 	bra.s	_t_cis_gate_end

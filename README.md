@@ -21,6 +21,18 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
+### v1.40
+
+#### Driver
+
+* **CIS gate accepts only known CompactFlash device types** ([#38](https://github.com/pulchart/cfd/issues/38))
+  - Accepts cards whose CIS reports device type `0x0D` (FUNCSPEC) or `0x05` (FLASH), the two types CompactFlash cards are known to use.
+  - Other memory-card types are rejected early, so the driver no longer tries ATA IDENTIFY on cards that are not expected to behave like ATA devices and will not get stuck on them. (see [CIS gate decision](#cis-gate-decision))
+
+#### Others
+
+* Rebuild by vasm 2.0e
+
 ### v1.39
 
 #### Driver
@@ -331,6 +343,53 @@ MaxTransfer = 0x10000   /* debug + enforce mode, 128 sectors per IO */
 | Transcend 4GB CF 133x (TS4GCF133) | 20110407 | ✓ Works |
 | Transcend 4GB CF 133x (TS4GCF133) | 20140121 | ✗ Does not work |
 
+
+## CIS gate decision
+
+When a card is inserted, the driver inspects the card's CIS (Card Information Structure) and decides whether to handle the card itself or release it back to the system so another PCMCIA driver can claim it. The decision is reported in serial debug right after the `[CFD] CIS gate` line as `[CFD] ..RESULT: accept` or `[CFD] ..RESULT: reject`.
+
+Decision flow:
+
+```mermaid
+flowchart TD
+    Start([CIS gate]) --> HasDev{CISTPL_DEVICE present?}
+    HasDev -- yes --> DevType{type in 0x0D, 0x05?}
+    DevType -- yes --> Accept([ACCEPT])
+    DevType -- no --> Reject([REJECT])
+    HasDev -- no --> HasFunc{CISTPL_FUNCID present?}
+    HasFunc -- no --> AcceptCompat([ACCEPT compat])
+    HasFunc -- yes --> FuncId{FUNCID == 0x04?}
+    FuncId -- yes --> Accept
+    FuncId -- no --> Reject
+```
+
+`CISTPL_DEVICE` type values shown in `[CFD] ..DEVICE: type=0x..`:
+
+| Value | Meaning | CIS gate |
+|-------|---------|----------|
+| 0x0 | NULL (no device) | reject |
+| 0x1 | ROM | reject |
+| 0x2 | OTPROM | reject |
+| 0x3 | EPROM | reject |
+| 0x4 | EEPROM | reject |
+| 0x5 | FLASH | **accept** |
+| 0x6 | SRAM | reject |
+| 0x7 | DRAM | reject |
+| 0xD | FUNCSPEC (function-specific memory) | **accept** |
+| 0xE | EXTEND (extended type follows) | reject |
+
+CompactFlash cards normally report `0x0D` or `0x05`.
+
+`CISTPL_FUNCID` is only consulted when `CISTPL_DEVICE` is unavailable (some adapters/cards do not provide it). Shown in `[CFD] ..FUNCID: 0x..` or `[CFD] ..FUNCID: missing (compat)`:
+
+| FUNCID | Meaning | CIS gate |
+|--------|---------|----------|
+| missing/unreadable | (e.g. some CF cards/adapters) | accept (compat) |
+| 0x04 | Fixed Disk | accept |
+| anything else | (e.g. WiFi/LAN, serial, ...) | reject |
+
+Rejected cards are released back to the system (`ReleaseCard`), so another PCMCIA driver can claim them. The driver does not attempt an ATA IDENTIFY on rejected cards, which prevents `compactflash.device` from interfering with non-storage PCMCIA cards.
+
 ## Speed Test Results
 
 Retaken from readme of version 1.32/1.33. Those versions behave as if **Enforce Multi Mode** is enabled.
@@ -408,6 +467,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
 | v1.39 | 02/2026 | I/O port access reliability check |
 | v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
 | v1.37 | 01/2026 | IDENTIFY-based detection, auto multi-sector override, CFInfo mount flags display |

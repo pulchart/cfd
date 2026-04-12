@@ -37,7 +37,7 @@ import sys
 import os
 from datetime import datetime
 
-SCRIPT_VERSION = '1.3 (10.02.2026)'
+SCRIPT_VERSION = '1.4 (17.04.2026)'
 
 # Constants for text formatting
 DEFAULT_WRAP_WIDTH = 72
@@ -251,7 +251,13 @@ def extract_nodes(lines):
         list: Tuples of (level, title, node_name) for each heading found
     """
     nodes = []
+    in_code_block = False
     for line in lines:
+        if line.startswith('```'):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
         match = HEADING_PATTERN.match(line)
         if match:
             level = len(match.group(1))
