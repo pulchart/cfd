@@ -692,7 +692,13 @@ CFU_Pad966	= 966			;alignment padding (2 bytes)
 CFU_ReadBlockFn	= 968			;bound read-block handler (longword)
 CFU_WriteBlockFn = 972			;bound write-block handler (longword)
 
-CFU_Sizeof	= 976
+;--- Pre-baked I/O data-port pointer ---
+; = CFU_IOPtr + 8. PIO I/O-space handlers (pi_mode0..3, po_mode0..3)
+; load this directly instead of recomputing the +8 every call.
+; Written alongside CFU_IOPtr at probe time.
+CFU_DataPort	= 976			;PCMCIA I/O base + 8 (longword)
+
+CFU_Sizeof	= 980
 
 
 ;CFU_Flags
@@ -2177,7 +2183,10 @@ Test:
 	move.l	d0,a0
 	move.l	(a0)+,CFU_MemPtr(a3)
 	move.l	(a0)+,CFU_AttrPtr(a3)
-	move.l	(a0),CFU_IOPtr(a3)
+	move.l	(a0),d0
+	move.l	d0,CFU_IOPtr(a3)
+	addq.l	#8,d0
+	move.l	d0,CFU_DataPort(a3)	;pre-baked +8 for PIO I/O handlers
 
 	moveq.l	#20,d0			;normal or..
 	btst	#0,CFU_OpenFlags+1(a3)
@@ -3725,7 +3734,7 @@ _gid_end:
 ;   - Retries up to 5 times on error
 ;
 _ReadBlocks:
-	movem.l	d2-d7/a2,-(sp)
+	movem.l	d2-d7/a2/a5,-(sp)
 	move.l	a1,a2			;&buffer
 	move.l	d0,d2			;Block #
 	move.l	d1,d3			;total bytes
@@ -3742,6 +3751,7 @@ _rb_swath:
 	move.l	d3,CFU_Count(a3)
 	move.l	a2,CFU_Buffer(a3)
 _rb_try:
+	move.l	CFU_ReadBlockFn(a3),a5	;cache bound handler across chunk loop
 	btst	#6,CFU_EventFlags(a3)
 	bne.w	_rb_starttimer
 _rb_0:
@@ -3797,9 +3807,8 @@ _rb_2:
 
 	move.l	d6,d0
 	lsl.l	#8,d0			;bytes = blocks * 512
-	lsl.l	#1,d0
-	move.l	CFU_ReadBlockFn(a3),a1
-	jsr	(a1)			;dispatch to bound handler (pi_modeN)
+	add.l	d0,d0			;final *2 via add.l (faster than lsl.l #1)
+	jsr	(a5)			;dispatch via a5-cached handler (pi_modeN)
 _rb_lnext:
 	add.l	d6,d2
 	sub.l	d6,d3
@@ -3828,7 +3837,7 @@ _rb_ready:
 	move.l	d5,d0
 	sub.l	d3,d0
 _rb_end:
-	movem.l	(sp)+,d2-d7/a2
+	movem.l	(sp)+,d2-d7/a2/a5
 	rts
 
 _rb_break:
@@ -3952,8 +3961,8 @@ pi_tab:
 pi_mode0:
 	lsr.l	#4,d0
 	subq.l	#1,d0
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
+	cnop	0,4
 pi0_loop:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
@@ -3982,8 +3991,8 @@ pi1_1:
 	lsr.l	#4,d1
 	subq.l	#1,d1
 	moveq.l	#16,d2
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
+	cnop	0,4
 pi1_loop2:
 	move.w	(a0),(a2)+
 	add.l	d2,a0
@@ -4013,10 +4022,10 @@ pi1_loop2:
 pi_mode2:
 	lsr.l	#4,d0
 	subq.l	#1,d0
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
 	move.l	a0,a1
 	add.l	#$10001,a1
+	cnop	0,4
 pi2_loop:
 	move.b	(a0),(a2)+
 	move.b	(a1),(a2)+
@@ -4041,8 +4050,8 @@ pi2_loop:
 pi_mode3:
 	lsr.l	#4,d0
 	subq.l	#1,d0
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
+	cnop	0,4
 pi3_loop:
 	move.w	(a0),(a2)+
 	move.w	(a0),d1
@@ -4079,6 +4088,7 @@ pi4_1:
 	subq.l	#1,d1
 	move.l	CFU_MemPtr(a3),a0
 	add.w	#1024,a0
+	cnop	0,4
 pi4_loop2:
 	move.w	(a0)+,(a2)+
 	move.w	(a0)+,(a2)+
@@ -4134,8 +4144,8 @@ po_tab:
 po_mode0:
 	lsr.l	#4,d0
 	subq.l	#1,d0
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
+	cnop	0,4
 po0_loop:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
@@ -4164,8 +4174,8 @@ po1_1:
 	lsr.l	#4,d1
 	subq.l	#1,d1
 	moveq.l	#16,d2
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
+	cnop	0,4
 po1_loop2:
 	move.w	(a2)+,(a0)
 	add.l	d2,a0
@@ -4195,10 +4205,10 @@ po1_loop2:
 po_mode2:
 	lsr.l	#4,d0
 	subq.l	#1,d0
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
+	move.l	CFU_DataPort(a3),a0
 	move.l	a0,a1
 	add.l	#$10001,a1
+	cnop	0,4
 po2_loop:
 	move.b	(a2)+,(a0)
 	move.b	(a2)+,(a1)
@@ -4235,6 +4245,7 @@ po4_1:
 	subq.l	#1,d1
 	move.l	CFU_MemPtr(a3),a0
 	add.w	#1024,a0
+	cnop	0,4
 po4_loop2:
 	move.w	(a2)+,(a0)+
 	move.w	(a2)+,(a0)+
@@ -4330,7 +4341,7 @@ wb_handler_tab:
 _WB2:
 	move.l	a1,a0
 _WriteBlocks:
-	movem.l	d2-d7/a2,-(sp)
+	movem.l	d2-d7/a2/a5,-(sp)
 	move.l	a0,a2			;&buffer
 	move.l	d0,d2			;Block #
 	move.l	d1,d3			;total bytes
@@ -4349,6 +4360,7 @@ _wb_swath:
 	move.l	d3,CFU_Count(a3)
 	move.l	a2,CFU_Buffer(a3)
 _wb_try:
+	move.l	CFU_WriteBlockFn(a3),a5	;cache bound handler across chunk loop
 	moveq.l	#0,d4
 	move.w	CFU_MultiSizeRW(a3),d4
 	cmp.l	d4,d3
@@ -4425,9 +4437,8 @@ _wb_w3:
 _wb_w4:
 	move.l	d6,d0
 	lsl.l	#8,d0			;bytes = blocks * 512
-	lsl.l	#1,d0
-	move.l	CFU_WriteBlockFn(a3),a1
-	jsr	(a1)			;dispatch to bound handler (po_modeN)
+	add.l	d0,d0			;final *2 via add.l (faster than lsl.l #1)
+	jsr	(a5)			;dispatch via a5-cached handler (po_modeN)
 _wb_lnext:
 	bsr.w	WaitReady
 	add.l	d6,d2
@@ -4455,7 +4466,7 @@ _wb_ready:
 	move.l	a2,a0
 	move.l	d5,d0
 	sub.l	d3,d0
-	movem.l	(sp)+,d2-d7/a2
+	movem.l	(sp)+,d2-d7/a2/a5
 	rts
 
 _wb_erase:
@@ -4732,8 +4743,7 @@ _TestMultiSectorIssue:
 
 	;--- Read 512 bytes (discard data) ---
 	;Uses word reads, 256 iterations of 1 word = 512 bytes
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0			;IDE data register
+	move.l	CFU_DataPort(a3),a0	;IDE data register
 	move.w	#256-1,d1		;256 word reads
 _tms_read:
 	move.w	(a0),d2			;read and discard
