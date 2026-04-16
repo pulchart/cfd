@@ -1052,7 +1052,7 @@ bio_quick:
 	or.b	#IOF_QUICK,IO_Flags(a2)
 	lsl.l	#1,d0
 	lea	bio_tab(pc),a6
-	add.w	(a6,d0.l),a6
+	add.w	(a6,d0.w),a6		;d0 high bits cleared above, .w is 68000-safe
 	jsr	(a6)
 	move.b	d0,IO_Error(a2)
 	bra.s	bio_end
@@ -2301,7 +2301,7 @@ _t_do:
 	bsr.w	FunctionIndex
 	lsl.l	#1,d0
 	lea	bio_tab(pc),a6
-	add.w	(a6,d0.l),a6
+	add.w	(a6,d0.w),a6		;d0 high bits cleared in FunctionIndex, .w is 68000-safe
 	jsr	(a6)			;handle and..
 	move.b	d0,IO_Error(a2)
 	move.l	a2,a1
@@ -3948,7 +3948,7 @@ _pio_in:
 	move.b	CFU_ReceiveMode(a3),d1
 	lsl.l	#1,d1
 	lea	pi_tab(pc),a1
-	add.w	(a1,d1.l),a1
+	add.w	(a1,d1.w),a1		;d1 high bits cleared above, .w is 68000-safe
 	jmp	(a1)
 pi_tab:
 	dc.w	pi_mode0-pi_tab
@@ -4131,7 +4131,7 @@ _pio_out:
 	move.b	CFU_SendMode(a3),d1
 	lsl.l	#1,d1
 	lea	po_tab(pc),a1
-	add.w	(a1,d1.l),a1
+	add.w	(a1,d1.w),a1		;d1 high bits cleared above, .w is 68000-safe
 	jmp	(a1)
 po_tab:
 	dc.w	po_mode0-po_tab
