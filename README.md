@@ -542,7 +542,6 @@ make V=1
 |--------|-------------|
 | `V=1` | Verbose output (show full compiler messages) |
 | `GTIMING=1` | Enable Gayle timing optimization (experimental) |
-| `COPYBURST=1` | Enable MOVEM transfers (experimental) |
 | `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
 | `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |
 
@@ -550,11 +549,11 @@ make V=1
 
 | Target | Description |
 |--------|-------------|
-| `make` | Build driver (full + small) and CFInfo |
+| `make` | Build both driver variants and the bundled utilities |
 | `make full` | Build full version only (with debug support) |
 | `make small` | Build small version only (no debug) |
 | `make tools` | Build utilitties (requires vbcc + NDK) |
-| `make fastpio` | Build with Gayle timing optimization (experimental) |
+| `make GTIMING=1` | Build with Gayle timing optimization (experimental) |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |
 | `make clean` | Remove built files |

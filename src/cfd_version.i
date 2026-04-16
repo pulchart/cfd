@@ -2,5 +2,5 @@
 FILE_VERSION	= 1
 FILE_REVISION	= 40
 VERSION_STRING	macro
-	dc.b	"compactflash.device 1.40 (12.04.2026)"
+	dc.b	"compactflash.device 1.40-dev (16.04.2026)"
 	endm

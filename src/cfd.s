@@ -45,7 +45,6 @@
 ;   Full build (DEBUG=1): includes serial debug output (~10 KB)
 ;   Small build (no DEBUG): minimal binary size (~8 KB)
 ;   Gayle timing (GTIMING=1): enables Gayle timing mapping based on CF PIO mode capabilities (experimental)
-;   Copy burst (COPYBURST=1): uses movem for PIO memory transfers
 ;
 ;===========================================================================
 
@@ -59,10 +58,6 @@
 ; Set via assembler command line: -DGTIMING=1
 ; Or uncomment the next line:
 ;GTIMING	= 1
-
-; Optimization by MOVEM burst transfers
-; - Uses MOVEM.L for burst memory reads/writes (8 bytes at a time)
-;COPYBURST	= 1
 
 ; --- Includes ---
 	include	"cfd_version.i"
@@ -687,7 +682,17 @@ CFU_CacheFlags	= 960			;saved cache flags
 CFU_MultiSizeRW	= 964			;bytes per transfer (sectors * 512)
 				;set from card or override (Flags=16)
 
-CFU_Sizeof	= 966
+;--- Runtime-bound I/O handlers (see _BindIOHandlers) ---
+; Set once probing converges and rebind on any later mode change.
+; Called from _rb_block / _wb_block with:
+;   d0 = byte count, a2 = buffer, a3 = CFU
+; Handler returns via rts with a2 advanced. All data registers may
+; be clobbered. Points at one of pi_mode0..pi_mode4 / po_mode0..po_mode4.
+CFU_Pad966	= 966			;alignment padding (2 bytes)
+CFU_ReadBlockFn	= 968			;bound read-block handler (longword)
+CFU_WriteBlockFn = 972			;bound write-block handler (longword)
+
+CFU_Sizeof	= 976
 
 
 ;CFU_Flags
@@ -861,13 +866,6 @@ dbg_multi_ovr_fail:
 	dc.b	"[CFD] ..override test: failed",13,10,0
 dbg_multi_ovr_skip:
 	dc.b	"[CFD] ..override test: skipped",13,10,0
-	ifnd	COPYBURST
-dbg_copyburst:
-	dc.b	"[CFD] Memory transfers: standard",13,10,0
-	else
-dbg_copyburst:
-	dc.b	"[CFD] Memory transfers: MOVEM burst (8-byte)",13,10,0
-	endc
 	endc
 	even
 
@@ -2373,9 +2371,6 @@ _t_i2:
 	CALLCARD CardProgramVoltage
 	DBGMSG	dbg_voltage5v
 
-	; Show memory transfer mode
-	DBGMSG	dbg_copyburst
-
 	; CIS gate report
 	DBGMSG	dbg_cis_scan
 
@@ -2995,10 +2990,10 @@ RWTest:
 	moveq.l	#$000f,d0
 	and.w	d3,d0
 	bne.s	rwt_1
-
 	moveq.l	#1,d2
 rwt_1:
 	move.b	d2,CFU_WriteMode(a3)
+	bsr.w	_BindIOHandlers		;prime read/write handler pointers
 	move.l	d3,d0
 	movem.l	(sp)+,d2-d3
 	rts
@@ -3697,6 +3692,7 @@ _gid_check_retry:
 
 _gid_end:
 	bsr.w	_IDEStop
+	bsr.w	_BindIOHandlers		;probe settled, rebind handlers
 	move.l	d2,d0
 	movem.l	(sp)+,d2-d6/a2
 	rts
@@ -3799,48 +3795,11 @@ _rb_2:
 	subq.b	#8,d0			;DRQ
 	bne.w	_rb_break
 
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
-	move.b	CFU_ReceiveMode(a3),d1
-	bne.w	_rb_lcheck
 	move.l	d6,d0
-
-	lsl.l	#5,d0
-	subq.l	#1,d0
-	ifnd	COPYBURST
-_rb_loop0:
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	move.w	(a0),(a2)+
-	dbf	d0,_rb_loop0
-	else
-	move.l	d0,d7
-_rb_loop0:
-	; COPYBURST: PACK+MOVEM4 (single 16-byte store). Uses d2/d3 as temporaries.
-	movem.l	d2-d3,-(sp)
-_rb_loop0_burst:
-	move.w	(a0),d0			;w0
-	swap	d0
-	move.w	(a0),d0			;d0 = w0:w1
-	move.w	(a0),d1			;w2
-	swap	d1
-	move.w	(a0),d1			;d1 = w2:w3
-	move.w	(a0),d2			;w4
-	swap	d2
-	move.w	(a0),d2			;d2 = w4:w5
-	move.w	(a0),d3			;w6
-	swap	d3
-	move.w	(a0),d3			;d3 = w6:w7
-	movem.l	d0-d3,(a2)		;burst write 16 bytes
-	lea	16(a2),a2
-	dbf	d7,_rb_loop0_burst
-	movem.l	(sp)+,d2-d3
-	endc
+	lsl.l	#8,d0			;bytes = blocks * 512
+	lsl.l	#1,d0
+	move.l	CFU_ReadBlockFn(a3),a1
+	jsr	(a1)			;dispatch to bound handler (pi_modeN)
 _rb_lnext:
 	add.l	d6,d2
 	sub.l	d6,d3
@@ -3871,12 +3830,6 @@ _rb_ready:
 _rb_end:
 	movem.l	(sp)+,d2-d7/a2
 	rts
-
-_rb_lcheck:
-	lsl.l	#8,d0
-	lsl.l	#1,d0
-	bsr.w	_pio_in
-	bra.s	_rb_lnext
 
 _rb_break:
 	move.b	#TDERR_NOSECHDR,CFU_IOErr(a3)
@@ -4001,7 +3954,6 @@ pi_mode0:
 	subq.l	#1,d0
 	move.l	CFU_IOPtr(a3),a0
 	addq.l	#8,a0
-	ifnd	COPYBURST
 pi0_loop:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
@@ -4012,26 +3964,6 @@ pi0_loop:
 	move.w	(a0),(a2)+
 	move.w	(a0),(a2)+
 	dbf	d0,pi0_loop
-	else
-	move.l	d0,d7
-pi0_loop:
-	move.w	(a0),d0
-	swap	d0
-	move.w	(a0),d0			;d0 = w0:w1
-	move.w	(a0),d1
-	swap	d1
-	move.w	(a0),d1			;d1 = w2:w3
-	movem.l	d0-d1,(a2)		;burst write 8 bytes
-	move.w	(a0),d0
-	swap	d0
-	move.w	(a0),d0			;d0 = w4:w5
-	move.w	(a0),d1
-	swap	d1
-	move.w	(a0),d1			;d1 = w6:w7
-	movem.l	d0-d1,8(a2)		;burst write 8 bytes
-	lea	16(a2),a2
-	dbf	d7,pi0_loop
-	endc
 	rts
 
 ; I/O Register 8 and Duplikates, word-wise
@@ -4204,7 +4136,6 @@ po_mode0:
 	subq.l	#1,d0
 	move.l	CFU_IOPtr(a3),a0
 	addq.l	#8,a0
-	ifnd	COPYBURST
 po0_loop:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
@@ -4215,30 +4146,6 @@ po0_loop:
 	move.w	(a2)+,(a0)
 	move.w	(a2)+,(a0)
 	dbf	d0,po0_loop
-	else
-	move.l	d0,d7
-po0_loop:
-	movem.l	(a2),d0-d1		;burst read 8 bytes
-	swap	d0
-	move.w	d0,(a0)			;word 0
-	swap	d0
-	move.w	d0,(a0)			;word 1
-	swap	d1
-	move.w	d1,(a0)			;word 2
-	swap	d1
-	move.w	d1,(a0)			;word 3
-	movem.l	8(a2),d0-d1		;burst read 8 bytes
-	swap	d0
-	move.w	d0,(a0)			;word 4
-	swap	d0
-	move.w	d0,(a0)			;word 5
-	swap	d1
-	move.w	d1,(a0)			;word 6
-	swap	d1
-	move.w	d1,(a0)			;word 7
-	lea	16(a2),a2
-	dbf	d7,po0_loop
-	endc
 	rts
 
 ; I/O Register 8 and Duplikates, word-wise
@@ -4341,6 +4248,56 @@ po4_loop2:
 	tst.l	d0
 	bne.s	po4_loop1
 	rts
+
+;--- _BindIOHandlers --------------------------------------
+; Specialize the hot read/write block dispatch for the current
+; CFU_ReceiveMode / CFU_SendMode so that _rb_block and _wb_block
+; can jsr the selected worker directly without per-block mode
+; checks or pi_tab/po_tab dispatch.
+;
+; Must be called once after mode probing settles and re-called
+; from every later site that changes CFU_ReceiveMode or
+; CFU_SendMode:
+;   - end of RWTest
+;   - _gid_end (covers _gid_switch's mode-4 fallback)
+;   - _wb_switch (mid-write fallback to memory-mapped mode)
+;   - _wb_bump fallback step (try next send mode)
+;
+; Clobbers: d0, a0, a1 (callers must save anything live).
+;
+_BindIOHandlers:
+	moveq.l	#0,d0
+	move.b	CFU_ReceiveMode(a3),d0
+	add.w	d0,d0
+	lea	rb_handler_tab(pc),a0
+	move.l	a0,a1
+	add.w	(a0,d0.w),a1
+	move.l	a1,CFU_ReadBlockFn(a3)
+
+	moveq.l	#0,d0
+	move.b	CFU_SendMode(a3),d0
+	add.w	d0,d0
+	lea	wb_handler_tab(pc),a0
+	move.l	a0,a1
+	add.w	(a0,d0.w),a1
+	move.l	a1,CFU_WriteBlockFn(a3)
+	rts
+
+; Word-offset tables (PC-relative, matches pi_tab/po_tab style).
+; Indexed by CFU_ReceiveMode / CFU_SendMode (0..4).
+rb_handler_tab:
+	dc.w	pi_mode0-rb_handler_tab
+	dc.w	pi_mode1-rb_handler_tab
+	dc.w	pi_mode2-rb_handler_tab
+	dc.w	pi_mode3-rb_handler_tab
+	dc.w	pi_mode4-rb_handler_tab
+
+wb_handler_tab:
+	dc.w	po_mode0-wb_handler_tab
+	dc.w	po_mode1-wb_handler_tab
+	dc.w	po_mode2-wb_handler_tab
+	dc.w	po_mode1-wb_handler_tab		;mode 3 folds to mode 1
+	dc.w	po_mode4-wb_handler_tab
 
 ;--- write Blocks ------------------------------------------
 ; Write sectors to CF card using PIO
@@ -4460,8 +4417,6 @@ _wb_block:
 	subq.b	#8,d0			;DRQ
 	bne.w	_wb_break
 
-	move.l	CFU_IOPtr(a3),a0
-	addq.l	#8,a0
 _wb_w3:
 	cmp.l	d6,d4
 	bcc.s	_wb_w4
@@ -4469,50 +4424,10 @@ _wb_w3:
 	move.l	d4,d6
 _wb_w4:
 	move.l	d6,d0
-	move.b	CFU_SendMode(a3),d1
-	bne.s	_wb_l1
-
-	lsl.l	#5,d0
-	subq.l	#1,d0
-	ifnd	COPYBURST
-_wb_loop0:
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	move.w	(a2)+,(a0)
-	dbf	d0,_wb_loop0
-	else
-	move.l	d0,d7
-_wb_loop0:
-	; COPYBURST write: single 16-byte MOVEM load (d0-d3), then 8 word writes.
-	; Uses d2/d3 as temporaries, preserve them across the loop.
-	movem.l	d2-d3,-(sp)
-_wb_loop0_burst:
-	movem.l	(a2),d0-d3		;burst read 16 bytes
-	swap	d0
-	move.w	d0,(a0)			;word 0
-	swap	d0
-	move.w	d0,(a0)			;word 1
-	swap	d1
-	move.w	d1,(a0)			;word 2
-	swap	d1
-	move.w	d1,(a0)			;word 3
-	swap	d2
-	move.w	d2,(a0)			;word 4
-	swap	d2
-	move.w	d2,(a0)			;word 5
-	swap	d3
-	move.w	d3,(a0)			;word 6
-	swap	d3
-	move.w	d3,(a0)			;word 7
-	lea	16(a2),a2
-	dbf	d7,_wb_loop0_burst
-	movem.l	(sp)+,d2-d3
-	endc
+	lsl.l	#8,d0			;bytes = blocks * 512
+	lsl.l	#1,d0
+	move.l	CFU_WriteBlockFn(a3),a1
+	jsr	(a1)			;dispatch to bound handler (po_modeN)
 _wb_lnext:
 	bsr.w	WaitReady
 	add.l	d6,d2
@@ -4542,12 +4457,6 @@ _wb_ready:
 	sub.l	d3,d0
 	movem.l	(sp)+,d2-d7/a2
 	rts
-
-_wb_l1:
-	lsl.l	#8,d0
-	lsl.l	#1,d0
-	bsr.w	_pio_out
-	bra.s	_wb_lnext
 
 _wb_erase:
 	move.b	#$c0,d0			;"CFA ERASE SECTORS"
@@ -4587,10 +4496,12 @@ _wb_bump:
 	beq.s	_wb_switch
 
 	addq.b	#1,CFU_SendMode(a3)	;try different transfer mode
+	bsr.w	_BindIOHandlers		;rebind for new send mode
 	bra.s	_wb_break
 _wb_switch:
 	bsr.w	_IDEStop
 	move.w	#$0404,CFU_ReceiveMode(a3)
+	bsr.w	_BindIOHandlers		;rebind for memory-mapped mode
 	move.l	CFU_ConfigAddr(a3),a0
 	move.b	#$40,(a0)
 	bsr.w	Wait40

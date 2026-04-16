@@ -47,17 +47,6 @@ else
   TEXT=", -gayletiming"
 endif
 
-# COPYBURST: Enable MOVEM burst transfers for memory operations
-# Uses MOVEM.L for 8-byte burst reads/writes
-# Default" disabled (experimental, set COPYBURST=1 to enable)
-COPYBURST ?= 0
-ifeq ($(COPYBURST),1)
-  TEXT:="$(TEXT), +copyburst"
-  DEFINITIONS += -DCOPYBURST=$(COPYBURST)
-else
-  TEXT:="$(TEXT), -copyburst"
-endif
-
 # Tools (override these for different installations)
 VASM_HOME = /opt/vasm
 VBCC_HOME = /opt/vbcc
@@ -79,6 +68,7 @@ OUTDIR_C = dist/c
 SOURCE = $(SRCDIR)/cfd.s
 TARGET_FULL = $(OUTDIR_DEVS)/compactflash.device
 TARGET_SMALL = $(OUTDIR_DEVS)/compactflash.device.small
+DRIVER_TARGETS = $(TARGET_FULL) $(TARGET_SMALL)
 
 # Files: Tools
 SOURCE_CFINFO = $(SRCDIR)/cfinfo.c
@@ -100,7 +90,7 @@ README_INFO = dist/cfd.readme.info
 # ============================================================
 
 # Default target - build both versions and tools
-all: check-vasm version-readme $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+all: check-vasm version-readme $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Generate version include file (always check, only update if changed)
 # Uses a stamp file to track the current version string
@@ -133,12 +123,14 @@ version-readme:
 
 # Full version (with serial debug capability)
 $(TARGET_FULL): $(SOURCE) $(VERSION_INC)
+	$(Q)mkdir -p $(OUTDIR_DEVS)
 	$(Q)echo "  VASM    $@ [full${TEXT}]"
 	$(Q)$(VASM) $(VASMFLAGS) -DDEBUG=1 -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # Small version (no debug code/strings)
 $(TARGET_SMALL): $(SOURCE) $(VERSION_INC)
+	$(Q)mkdir -p $(OUTDIR_DEVS)
 	$(Q)echo "  VASM    $@ [small$(TEXT)]"
 	$(Q)$(VASM) $(VASMFLAGS) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
@@ -186,7 +178,7 @@ $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
 # ============================================================
 
 # Generate readme from template
-$(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+$(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 	@echo "Generating $(README_NAME) from template..."
 	$(eval FULL_SIZE := $(shell stat -c%s $(TARGET_FULL)))
 	$(eval FULL_MD5 := $(shell md5sum $(TARGET_FULL) | cut -d' ' -f1))
@@ -228,7 +220,7 @@ $(README_NAME): $(README_TEMPLATE) $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINF
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: check-vasm version-readme $(TARGET_FULL) $(TARGET_SMALL) $(README_NAME) guides check-lha
+release: check-vasm version-readme $(DRIVER_TARGETS) $(README_NAME) guides check-lha
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
 	@echo "=================================="
 	$(eval STAGING := $(shell mktemp -d))
@@ -295,8 +287,8 @@ check-lha:
 # ============================================================
 
 # Show checksums for both versions
-checksums: $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
-	@for target in $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK); do \
+checksums: $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+	@for target in $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK); do \
 		if [ -f "$$target" ]; then \
 			echo "=== $${target} ==="; \
 			ls -l "$$target"; \
@@ -309,7 +301,7 @@ checksums: $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED)
 
 # Clean build artifacts
 clean:
-	rm -f $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(VERSION_INC) $(VERSION_STAMP)
+	rm -f $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(VERSION_INC) $(VERSION_STAMP)
 
 # Clean everything including release archives
 distclean: clean
@@ -329,7 +321,6 @@ help:
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
 	@echo "  GTIMING=1           - Enable Gayle timing optimization (experimental)"
-	@echo "  COPYBURST=1         - Enable MOVEM burst transfers (experimental)"
 	@echo "  VASM_HOME=/opt/vbcc - vasm installation path"
 	@echo "  VBCC_HOME=/opt/vbcc - vbcc installation path"
 	@echo ""

@@ -54,6 +54,10 @@ Choose based on your needs:
 - Use the full version if you need serial debug output (Flags = 8)
 - Use small for minimal memory footprint (rename to compactflash.device)
 
+The read/write hot path is specialized at card-identify time for
+the detected PIO transfer mode, so no separate word-only variant
+is required.
+
 Steps:
 1. Copy devs/compactflash.device to DEVS:
    (or copy compactflash.device.small as DEVS:compactflash.device)
