@@ -14,15 +14,16 @@ CHANGES IN @VERSION@ (@DATE@)
 
 Driver:
 
-* Checking stability of I/O port access (github issue #33)
-  Cards with unreliable data transfer are now detected and rejected
-  to prevent data corruption. Thanks to Freddy (amigaportal.cz)
-  for sending the CF card for analysis.
+* CIS gate accepts only known CompactFlash device types (github issue/38)
+  - Accepts cards whose CIS reports device type 0x0D (FUNCSPEC) or
+    0x05 (FLASH), the two types CompactFlash cards are known to use.
+  - Other memory-card types are rejected early, so the driver no
+    longer tries ATA IDENTIFY on cards that are not expected to
+    behave like ATA devices and will not get stuck on them.
 
 Others:
 
-* git repository restructured
-* Rebuild by vasm 2.0d
+* Rebuild by vasm 2.0e
 
 FEATURES
 ========
