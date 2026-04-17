@@ -14,16 +14,15 @@ CHANGES IN @VERSION@ (@DATE@)
 
 Driver:
 
-* CIS gate accepts only known CompactFlash device types (github issue/38)
-  - Accepts cards whose CIS reports device type 0x0D (FUNCSPEC) or
-    0x05 (FLASH), the two types CompactFlash cards are known to use.
-  - Other memory-card types are rejected early, so the driver no
-    longer tries ATA IDENTIFY on cards that are not expected to
-    behave like ATA devices and will not get stuck on them.
+* Read/write path streamlined an internal cleanup in the read/write code path.
+* The driver now ships two CPU tiers:
+  68020+ (A1200 stock, 030/040/060/080 accelerators) at devs/68020/compactflash.device
+  68000  (stock A600) at devs/68000/compactflash.device.
+* 68020+ build uses native 32-bit math
 
 Others:
 
-* Rebuild by vasm 2.0e
+* Experimental COPYBURST build option removed (had no effect in practice)
 
 FEATURES
 ========
@@ -45,22 +44,25 @@ REQUIREMENTS
 
 INSTALLATION
 ============
-Two versions of the driver are included:
+Two CPU tiers are included, each in full and small flavours:
 
-  compactflash.device      @FULL_SIZE@ bytes  Driver with debug to serial console flag support
-  compactflash.device.small @SMALL_SIZE@ bytes  Driver without debug to serial console support
+  68020+ (A1200 stock, 68020+ accelerators -- 030/040/060/080):
+    devs/68020/compactflash.device      @FULL_SIZE@ bytes   debug-capable
+    devs/68020/compactflash.device.small @SMALL_SIZE@ bytes   no debug code
+
+  68000 (stock A600):
+    devs/68000/compactflash.device      @FULL_SIZE_000@ bytes   debug-capable
+    devs/68000/compactflash.device.small @SMALL_SIZE_000@ bytes   no debug code
 
 Choose based on your needs:
 - Use the full version if you need serial debug output (Flags = 8)
 - Use small for minimal memory footprint (rename to compactflash.device)
 
-The read/write hot path is specialized at card-identify time for
-the detected PIO transfer mode, so no separate word-only variant
-is required.
-
 Steps:
-1. Copy devs/compactflash.device to DEVS:
-   (or copy compactflash.device.small as DEVS:compactflash.device)
+1. Copy the driver for your CPU tier to DEVS:
+     - A1200 + accelerators: devs/68020/compactflash.device
+     - Stock A600:           devs/68000/compactflash.device
+   (or the .small variant renamed to compactflash.device)
 2. Copy c/CFInfo to C: (optional, card info utility)
 3. Have fat95 installed on your system
 4. Mount the drive by double-clicking devs/CF0
@@ -82,8 +84,11 @@ Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
 
 SERIAL DEBUG EXAMPLE
 ====================
-With Flags = 8, connect serial cable and monitor at 9600 baud:
+With Flags = 8, connect serial cable and monitor at 9600 baud. The first
+line is a version banner that identifies the driver version and CPU tier
+([68020] or [68000]):
 
+  [CFD] compactflash.device 1.41 (17.04.2026) [68020]
   [CFD] Card inserted
   [CFD] Identifying card...
   [CFD] Reset
@@ -244,8 +249,10 @@ cfd/c/pcmciacheck - PCMCIA check utility
 cfd/c/pcmciaspeed - Speed test utility
 
 cfd/devs/CF0                       - Mountlist entry (with flags documentation)
-cfd/devs/compactflash.device       - Driver with debug to serial console flag support
-cfd/devs/compactflash.device.small - Driver without debug to serial console support
+cfd/devs/68020/compactflash.device       - 68020+ driver with debug to serial console flag support
+cfd/devs/68020/compactflash.device.small - 68020+ driver without debug to serial console support
+cfd/devs/68000/compactflash.device       - 68000 driver with debug to serial console flag support
+cfd/devs/68000/compactflash.device.small - 68000 driver without debug to serial console support
 
 cfd/docs/cfd.guide         - Main documentation (AmigaGuide)
 cfd/docs/CFInfo.guide      - CFInfo utility documentation (AmigaGuide)

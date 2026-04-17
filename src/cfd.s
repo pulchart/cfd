@@ -1,4 +1,4 @@
-; compactflash.device driver V1.36
+; compactflash.device driver
 ; Copyright (C) 2009  Torsten Jager <t.jager@gmx.de>
 ; This file is part of cfd, a free storage device driver for Amiga.
 ;
@@ -85,6 +85,33 @@ INITLIST macro
 	addq.l	#4,(\1)
 	clr.l	4(\1)
 	move.l	\1,8(\1)
+	endm
+
+; --- 32-bit math: inline on 68020+, bsr to helper on 68000 ---
+
+UMUL32	macro				;d0 = d0 * d1 (u32)
+	ifd	__68020__
+	mulu.l	d1,d0
+	else
+	bsr.w	UMul32
+	endif
+	endm
+
+UDIVMOD32 macro				;d0 = d0/d1, d1 = d0 mod d1 (u32)
+	ifd	__68020__
+	divul.l	d1,d1:d0
+	else
+	bsr.w	UDivMod32
+	endif
+	endm
+
+LOG2	macro				;d0 = log2(d0), d0 != 0
+	ifd	__68020__
+	bfffo	d0{0:32},d0
+	eori.w	#31,d0
+	else
+	bsr.w	Log2
+	endif
 	endm
 
 _AbsExecBase	= 4
@@ -682,7 +709,7 @@ CFU_CacheFlags	= 960			;saved cache flags
 CFU_MultiSizeRW	= 964			;bytes per transfer (sectors * 512)
 				;set from card or override (Flags=16)
 
-;--- Runtime-bound I/O handlers (see _BindIOHandlers) ---
+;--- Runtime-bound I/O handlers (see _BindIOHandlers header for dispatch flow) ---
 ; Set once probing converges and rebind on any later mode change.
 ; Called from _rb_block / _wb_block with:
 ;   d0 = byte count, a2 = buffer, a3 = CFU
@@ -739,6 +766,10 @@ TimerName:
 
 ;--- Debug message strings (used when Flags = 8) ---
 	ifd	DEBUG
+dbg_version:
+	dc.b	"[CFD] "
+	VERSION_STRING
+	dc.b	13,10,0
 dbg_card_insert:
 	dc.b	"[CFD] Card inserted",13,10,0
 dbg_card_remove:
@@ -1403,7 +1434,7 @@ _GetGeometry:
 	mulu.w	d0,d1
 	move.l	d1,4(a1)		;DG_CylSectors
 	move.l	CFU_DriveSize(a3),d0
-	bsr.w	UDivMod32
+	UDIVMOD32
 	move.l	d0,(a1)			;DG_Cylinders
 	add.w	#16,a1
 	bra.s	_gg_bufmemtype
@@ -1568,13 +1599,13 @@ _r_odd:
 	move.l	d0,-(sp)
 	move.l	IO_Length(a2),d0
 	move.l	d2,d1
-	bsr.w	UDivMod32
+	UDIVMOD32
 	move.l	d0,d1
 	move.l	(sp)+,d0
 	move.l	IO_Data(a2),a1
 	jsr	(a6)
 	move.l	d2,d1
-	bsr.w	UMul32
+	UMUL32
 	bra.s	_r_end
 
 ;--- write back pending buffers (unused) -------------------
@@ -2310,7 +2341,8 @@ _t_do:
 
 ;- - examine and register new card  - - - - - - - - - - - -
 
-_t_identify:	
+_t_identify:
+	DBGMSG	dbg_version
 	DBGMSG	dbg_card_insert
 	clr.w	CFU_CardReady(a3)
 	lea	CFU_CardHandle(a3),a2
@@ -2750,7 +2782,7 @@ _t_fs1:
 	move.l	d2,d0
 	beq.s	_t_fs2
 
-	bsr.w	Log2
+	LOG2
 	bclr	d0,d2
 	CALLEXEC FreeSignal
 	bra.s	_t_fs1
@@ -4274,6 +4306,23 @@ po4_loop2:
 ;   - _wb_switch (mid-write fallback to memory-mapped mode)
 ;   - _wb_bump fallback step (try next send mode)
 ;
+; Dispatch flow:
+;
+;   COLD (on every mode change, rare):
+;     _BindIOHandlers
+;       -> CFU_ReadBlockFn  := pi_modeN
+;       -> CFU_WriteBlockFn := po_modeN
+;
+;   HOT (per IO request, per block):
+;     _rb_try / _wb_try:
+;       a5 := CFU_*BlockFn(a3)        ; cached once, outside chunk loop
+;     _rb_block / _wb_block:
+;       jsr (a5)                      ; direct call, no mode read
+;       -> pi_modeN / po_modeN worker
+;
+;   (pi_tab / po_tab are used only by the cold _pio_in / _pio_out
+;   helpers for IDENTIFY / config reads, not by the block hot path.)
+;
 ; Clobbers: d0, a0, a1 (callers must save anything live).
 ;
 _BindIOHandlers:
@@ -5277,7 +5326,7 @@ as_rc:
 	move.l	CFU_ConfigBlock+508(a3),d1
 	move.l	d1,CFU_BlockSize(a3)
 	move.l	d1,d0
-	bsr.w	Log2
+	LOG2
 	bclr	d0,d1
 	tst.l	d1
 	beq.s	as_1
@@ -5321,7 +5370,9 @@ ap_time:
 ap_end:
 	rts
 
-;*** Some math *********************************************
+;*** Some math (68000 fallbacks; 020+ inlines via macros) ***
+	ifnd	__68020__
+
 ; d0 *= d1
 
 UMul32:
@@ -5403,6 +5454,8 @@ lg2_loop:
 	move.l	d1,d0
 	move.l	(sp)+,d1
 	rts
+
+	endif	;__68020__
 
 	cnop	0,4
 

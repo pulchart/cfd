@@ -6,9 +6,9 @@
 
 # Driver Version (update these for new releases)
 VERSION_MAJOR = 1
-VERSION_MINOR = 40
-VERSION_SUFFIX =
-DATE = 12.04.2026
+VERSION_MINOR = 41
+VERSION_SUFFIX = -dev
+DATE = 18.04.2026
 DATE_SHORT = 04/2026
 
 # Tool-specific versions
@@ -56,19 +56,34 @@ LHA = lha
 EXPECTED_VASM_VERSION = 2.0e
 
 # Flags
-VASMFLAGS = -Fhunkexe -m68020 -nosym $(DEFINITIONS)
+# VASMFLAGS is the base set shared by all tiers; per-tier CPU flag
+# (-m68020 / -m68000) is appended in the individual build rules.
+VASMFLAGS = -Fhunkexe -nosym $(DEFINITIONS)
 VBCCFLAGS = +aos68k -O2 -c99 -INDK/Include_H
+
+# CPU tier flags
+# -D__68020__=1 enables the 020+ inline math paths (mulu.l / divul.l / bfffo)
+# inside src/cfd.s. Must not be set for the 68000 tier.
+VASMCPU_020 = -m68020 -D__68020__=1
+VASMCPU_000 = -m68000
 
 # Directories
 SRCDIR = src
 OUTDIR_DEVS = dist/devs
+OUTDIR_DEVS_020 = $(OUTDIR_DEVS)/68020
+OUTDIR_DEVS_000 = $(OUTDIR_DEVS)/68000
 OUTDIR_C = dist/c
 
 # Files: Driver
+# 68020+ is the default build (A1200 and 68020+ accelerators) and sits
+# at the devs/68020/ path. 68000 build ships under devs/68000/ for
+# stock A600.
 SOURCE = $(SRCDIR)/cfd.s
-TARGET_FULL = $(OUTDIR_DEVS)/compactflash.device
-TARGET_SMALL = $(OUTDIR_DEVS)/compactflash.device.small
-DRIVER_TARGETS = $(TARGET_FULL) $(TARGET_SMALL)
+TARGET_FULL = $(OUTDIR_DEVS_020)/compactflash.device
+TARGET_SMALL = $(OUTDIR_DEVS_020)/compactflash.device.small
+TARGET_FULL_000 = $(OUTDIR_DEVS_000)/compactflash.device
+TARGET_SMALL_000 = $(OUTDIR_DEVS_000)/compactflash.device.small
+DRIVER_TARGETS = $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_FULL_000) $(TARGET_SMALL_000)
 
 # Files: Tools
 SOURCE_CFINFO = $(SRCDIR)/cfinfo.c
@@ -112,7 +127,11 @@ $(VERSION_INC): $(VERSION_STAMP)
 	$(Q)echo "FILE_VERSION	= $(VERSION_MAJOR)" >> $@
 	$(Q)echo "FILE_REVISION	= $(VERSION_MINOR)" >> $@
 	$(Q)echo "VERSION_STRING	macro" >> $@
-	$(Q)echo "	dc.b	\"compactflash.device $(VERSION) ($(DATE))\"" >> $@
+	$(Q)echo "	ifd	__68020__" >> $@
+	$(Q)echo "	dc.b	\"compactflash.device $(VERSION) ($(DATE)) [68020]\"" >> $@
+	$(Q)echo "	else" >> $@
+	$(Q)echo "	dc.b	\"compactflash.device $(VERSION) ($(DATE)) [68000]\"" >> $@
+	$(Q)echo "	endc" >> $@
 	$(Q)echo "	endm" >> $@
 
 # Update version suffix in README.md (in-place)
@@ -121,25 +140,43 @@ version-readme:
 	$(Q)sed -i 's/^### v$(VERSION_MAJOR)\.$(VERSION_MINOR)[^[:space:]]*/### v$(VERSION)/' README.md
 	$(Q)echo "  README  version updated to $(VERSION)"
 
-# Full version (with serial debug capability)
+# Full version, 68020+ (with serial debug capability)
 $(TARGET_FULL): $(SOURCE) $(VERSION_INC)
-	$(Q)mkdir -p $(OUTDIR_DEVS)
-	$(Q)echo "  VASM    $@ [full${TEXT}]"
-	$(Q)$(VASM) $(VASMFLAGS) -DDEBUG=1 -o $@ $<
+	$(Q)mkdir -p $(OUTDIR_DEVS_020)
+	$(Q)echo "  VASM    $@ [full, 68020+${TEXT}]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_020) -DDEBUG=1 -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
-# Small version (no debug code/strings)
+# Small version, 68020+ (no debug code/strings)
 $(TARGET_SMALL): $(SOURCE) $(VERSION_INC)
-	$(Q)mkdir -p $(OUTDIR_DEVS)
-	$(Q)echo "  VASM    $@ [small$(TEXT)]"
-	$(Q)$(VASM) $(VASMFLAGS) -o $@ $<
+	$(Q)mkdir -p $(OUTDIR_DEVS_020)
+	$(Q)echo "  VASM    $@ [small, 68020+$(TEXT)]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_020) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
-# Build only full version
+# Full version, 68000 (with serial debug capability)
+$(TARGET_FULL_000): $(SOURCE) $(VERSION_INC)
+	$(Q)mkdir -p $(OUTDIR_DEVS_000)
+	$(Q)echo "  VASM    $@ [full, 68000${TEXT}]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_000) -DDEBUG=1 -o $@ $<
+	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
+
+# Small version, 68000 (no debug code/strings)
+$(TARGET_SMALL_000): $(SOURCE) $(VERSION_INC)
+	$(Q)mkdir -p $(OUTDIR_DEVS_000)
+	$(Q)echo "  VASM    $@ [small, 68000$(TEXT)]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_000) -o $@ $<
+	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
+
+# Build only full version (68020+)
 full: check-vasm $(TARGET_FULL)
 
-# Build only small version
+# Build only small version (68020+)
 small: check-vasm $(TARGET_SMALL)
+
+# Build only 68000 variants
+full-000: check-vasm $(TARGET_FULL_000)
+small-000: check-vasm $(TARGET_SMALL_000)
 
 # Tools only target
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
@@ -186,6 +223,12 @@ $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_P
 	$(eval SMALL_SIZE := $(shell stat -c%s $(TARGET_SMALL)))
 	$(eval SMALL_MD5 := $(shell md5sum $(TARGET_SMALL) | cut -d' ' -f1))
 	$(eval SMALL_SHA256 := $(shell sha256sum $(TARGET_SMALL) | cut -d' ' -f1))
+	$(eval FULL_SIZE_000 := $(shell stat -c%s $(TARGET_FULL_000)))
+	$(eval FULL_MD5_000 := $(shell md5sum $(TARGET_FULL_000) | cut -d' ' -f1))
+	$(eval FULL_SHA256_000 := $(shell sha256sum $(TARGET_FULL_000) | cut -d' ' -f1))
+	$(eval SMALL_SIZE_000 := $(shell stat -c%s $(TARGET_SMALL_000)))
+	$(eval SMALL_MD5_000 := $(shell md5sum $(TARGET_SMALL_000) | cut -d' ' -f1))
+	$(eval SMALL_SHA256_000 := $(shell sha256sum $(TARGET_SMALL_000) | cut -d' ' -f1))
 	$(eval CFINFO_SIZE := $(shell stat -c%s $(TARGET_CFINFO)))
 	$(eval CFINFO_MD5 := $(shell md5sum $(TARGET_CFINFO) | cut -d' ' -f1))
 	$(eval CFINFO_SHA256 := $(shell sha256sum $(TARGET_CFINFO) | cut -d' ' -f1))
@@ -204,6 +247,12 @@ $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_P
 		 -e 's|@SMALL_SIZE@|$(SMALL_SIZE)|g' \
 		 -e 's|@SMALL_MD5@|$(SMALL_MD5)|g' \
 		 -e 's|@SMALL_SHA256@|$(SMALL_SHA256)|g' \
+		 -e 's|@FULL_SIZE_000@|$(FULL_SIZE_000)|g' \
+		 -e 's|@FULL_MD5_000@|$(FULL_MD5_000)|g' \
+		 -e 's|@FULL_SHA256_000@|$(FULL_SHA256_000)|g' \
+		 -e 's|@SMALL_SIZE_000@|$(SMALL_SIZE_000)|g' \
+		 -e 's|@SMALL_MD5_000@|$(SMALL_MD5_000)|g' \
+		 -e 's|@SMALL_SHA256_000@|$(SMALL_SHA256_000)|g' \
 		 -e 's|@CFINFO_SIZE@|$(CFINFO_SIZE)|g' \
 		 -e 's|@CFINFO_MD5@|$(CFINFO_MD5)|g' \
 		 -e 's|@CFINFO_SHA256@|$(CFINFO_SHA256)|g' \
@@ -302,6 +351,8 @@ checksums: $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCM
 # Clean build artifacts
 clean:
 	rm -f $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(VERSION_INC) $(VERSION_STAMP)
+	$(Q)[ ! -d $(OUTDIR_DEVS_020) ] || rmdir --ignore-fail-on-non-empty $(OUTDIR_DEVS_020)
+	$(Q)[ ! -d $(OUTDIR_DEVS_000) ] || rmdir --ignore-fail-on-non-empty $(OUTDIR_DEVS_000)
 
 # Clean everything including release archives
 distclean: clean
@@ -312,11 +363,13 @@ help:
 	@echo "Usage: make [V=1] [target]"
 	@echo ""
 	@echo "Build targets:"
-	@echo "  all    - Build driver + tools (default)"
-	@echo "  full   - Build full driver version only (with serial debug capability)"
-	@echo "  small  - Build small driver version only (no serial debug code)"
-	@echo "  tools  - Build all tools"
-	@echo "  guides - Generate AmigaGuide documentation from Markdown"
+	@echo "  all       - Build driver (both CPU tiers) + tools (default)"
+	@echo "  full      - Build 68020+ full driver only (with serial debug capability)"
+	@echo "  small     - Build 68020+ small driver only (no serial debug code)"
+	@echo "  full-000  - Build 68000 full driver only (stock A600)"
+	@echo "  small-000 - Build 68000 small driver only (stock A600)"
+	@echo "  tools     - Build all tools"
+	@echo "  guides    - Generate AmigaGuide documentation from Markdown"
 	@echo ""
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
@@ -336,8 +389,10 @@ help:
 	@echo "  help      - Show this help"
 	@echo ""
 	@echo "Output files:"
-	@echo "  $(TARGET_FULL)- full version (with serial debug capability)"
-	@echo "  $(TARGET_SMALL) - small version"
+	@echo "  $(TARGET_FULL) - 68020+ full (A1200 stock + 68020+ accelerators)"
+	@echo "  $(TARGET_SMALL) - 68020+ small"
+	@echo "  $(TARGET_FULL_000) - 68000 full (stock A600)"
+	@echo "  $(TARGET_SMALL_000) - 68000 small (stock A600)"
 	@echo "  $(TARGET_CFINFO) - card info utility"
 	@echo "  $(TARGET_PCMCIASPEED) - pcmcia speed/timing benchmark utility"
 	@echo "  $(TARGET_PCMCIACHECK) - pcmcia check utility"
@@ -346,4 +401,4 @@ help:
 	@echo ""
 	@echo "Version: $(VERSION) ($(DATE))"
 
-.PHONY: all full small tools guides version-readme readme release check-lha checksums clean distclean help
+.PHONY: all full small full-000 small-000 tools guides version-readme readme release check-lha checksums clean distclean help
