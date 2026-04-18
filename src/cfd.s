@@ -2757,6 +2757,9 @@ _t_disown:
 	clr.l	CFU_ConfigAddr(a3)	;clear config address
 	clr.w	CFU_MultiSize(a3)	;clear multi-sector size
 	clr.w	CFU_MultiSizeRW(a3)	;clear multi-sector RW size
+	clr.l	CFU_ReadBlockFn(a3)	;unbind hot-path handlers so a stray
+	clr.l	CFU_WriteBlockFn(a3)	; IO that slips past the state machine
+					; hits the NULL-guard in _rb_try/_wb_try
 	;Clear 512-byte IDENTIFY buffer (CFU_ConfigBlock)
 	lea	CFU_ConfigBlock(a3),a0
 	moveq.l	#512/4-1,d0		;128 longwords - 1
@@ -3828,6 +3831,8 @@ _rb_swath:
 	move.l	a2,CFU_Buffer(a3)
 _rb_try:
 	move.l	CFU_ReadBlockFn(a3),a5	;cache bound handler across chunk loop
+	move.l	a5,d0			;handler bound? (_BindIOHandlers ran?)
+	beq.w	_rb_nodisk		;NULL -> fail IO as "disk changed"
 	btst	#6,CFU_EventFlags(a3)
 	bne.w	_rb_starttimer
 _rb_0:
@@ -4462,6 +4467,8 @@ _wb_swath:
 	move.l	a2,CFU_Buffer(a3)
 _wb_try:
 	move.l	CFU_WriteBlockFn(a3),a5	;cache bound handler across chunk loop
+	move.l	a5,d0			;handler bound? (_BindIOHandlers ran?)
+	beq.w	_wb_nodisk		;NULL -> fail IO as "disk changed"
 	moveq.l	#0,d4
 	move.w	CFU_MultiSizeRW(a3),d4
 	cmp.l	d4,d3
