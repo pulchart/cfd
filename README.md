@@ -21,15 +21,17 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### v1.41-dev
+### v1.41
+
+This release focuses on stability and CPU compatibility improvements across both shipped CPU tiers (`68000` / `68010` and `68020+`).
 
 #### Driver
 
-* **IO path streamlined** -- internal cleanup in the IO path (see [IO path dispatch](#io-path-dispatch))
+* **IO path streamlined**: internal cleanup in the IO path (see [IO path dispatch](#io-path-dispatch))
 * **The driver now ships two CPU tiers**:
   - `68020+` at `devs/68020/compactflash.device` (A1200 stock, and 68020+ accelerators: 030/040/060/080)
   - `68000` at `devs/68000/compactflash.device` (stock A600)
-* **68020+ build uses native 32-bit math** -- `mulu.l` / `divul.l` / `bfffo` are inlined at the call sites via macros and fully replace the 68000 compatibility routines (which are excluded from the 020+ binary). Shrinks the 68020+ driver by ~124 bytes and removes `bsr/rts` overhead at every multiply / divide / log2 site. No functional change; the 68000 binary is bit-identical to before.
+* **68020+ build uses native 32-bit math**: `mulu.l` / `divul.l` / `bfffo` are inlined at the call sites via macros and fully replace the 68000 compatibility routines (which are excluded from the 020+ binary). No functional change.
 
 #### Others
 

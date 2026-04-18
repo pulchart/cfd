@@ -5,6 +5,7 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
+Replaces:     driver/media/cfd140.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -14,7 +15,10 @@ CHANGES IN @VERSION@ (@DATE@)
 
 Driver:
 
-* Read/write path streamlined an internal cleanup in the read/write code path.
+This release focuses on stability and CPU compatibility improvements across
+both CPU tiers (68000/68010 and 68020+).
+
+* Read/write path streamlined: an internal cleanup in the IO code path.
 * The driver now ships two CPU tiers:
   68020+ (A1200 stock, 030/040/060/080 accelerators) at devs/68020/compactflash.device
   68000  (stock A600) at devs/68000/compactflash.device.
