@@ -21,6 +21,22 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
+### v1.41
+
+This release focuses on stability and CPU compatibility improvements across both shipped CPU tiers (`68000` / `68010` and `68020+`).
+
+#### Driver
+
+* **IO path streamlined**: internal cleanup in the IO path (see [IO path dispatch](#io-path-dispatch))
+* **The driver now ships two CPU tiers**:
+  - `68020+` at `devs/68020/compactflash.device` (A1200 stock, and 68020+ accelerators: 030/040/060/080)
+  - `68000` at `devs/68000/compactflash.device` (stock A600)
+* **68020+ build uses native 32-bit math**: `mulu.l` / `divul.l` / `bfffo` are inlined at the call sites via macros and fully replace the 68000 compatibility routines (which are excluded from the 020+ binary). No functional change.
+
+#### Others
+
+* Experimental `COPYBURST` build option removed (had no effect in practice).
+
 ### v1.40
 
 #### Driver
@@ -161,22 +177,29 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 
 ## Installation
 
-Two versions of the driver are provided:
+The driver ships in two CPU tiers, each with a full and a small flavour:
 
-| File | Size | Description |
-|------|------|-------------|
-| `compactflash.device` | ~10.3 KB | Driver with debug to serial console flag support |
-| `compactflash.device.small` | ~8.3 KB | Driver without debug to serial console support |
+| Tier | File | Size | Target |
+|------|------|------|--------|
+| 68020+ | `devs/68020/compactflash.device` | ~11.0 KB | A1200 stock + 68020+ accelerators (030/040/060/080) |
+| 68020+ | `devs/68020/compactflash.device.small` | ~8.3 KB | same, no debug code |
+| 68000 | `devs/68000/compactflash.device` | ~11.1 KB | stock A600 (68000) |
+| 68000 | `devs/68000/compactflash.device.small` | ~8.5 KB | same, no debug code |
 
-Choose the version you need:
-- Use the **full version** if you need serial debug output (`Flags = 8`)
-- Use the **small version** for minimal memory footprint
+Pick the tier that matches your CPU, then pick the full or small flavour:
+- Use the **full** version if you want serial debug output (`Flags = 8`)
+- Use the **small** version for minimal memory footprint
 
 ```
-Copy devs/compactflash.device to DEVS:
+# A1200 (68020+)
+Copy devs/68020/compactflash.device to DEVS:compactflash.device
+
+# A600 (68000)
+Copy devs/68000/compactflash.device to DEVS:compactflash.device
+
 Copy c/CFInfo to C:
 ```
-(or `compactflash.device.small`, renamed to `compactflash.device`)
+(or the `.small` variant, renamed to `compactflash.device`)
 
 Have fat95 installed on your system. Mount the drive by double-clicking `devs/CF0`.
 
@@ -254,8 +277,9 @@ Use a adapter `DB-25 Female to DB-9 Male`, the adapter uses Straight-Through con
 
 #### Monitoring Serial Output
 
-Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyUSB0 9600`, `minicom -b 9600 -o -D /dev/ttyUSB0`, `putty`) on remote computer to see online initialization process:
+Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyUSB0 9600`, `minicom -b 9600 -o -D /dev/ttyUSB0`, `putty`) on remote computer to see online initialization process. The first line is a version banner that identifies the driver version and CPU tier (`[68020]`+ or `[68000]`):
 ```
+[CFD] compactflash.device 1.41 (17.04.2026) [68020]
 [CFD] Card inserted
 [CFD] Identifying card...
 [CFD] Reset
@@ -390,6 +414,60 @@ CompactFlash cards normally report `0x0D` or `0x05`.
 
 Rejected cards are released back to the system (`ReleaseCard`), so another PCMCIA driver can claim them. The driver does not attempt an ATA IDENTIFY on rejected cards, which prevents `compactflash.device` from interfering with non-storage PCMCIA cards.
 
+## IO path dispatch
+
+Before v1.41 every block transfer paid a mode check and a small dispatch-table lookup. In v1.41 the dispatch is resolved once at probe time; the per-block path just jumps to the selected worker.
+
+### Before (through v1.40)
+
+```mermaid
+flowchart LR
+    Req["IO request"] --> WB["_WriteBlocks / _ReadBlocks"]
+    WB --> Chunk["per-chunk loop"]
+    Chunk --> Block["_rb_block / _wb_block"]
+    Block --> Mode["read CFU_ReceiveMode / CFU_SendMode<br/>(every block)"]
+    Mode -->|"mode 0"| Inline["inlined word-only loop<br/>(duplicated by ifnd COPYBURST)"]
+    Mode -->|"mode > 0"| Tbl["pi_tab / po_tab lookup + jmp<br/>(every block)"]
+    Tbl --> Workers["pi_mode1 / pi_mode2 / pi_mode3 / pi_mode4"]
+```
+
+### After (v1.41-dev)
+
+```mermaid
+flowchart LR
+    subgraph cold [Once, at mode change]
+        Evt["RWTest / _gid_end<br/>_wb_switch / _wb_bump"] --> Bind["_BindIOHandlers"]
+        Bind --> Slot1["CFU_ReadBlockFn = pi_modeN"]
+        Bind --> Slot2["CFU_WriteBlockFn = po_modeN"]
+    end
+
+    subgraph hot [Per IO request, hot path]
+        Req["IO request"] --> WB["_WriteBlocks / _ReadBlocks"]
+        WB --> Cache["load CFU_*BlockFn into a5<br/>(once, outside chunk loop)"]
+        Cache --> Chunk["per-chunk loop"]
+        Chunk --> Block["_rb_block / _wb_block"]
+        Block --> Direct["jsr (a5)"]
+        Direct --> Worker["selected worker<br/>(pi_modeN / po_modeN)"]
+    end
+```
+
+### What that removes from the hot path
+
+- Per-block `move.b CFU_ReceiveMode(a3)` + branch.
+- Per-block `pi_tab` / `po_tab` offset load + `jmp` (the tables are now used only by the cold `_pio_in` / `_pio_out` helpers for IDENTIFY / config reads).
+- The four source copies of the word-only loop that the old `ifnd COPYBURST / else` wrapping produced.
+
+### What triggers a rebind
+
+`_BindIOHandlers` is called from:
+
+- end of `RWTest` (initial mode selection settles)
+- `_gid_end` (covers `_gid_switch`'s mode-4 fallback)
+- `_wb_switch` (mid-write fallback to memory-mapped mode)
+- `_wb_bump` (try next send mode on error)
+
+Outside these four sites the hot path does not consult the mode at all.
+
 ## Speed Test Results
 
 Retaken from readme of version 1.32/1.33. Those versions behave as if **Enforce Multi Mode** is enabled.
@@ -467,6 +545,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
 | v1.39 | 02/2026 | I/O port access reliability check |
 | v1.38 | 01/2026 | CIS gate filter to avoid interfering with non-storage PCMCIA cards, PCMCIA timing setup restored |
@@ -542,7 +621,6 @@ make V=1
 |--------|-------------|
 | `V=1` | Verbose output (show full compiler messages) |
 | `GTIMING=1` | Enable Gayle timing optimization (experimental) |
-| `COPYBURST=1` | Enable MOVEM transfers (experimental) |
 | `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
 | `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |
 
@@ -550,11 +628,13 @@ make V=1
 
 | Target | Description |
 |--------|-------------|
-| `make` | Build driver (full + small) and CFInfo |
-| `make full` | Build full version only (with debug support) |
-| `make small` | Build small version only (no debug) |
-| `make tools` | Build utilitties (requires vbcc + NDK) |
-| `make fastpio` | Build with Gayle timing optimization (experimental) |
+| `make` | Build all driver tiers (68020+ and 68000) + utilities |
+| `make full` | 68020+ full only (with debug support) |
+| `make small` | 68020+ small only (no debug) |
+| `make full-000` | 68000 full only (stock A600) |
+| `make small-000` | 68000 small only (stock A600) |
+| `make tools` | Build utilities (requires vbcc + NDK) |
+| `make GTIMING=1` | Build with Gayle timing optimization (experimental) |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |
 | `make clean` | Remove built files |
