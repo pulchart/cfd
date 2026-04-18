@@ -4022,6 +4022,10 @@ _rb_serror:
 _pio_in:
 	moveq.l	#0,d1
 	move.b	CFU_ReceiveMode(a3),d1
+	cmp.b	#4,d1			;mode in 0..4?
+	bls.s	pi_ok
+	moveq.l	#0,d1			;out-of-range -> safe default (WORD mode)
+pi_ok:
 	lsl.l	#1,d1
 	lea	pi_tab(pc),a1
 	add.w	(a1,d1.w),a1		;d1 high bits cleared above, .w is 68000-safe
@@ -4205,6 +4209,10 @@ pi4_loop2:
 _pio_out:
 	moveq.l	#0,d1
 	move.b	CFU_SendMode(a3),d1
+	cmp.b	#4,d1			;mode in 0..4?
+	bls.s	po_ok
+	moveq.l	#0,d1			;out-of-range -> safe default (WORD mode)
+po_ok:
 	lsl.l	#1,d1
 	lea	po_tab(pc),a1
 	add.w	(a1,d1.w),a1		;d1 high bits cleared above, .w is 68000-safe
