@@ -25,6 +25,10 @@ DBGNUM	macro
 	bsr.w	_DebugHex
 	endm
 
+DBGNL	macro
+	bsr.w	_DebugNewline
+	endm
+
 ;--- Common debug entry/exit macros ---
 ; DBG_ENTRY <end_label>,<regs> - Check debug flag, load ExecBase, save registers
 ;                                If debug disabled, branches to end_label
@@ -70,6 +74,9 @@ DBGCHR	macro
 	endm
 
 DBGNUM	macro
+	endm
+
+DBGNL	macro
 	endm
 
 DBG_ENTRY	macro
