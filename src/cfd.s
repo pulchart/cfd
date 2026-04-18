@@ -4211,6 +4211,13 @@ pi4_loop2:
 ; Note: Mode selection is determined during card identification
 ; based on card capabilities and PCMCIA hardware.
 ;
+; Conditionally compiled out of the default build: this helper has no
+; callers since the v1.41-dev runtime IO specialization moved per-block
+; writes onto the cached CFU_WriteBlockFn / a5 dispatch. _BindIOHandlers
+; binds po_modeN directly into CFU_WriteBlockFn, so the cold po_tab
+; indirection is no longer needed on the write side. Build with
+; -DDEADCODE to revive.
+	ifd	DEADCODE
 _pio_out:
 	moveq.l	#0,d1
 	move.b	CFU_SendMode(a3),d1
@@ -4228,6 +4235,7 @@ po_tab:
 	dc.w	po_mode2-po_tab
 	dc.w	po_mode1-po_tab
 	dc.w	po_mode4-po_tab
+	endc
 
 ; I/O Register 8, word-wise
 po_mode0:
