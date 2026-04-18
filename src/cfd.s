@@ -821,6 +821,10 @@ dbg_ns:
 	dc.b	"ns",13,10,0
 dbg_notify:
 	dc.b	"[CFD] Notify clients",13,10,0
+dbg_notify_call:
+	dc.b	"[CFD] ..client IS_Code=0x",0
+dbg_notify_drop:
+	dc.b	"[CFD] ..drop stale client at 0x",0
 dbg_done:
 	dc.b	"[CFD] ..done",13,10,0
 dbg_ideerr:
@@ -2971,24 +2975,64 @@ _wc_end:
 
 ;--- notify user -------------------------------------------
 
+; Walks CFU_Clients (a list of IORequests left behind by TD_ADDCHANGEINT).
+; Each node's IO_Data points to a client-supplied Interrupt struct whose
+; IS_Code is called with a6=SysBase, a1=IS_Data. Historically this was a
+; bare `jsr (a5)` that trusted the client completely. In practice clients
+; can exit without calling TD_REMCHANGEINT, leaving a stale Interrupt on
+; the list whose IS_Code now points into freed / remapped memory - the
+; next notify then jumps to a random address and the whole system Gurus.
+;
+; The hardened version:
+;   - rejects NULL IO_Data / IS_Code,
+;   - runs exec.library/TypeOfMem on IS_Code and rejects pointers that
+;     exec does not track (freed or never allocated via AllocMem),
+;   - Remove's the rejected node from CFU_Clients so the same stale
+;     entry cannot re-fault on every subsequent change event.
 NotifyClients:
-	movem.l	d2/a5,-(sp)
-	CALLEXEC Forbid
+	movem.l	d2/a2/a5,-(sp)
+	CALLEXEC Forbid			;a6 = SysBase on return
 	move.l	CFU_Clients(a3),d2
 ncl_loop:
 	move.l	d2,a5			;&IORequest
-	move.l	(a5),d2
-	beq.s	ncl_end			;end of List
+	move.l	(a5),d2			;d2 = next (ln_Succ)
+	beq.w	ncl_end			;end of List
 
-	move.l	IO_Data(a5),a5		;&InterruptServer
-	move.l	IS_Data(a5),a1
-	move.l	IS_Code(a5),a5
-	move.l	CFD_ExecBase(a4),a6
-	jsr	(a5)
-	bra.s	ncl_loop
+	move.l	a5,a2			;save &IORequest for possible Remove
+	move.l	IO_Data(a5),a5		;&InterruptServer (may be bogus)
+	move.l	a5,d0
+	beq.s	ncl_drop		;no Interrupt struct -> drop
+
+	move.l	IS_Code(a5),a1		;client-supplied IS_Code
+	move.l	a1,d0
+	beq.s	ncl_drop		;NULL IS_Code -> drop
+
+	DBGMSG	dbg_notify_call
+	move.l	a1,d0
+	DBGNUM
+	DBGNL
+
+	jsr	TypeOfMem(a6)		;a1 preserved; d0 = memflags or 0
+	tst.l	d0
+	beq.s	ncl_drop		;not exec-tracked -> stale client
+
+	move.l	IS_Data(a5),a1		;Interrupt convention: a1 = IS_Data
+	move.l	IS_Code(a5),a5		;a5 = IS_Code
+	jsr	(a5)			;a6 = SysBase preserved by server
+	bra.w	ncl_loop
+
+ncl_drop:
+	DBGMSG	dbg_notify_drop
+	move.l	a2,d0
+	DBGNUM
+	DBGNL
+	move.l	a2,a1			;node to unlink
+	jsr	Remove(a6)
+	bra.w	ncl_loop
+
 ncl_end:
 	CALLEXEC Permit
-	movem.l	(sp)+,d2/a5
+	movem.l	(sp)+,d2/a2/a5
 	rts
 
 ;--- test PCMCIA communication -----------------------------
