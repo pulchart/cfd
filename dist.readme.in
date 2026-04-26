@@ -5,28 +5,33 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd140.lha
+Replaces:     driver/media/cfd141.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
-compactflash.device V@VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
+compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
 CHANGES IN @VERSION@ (@DATE@)
 ============================
 
-Driver:
+compactflash.device:
 
-This release focuses on stability and CPU compatibility improvements across
-both CPU tiers (68000/68010 and 68020+).
+* Autoboot from RDB:
+  a bootable RDB partition on the inserted CF card boots straight into Workbench.
+* Automount from RDB:
+  RDB partitions appear in Workbench at cold start without DEVS:DOSDrivers/ entries.
+* RDB filesystem handlers:
+  handlers stored in the card's RDB are loaded and registered automatically.
 
-* Read/write path streamlined: an internal cleanup in the IO code path.
-* The driver now ships two CPU tiers:
-  68020+ (A1200 stock, 030/040/060/080 accelerators) at devs/68020/compactflash.device
-  68000  (stock A600) at devs/68000/compactflash.device.
-* 68020+ build uses native 32-bit math
+Autoboot and automount require a ROM-resident ptable.library (new companion library in this release).
+Without it, compactflash.device works as before.
 
 Others:
 
-* Experimental COPYBURST build option removed (had no effect in practice)
+* Release archive version and compactflash.device version are now tracked independently
+* New distribution layout: two build flavors per CPU tier are stored in dedicated folders:
+    cfd/full/<cpu>/   - debug-capable (serial output enabled with Flags=8)
+    cfd/small/<cpu>/  - no debug code
+  where <cpu> is 68000 (any 68k) or 68020 (68020+)
 
 FEATURES
 ========
@@ -48,31 +53,51 @@ REQUIREMENTS
 
 INSTALLATION
 ============
-Two CPU tiers are included, each in full and small flavours:
+The archive ships two flavours (full / small) and two CPU tiers,
+each as a sysroot ready to drop onto SYS:.
 
-  68020+ (A1200 stock, 68020+ accelerators -- 030/040/060/080):
-    devs/68020/compactflash.device      @FULL_SIZE@ bytes   debug-capable
-    devs/68020/compactflash.device.small @SMALL_SIZE@ bytes   no debug code
+  68020+ (A1200 stock, 68020+):
+    full/68020/devs/compactflash.device   debug-capable
+    small/68020/devs/compactflash.device  no debug code
+    full/68020/libs/ptable.library        debug-capable
+    small/68020/libs/ptable.library       no debug code
 
-  68000 (stock A600):
-    devs/68000/compactflash.device      @FULL_SIZE_000@ bytes   debug-capable
-    devs/68000/compactflash.device.small @SMALL_SIZE_000@ bytes   no debug code
+  68000 (stock A600, 68000+):
+    full/68000/devs/compactflash.device   debug-capable
+    small/68000/devs/compactflash.device  no debug code
+    full/68000/libs/ptable.library        debug-capable
+    small/68000/libs/ptable.library       no debug code
 
 Choose based on your needs:
-- Use the full version if you need serial debug output (Flags = 8)
-- Use small for minimal memory footprint (rename to compactflash.device)
+- Use the full flavour if you need serial debug output (Flags = 8)
+- Use small for minimal memory footprint (no debug strings/code)
 
-Steps:
-1. Copy the driver for your CPU tier to DEVS:
-     - A1200 + accelerators: devs/68020/compactflash.device
-     - Stock A600:           devs/68000/compactflash.device
-   (or the .small variant renamed to compactflash.device)
+Steps for normal mount-only use (no autoboot):
+1. Drag the contents of <flavor>/<cpu>/ onto SYS: the inner devs/
+   and libs/ drawers map onto SYS:Devs/ and SYS:Libs/ directly.
+     - A1200 + accelerators: full/68020/  (or small/68020/)
+     - Stock A600:           full/68000/  (or small/68000/)
 2. Copy c/CFInfo to C: (optional, card info utility)
 3. Have fat95 installed on your system
-4. Mount the drive by double-clicking devs/CF0
+4. Mount the drive by double-clicking Storage/DOSDrivers/CF0
+
+For autoboot, see the AUTOBOOT section below.
 
 For OS 3.5+:
   Copy def_CF0.info to sys:prefs/env-archive/sys and env:sys
+
+AUTOBOOT/AUTOMOUNT
+==================
+Autoboot is now provided by a separate ptable.library shipped under
+<flavor>/<cpu>/libs/. At Kickstart cold start the compactflash.device
+opens ptable.library and asks it to walk the RDB on the inserted card,
+load any filesystem handlers carried in into FileSystem.resource,
+and publish each partition via AddBootNode (bootable) or AddDosNode
+(non-bootable).
+
+The library MUST be ROM-resident for this to work a disk-only library
+install is silently ignored. The device driver still works as a normal
+mount-only device.
 
 MOUNT FLAGS
 ===========
@@ -92,7 +117,14 @@ With Flags = 8, connect serial cable and monitor at 9600 baud. The first
 line is a version banner that identifies the driver version and CPU tier
 ([68020] or [68000]):
 
-  [CFD] compactflash.device 1.41 (17.04.2026) [68020]
+  [CFD] boot: open ptable.library ...
+  [CFD] boot: ptable.library not preloaded, InitResident()...
+  [CFD] boot: BootScanRDB(compactflash.device,0)
+  [RDB] scan
+  [RDB] no RDB
+  [RDB] done
+
+  [CFD] compactflash.device 1.42 (03.05.2026) [68020]
   [CFD] Card inserted
   [CFD] Identifying card...
   [CFD] Reset
@@ -226,44 +258,39 @@ see https://github.com/pulchart/cfd/blob/master/README.md for complete history
 
 CHECKSUMS
 =========
-compactflash.device (full, @FULL_SIZE@ bytes):
-  MD5:    @FULL_MD5@
-  SHA256: @FULL_SHA256@
-
-compactflash.device.small (no debug, @SMALL_SIZE@ bytes):
-  MD5:    @SMALL_MD5@
-  SHA256: @SMALL_SHA256@
-
-CFInfo (@CFINFO_SIZE@ bytes):
-  MD5:    @CFINFO_MD5@
-  SHA256: @CFINFO_SHA256@
-
-pcmciacheck (@PCMCIACHECK_SIZE@ bytes):
-  MD5:    @PCMCIACHECK_MD5@
-  SHA256: @PCMCIACHECK_SHA256@
-
-pcmciaspeed (@PCMCIASPEED_SIZE@ bytes):
-  MD5:    @PCMCIASPEED_MD5@
-  SHA256: @PCMCIASPEED_SHA256@
+@TOOL_CHECKSUMS@
 
 CONTENTS
 ========
+cfd/full/<cpu>/   - per-CPU "full" sysroot (debug-capable device + library)
+cfd/small/<cpu>/  - per-CPU "small" sysroot (no debug code/strings)
+
+compactflash.device block device driver for PCMCIA CF cards:
+cfd/full/68020/devs/compactflash.device  - 68020+, debug-capable (serial output with Flags=8)
+cfd/small/68020/devs/compactflash.device - 68020+, no debug code
+cfd/full/68000/devs/compactflash.device  - 68000+, debug-capable (serial output with Flags=8)
+cfd/small/68000/devs/compactflash.device - 68000+, no debug code
+
+ptable.library (optional) enables autoboot and automount from RDB-partitioned cards;
+                          must be ROM-resident to work, disk-only install has no effect:
+cfd/full/68020/libs/ptable.library       - 68020+, debug-capable (serial output always on at boot)
+cfd/small/68020/libs/ptable.library      - 68020+, no debug code
+cfd/full/68000/libs/ptable.library       - 68000+, debug-capable (serial output always on at boot)
+cfd/small/68000/libs/ptable.library      - 68000+, no debug code
+
 cfd/c/CFInfo      - Card information utility (displays model, size, capabilities)
 cfd/c/pcmciacheck - PCMCIA check utility
 cfd/c/pcmciaspeed - Speed test utility
 
-cfd/devs/CF0                       - Mountlist entry (with flags documentation)
-cfd/devs/68020/compactflash.device       - 68020+ driver with debug to serial console flag support
-cfd/devs/68020/compactflash.device.small - 68020+ driver without debug to serial console support
-cfd/devs/68000/compactflash.device       - 68000 driver with debug to serial console flag support
-cfd/devs/68000/compactflash.device.small - 68000 driver without debug to serial console support
+cfd/Storage/DOSDrivers/CF0      - Mountlist entry (with flags documentation)
+cfd/Storage/DOSDrivers/CF0.info - Mountlist Workbench icon
 
-cfd/docs/cfd.guide         - Main documentation (AmigaGuide)
-cfd/docs/CFInfo.guide      - CFInfo utility documentation (AmigaGuide)
-cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation (AmigaGuide)
-cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation (AmigaGuide)
+cfd/docs/cfd.guide         - Main documentation
+cfd/docs/CFInfo.guide      - CFInfo utility documentation
+cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation
+cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation
 
-cfd/src/ - Full source code (assembler + C)
+cfd/src/ - Full source code
 
 cfd/images/cf-type-1.jpg        - CF Type 1 adapter photo
 cfd/images/cf-type-2.jpg        - CF Type 2 adapter photo (also MicroDrive)

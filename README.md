@@ -21,7 +21,27 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### v1.41
+### v1.42-dev (03.05.2026)
+
+This release introduces **autoboot and automount from RDB-partitioned CF cards**.
+
+#### Driver
+
+* **Autoboot from RDB**: a bootable RDB partition on the inserted card boots straight into Workbench
+* **Automount of all RDB partitions**: every partition on the card appears in Workbench at cold start without `DEVS:DOSDrivers/` entries.
+* **Filesystem handlers ride along on the card**: handlers stored in the card's RDB are loaded automatically
+
+Autoboot/automount is provided by a companion `ptable.library` that **must be ROM-resident** to fire. Disk-only installation leaves the device mountable-only and ptable.library is not needed.
+
+#### Others
+
+* Release archive version and compactflash.device version are now tracked independently
+* New distribution layout: two build flavors per CPU tier in dedicated folders:
+`dist/full/<cpu>/` - debug-capable (serial output enabled)
+`dist/small/<cpu>/` - no debug code
+where `<cpu>` is `68000` (any 68k) or `68020` (68020+)
+
+### v1.41 (18.04.2026)
 
 This release focuses on stability and CPU compatibility improvements across both shipped CPU tiers (`68000` / `68010` and `68020+`).
 
@@ -37,7 +57,7 @@ This release focuses on stability and CPU compatibility improvements across both
 
 * Experimental `COPYBURST` build option removed (had no effect in practice).
 
-### v1.40
+### v1.40 (12.04.2026)
 
 #### Driver
 
@@ -49,7 +69,7 @@ This release focuses on stability and CPU compatibility improvements across both
 
 * Rebuild by vasm 2.0e
 
-### v1.39
+### v1.39 (10.02.2026)
 
 #### Driver
 
@@ -60,7 +80,7 @@ This release focuses on stability and CPU compatibility improvements across both
 * git repository restructured
 * Rebuild by vasm 2.0d
 
-### v1.38
+### v1.38 (27.01.2026)
 
 #### Driver
 
@@ -81,7 +101,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 
 * documentation improvements
 
-### v1.37
+### v1.37 (17.01.2026)
 
 #### Driver
 
@@ -114,7 +134,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 
 * Typo fixes throughout documentation
 
-### v1.36
+### v1.36 (08.01.2026)
 
 #### Driver
 
@@ -152,7 +172,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
   - Documented CFU structure fields
   - Added function headers with input/output/register usage
 
-### v1.35
+### v1.35 (31.12.2025)
 
 * **Serial debug output** - set `Flags = 8` to enable debug messages via serial port
   - Shows card insert/remove, identification, size, and MultiSize
@@ -162,7 +182,7 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
   - **Warning:** May cause data corruption on unsupported cards - see Enforce Multi Mode section below
 * **Simplified SD-to-CF adapter support** - cleaner retry mechanism for IDENTIFY command introduced in v1.33
 
-### v1.34
+### v1.34 (22.10.2025)
 
 * Improved compatibility with >=2014 Firmware CF cards
   - Workaround for "get IDE ID" on large capacity cards
@@ -177,37 +197,102 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 
 ## Installation
 
-The driver ships in two CPU tiers, each with a full and a small flavour:
+The archive ships two flavours (`full` / `small`) and two CPU tiers (`68020+` / `68000`), each as a partial sysroot ready to drop onto `SYS:`. The flavour is encoded in the path:
 
-| Tier | File | Size | Target |
-|------|------|------|--------|
-| 68020+ | `devs/68020/compactflash.device` | ~11.0 KB | A1200 stock + 68020+ accelerators (030/040/060/080) |
-| 68020+ | `devs/68020/compactflash.device.small` | ~8.3 KB | same, no debug code |
-| 68000 | `devs/68000/compactflash.device` | ~11.1 KB | stock A600 (68000) |
-| 68000 | `devs/68000/compactflash.device.small` | ~8.5 KB | same, no debug code |
+| Flavour | CPU Tier | File | Size |
+|---------|------|------|------|
+| full | 68020+ | full/68020/devs/compactflash.device | ~11.7 KB |
+| small | 68020+ | small/68020/devs/compactflash.device | ~8.6 KB |
+| full | 68000+ | full/68000/devs/compactflash.device | ~11.8 KB |
+| small | 68000+ | small/68000/devs/compactflash.device | ~8.8 KB |
+
+Companion `ptable.library` binaries live next to the device in the same flavour/CPU tree (`<flavour>/<cpu>/libs/ptable.library`).
 
 Pick the tier that matches your CPU, then pick the full or small flavour:
 - Use the **full** version if you want serial debug output (`Flags = 8`)
 - Use the **small** version for minimal memory footprint
 
 ```
-# A1200 (68020+)
-Copy devs/68020/compactflash.device to DEVS:compactflash.device
+# A1200 (68020+) -- full flavour
+Copy from cfd/full/68020/  to SYS:   ALL
 
-# A600 (68000)
-Copy devs/68000/compactflash.device to DEVS:compactflash.device
+# A600 (68000)   -- full flavour
+Copy from cfd/full/68000/  to SYS:   ALL
 
-Copy c/CFInfo to C:
+# Plus the shared tools
+Copy cfd/c/CFInfo to C:
 ```
-(or the `.small` variant, renamed to `compactflash.device`)
 
-Have fat95 installed on your system. Mount the drive by double-clicking `devs/CF0`.
+The inner `devs/` and `libs/` drawers map directly onto `SYS:Devs/` and `SYS:Libs/`, so a single `Copy ALL` of `<flavour>/<cpu>/` installs both the device and `ptable.library` at once.
+
+Have fat95 installed on your system. Mount the drive by double-clicking `Storage/DOSDrivers/CF0`.
 
 For OS 3.5+:
 ```
 Copy def_CF0.info sys:prefs/env-archive/sys
 Copy def_CF0.info env:sys
 ```
+
+## Autoboot / Automount (ROM-resident)
+
+At Kickstart cold start `compactflash.device` opens `ptable.library`, which walks the RDB on the inserted card, registers any filesystem handlers stored in the RDB into `FileSystem.resource`, and publishes each partition via `AddBootNode` (bootable) or `AddDosNode` (mountable only).
+
+*ROM-resident requirement*
+
+`ptable.library` is **optional** for the driver. Without it, `compactflash.device` still works fully as a mount-only device via `DEVS:DOSDrivers/CF0` as example. It is **required** for autoboot and automount. To activate, it must be flashed into a ROM image; copying it to `SYS:Libs/` alone is silently ignored because the early-startup environment runs before DOS volumes are accessible.
+
+*Partition handling*
+
+How each RDB partition is handled at boot:
+
+| RDB partition flag | BootPri | Result |
+|--------------------|---------|--------|
+| normal | ≥ 0 | bootable — appears in Early Startup boot device list |
+| normal | < 0 | non-bootable — mounted as a DOS volume |
+| NOMOUNT (bit 1 set) | any | skipped entirely — not mounted, not in DOS list |
+
+BootPri is stored in the RDB partition environment and controls boot order.
+
+*Boot debug output*
+
+With a full build, two components emit serial output: `compactflash.device` uses the `[CFD] boot:` prefix, and `ptable.library` uses `[RDB]`:
+
+```
+[CFD] boot: open ptable.library ...
+[CFD] boot: ptable.library not preloaded, InitResident()...
+[CFD] boot: BootScanRDB(compactflash.device,0)
+[RDB] scan
+[RDB] found RDSK
+[RDB] +fs PFS v20.0
+[RDB] skip SDH10
+[RDB] skip SDH11
+[RDB] +boot SDH0
+[RDB] +dos  SDH1
+[RDB] +dos  SDH2
+[RDB] done
+```
+
+| Line | Meaning |
+|------|---------|
+| `[CFD] boot: open ptable.library ...` | device opened ptable.library |
+| `[CFD] boot: ptable.library not preloaded, InitResident()...` | library was not yet in memory; loaded from ROM via `InitResident()` |
+| `[CFD] boot: BootScanRDB(compactflash.device,0)` | device hands off RDB scan to ptable.library for unit 0 |
+| `[RDB] scan` | ptable.library begins scanning for the RDB |
+| `[RDB] found RDSK` | RDB block located on the card |
+| `[RDB] +fs PFS v20.0` | filesystem handler loaded from RDB (DosType + version) |
+| `[RDB] skip SDH10` | partition skipped (NOMOUNT flag set in RDB) |
+| `[RDB] +boot SDH0` | bootable partition registered via `AddBootNode` |
+| `[RDB] +dos  SDH1` | mountable-only partition registered via `AddDosNode` |
+| `[RDB] done` | RDB scan complete |
+
+*Expansion board entry*
+
+`ptable.library` registers a synthetic expansion board entry so the Kickstart Early Startup boot menu sees the device. The entry is visible in expansion-board inspection tools (e.g. `ShowConfig`) as a board with the following identifiers:
+
+| Field | Value |
+|-------|-------|
+| Vendor ID | `2011 ($07DB)` |
+| Product ID | `1` |
 
 ## Hardware Notes
 
@@ -277,9 +362,24 @@ Use a adapter `DB-25 Female to DB-9 Male`, the adapter uses Straight-Through con
 
 #### Monitoring Serial Output
 
-Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyUSB0 9600`, `minicom -b 9600 -o -D /dev/ttyUSB0`, `putty`) on remote computer to see online initialization process. The first line is a version banner that identifies the driver version and CPU tier (`[68020]`+ or `[68000]`):
+Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyUSB0 9600`, `minicom -b 9600 -o -D /dev/ttyUSB0`, `putty`) on remote computer to see online initialization process.
+
+Cold boot (ROM-resident `ptable.library`, RDB-partitioned card):
 ```
-[CFD] compactflash.device 1.41 (17.04.2026) [68020]
+[CFD] boot: open ptable.library v1...
+[CFD] boot: ptable.library not preloaded, InitResident()...
+[CFD] boot: BootScanRDB(compactflash.device,0)
+[RDB] scan
+[RDB] found RDSK
+[RDB] +fs PFS v20.0
+[RDB] +boot SDH0
+[RDB] +dos  SDH1
+[RDB] done
+```
+
+Card identification (hot-plug):
+```
+[CFD] compactflash.device 1.42 (02.05.2026) [68020]
 [CFD] Card inserted
 [CFD] Identifying card...
 [CFD] Reset
@@ -545,6 +645,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
 | v1.39 | 02/2026 | I/O port access reliability check |
@@ -628,17 +729,26 @@ make V=1
 
 | Target | Description |
 |--------|-------------|
-| `make` | Build all driver tiers (68020+ and 68000) + utilities |
-| `make full` | 68020+ full only (with debug support) |
-| `make small` | 68020+ small only (no debug) |
-| `make full-000` | 68000 full only (stock A600) |
-| `make small-000` | 68000 small only (stock A600) |
+| `make` | Build all driver tiers + `ptable.library` variants + utilities |
+| `make full` | 68020+ full driver only (with debug support) |
+| `make small` | 68020+ small driver only (no debug) |
+| `make full-000` | 68000 full driver only (stock A600) |
+| `make small-000` | 68000 small driver only (stock A600) |
+| `make library` | All `ptable.library` variants (68020+ and 68000, full + small) |
+| `make library-full` | 68020+ full `ptable.library` only |
+| `make library-small` | 68020+ small `ptable.library` only |
+| `make library-full-000` | 68000 full `ptable.library` only |
+| `make library-small-000` | 68000 small `ptable.library` only |
 | `make tools` | Build utilities (requires vbcc + NDK) |
 | `make GTIMING=1` | Build with Gayle timing optimization (experimental) |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |
 | `make clean` | Remove built files |
 | `make help` | Show all available targets |
+
+> All targets write into `dist/<flavour>/<cpu>/{devs,libs}/<file>` -- e.g. `make` produces `dist/full/68020/devs/compactflash.device` and `dist/full/68020/libs/ptable.library` (and the same for the `small` flavour and the `68000` tier). Each `dist/<flavour>/<cpu>/` drawer is a partial sysroot: drop its contents onto `SYS:` to install both the device and `ptable.library` at once.
+
+> Every device build carries a tiny `RTF_COLDSTART` stub that opens `ptable.library` at Kickstart cold start. `ptable.library` must be ROM-resident for autoboot to fire; otherwise the device is mountable but not bootable.
 
 ### Cross-Compilation Notes
 
