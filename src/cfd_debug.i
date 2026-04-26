@@ -13,20 +13,20 @@
 
 DBGMSG	macro
 	lea	\1(pc),a0
-	bsr.w	_DebugStr
+	bsr	_DebugStr
 	endm
 
 DBGCHR	macro
 	moveq.l	#\1,d0
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 	endm
 
 DBGNUM	macro
-	bsr.w	_DebugHex
+	bsr	_DebugHex
 	endm
 
 DBGNL	macro
-	bsr.w	_DebugNewline
+	bsr	_DebugNewline
 	endm
 
 ;--- Common debug entry/exit macros ---
@@ -50,8 +50,8 @@ DBG_EXIT	macro
 DBGMSG_HEX	macro
 	DBGMSG	\1
 	move.w	\2(a2),d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	bsr	_DebugHexWord
+	bsr	_DebugNewline
 	endm
 
 ;--- DBGMSG_ATA: output label + ATA string + newline ---
@@ -61,8 +61,8 @@ DBGMSG_ATA	macro
 	DBGMSG	\1
 	lea	\2(a3),a0
 	moveq.l	#\3,d1
-	bsr.w	_DebugATAStr
-	bsr.w	_DebugNewline
+	bsr	_DebugATAStr
+	bsr	_DebugNewline
 	endm
 
 	else
@@ -140,7 +140,7 @@ _dh_loop:
 	rol.l	#4,d2
 	moveq.l	#$0f,d0
 	and.l	d2,d0
-	bsr.w	_DebugHexDigit
+	bsr	_DebugHexDigit
 	dbra	d3,_dh_loop
 	DBG_EXIT	d0-d3/a0-a1/a6
 _dh_end:
@@ -149,7 +149,7 @@ _dh_end:
 ;--- _DebugNewline: output CR+LF ---
 _DebugNewline:
 	moveq.l	#13,d0
-	bsr.s	_DebugChar
+	bsr	_DebugChar
 	moveq.l	#10,d0
 	bra.s	_DebugChar
 
@@ -183,7 +183,7 @@ _das_loop:
 	bne.s	_das_print		;print if > space
 	moveq.l	#'.',d0			;replace space with dot
 _das_print:
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 _das_skip:
 	dbra	d2,_das_loop		;d2 is safe from _DebugChar
 	DBG_EXIT	d0-d2/a0-a1/a6
@@ -223,7 +223,7 @@ _dhd_line:
 	;print word offset (W0, W8, W16... W248)
 	DBGCHR	'W'
 	move.w	d3,d0
-	bsr.w	_DebugDecimal		;output decimal number
+	bsr	_DebugDecimal		;output decimal number
 	DBGCHR	':'
 	DBGCHR	' '
 
@@ -231,13 +231,13 @@ _dhd_line:
 	moveq.l	#7,d2
 _dhd_word:
 	move.w	(a0)+,d0
-	bsr.w	_DebugHexWord
+	bsr	_DebugHexWord
 	DBGCHR	' '
 	dbra	d2,_dhd_word
 	addq.w	#8,d3			;next line starts at word+8
 
 	;newline
-	bsr.w	_DebugNewline
+	bsr	_DebugNewline
 
 	dbra	d4,_dhd_line
 
@@ -253,10 +253,10 @@ _DebugHexByte:
 	DBG_ENTRY	_dhb_end,d0-d2/a6
 	move.b	d0,d2
 	lsr.b	#4,d0
-	bsr.w	_DebugHexDigit
+	bsr	_DebugHexDigit
 	move.b	d2,d0
 	and.b	#$0f,d0
-	bsr.w	_DebugHexDigit
+	bsr	_DebugHexDigit
 	DBG_EXIT	d0-d2/a6
 _dhb_end:
 	rts
@@ -279,10 +279,10 @@ _DebugIdentifyFields:
 	;Words 60-61: LBA capacity (swap words for display)
 	DBGMSG	dbg_id_lba
 	move.w	122(a2),d0		;Word 61 (high)
-	bsr.w	_DebugHexWord
+	bsr	_DebugHexWord
 	move.w	120(a2),d0		;Word 60 (low)
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	bsr	_DebugHexWord
+	bsr	_DebugNewline
 
 	;Word 63: Multiword DMA
 	DBGMSG_HEX	dbg_id_dma,126
@@ -305,9 +305,9 @@ _DebugHexWord:
 	DBG_ENTRY	_dhw_end,d0-d1/a6
 	move.w	d0,d1
 	lsr.w	#8,d0
-	bsr.w	_DebugHexByte
+	bsr	_DebugHexByte
 	move.w	d1,d0
-	bsr.w	_DebugHexByte
+	bsr	_DebugHexByte
 	DBG_EXIT	d0-d1/a6
 _dhw_end:
 	rts
@@ -329,7 +329,7 @@ _dtm_check:
 	bne.s	_dtm_end
 	DBGMSG	dbg_rwtest_nomode	;" (no working mode)"
 _dtm_end:
-	bsr.w	_DebugNewline
+	bsr	_DebugNewline
 	rts
 
 ;--- _DebugDecimal: output d0.w as decimal (0-255) ---
@@ -354,7 +354,7 @@ _dd_h_done:
 	tst.w	d0
 	beq.s	_dd_tens
 	add.b	#'0',d0
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 	moveq.l	#1,d3			;set leading flag
 
 _dd_tens:
@@ -373,13 +373,13 @@ _dd_t_done:
 	beq.s	_dd_ones		;skip leading zero
 _dd_t_print:
 	add.b	#'0',d0
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 
 _dd_ones:
 	;ones digit (always print)
 	move.w	d2,d0
 	add.b	#'0',d0
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 
 	DBG_EXIT	d0-d3/a6
 _dd_end:
@@ -396,7 +396,7 @@ _DebugDecimal32:
 	bne.s	_dd32_loop
 	; special case: 0
 	moveq.l	#'0',d0
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 	bra.s	_dd32_restore
 
 _dd32_loop:
@@ -437,7 +437,7 @@ _dd32_out:
 	beq.s	_dd32_restore
 	moveq.l	#0,d0
 	move.b	(sp)+,d0
-	bsr.w	_DebugChar
+	bsr	_DebugChar
 	bra.s	_dd32_out
 
 _dd32_restore:
@@ -452,15 +452,15 @@ _DebugIDEStatus:
 	move.l	d0,d1			;save status
 	DBGMSG	dbg_idestatus
 	move.l	d1,d0
-	bsr.w	_DebugHex
-	bsr.w	_DebugNewline
+	bsr	_DebugHex
+	bsr	_DebugNewline
 	DBGMSG	dbg_ideerr
 	;Read error register
 	move.l	CFU_IDEAddr(a3),a0
 	moveq.l	#0,d0
 	move.b	2(a0),d0		;error register at offset 2
-	bsr.w	_DebugHex
-	bsr.w	_DebugNewline
+	bsr	_DebugHex
+	bsr	_DebugNewline
 	DBG_EXIT	d0-d1/a0
 _dis_end:
 	rts

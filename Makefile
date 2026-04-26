@@ -4,12 +4,26 @@
 # Usage: make [options] [target]
 #   help - show detailed usage output
 
-# Driver Version (update these for new releases)
+# Release version (controls archive name and readme; update for each release)
 VERSION_MAJOR = 1
-VERSION_MINOR = 41
-VERSION_SUFFIX =
-DATE = 18.04.2026
-DATE_SHORT = 04/2026
+VERSION_MINOR = 42
+VERSION_SUFFIX = -dev
+DATE = 03.05.2026
+DATE_SHORT = 05/2026
+
+# compactflash.device version
+CFD_MAJOR = 1
+CFD_MINOR = 42
+CFD_VERSION_SUFFIX = -dev
+CFD_DATE = 02.05.2026
+
+# ptable.library version; bumped only on library-ABI changes:
+# - additive LVOs bump REVISION
+# - breaking changes bump MAJOR
+PLIB_MAJOR = 1
+PLIB_MINOR = 0
+PLIB_VERSION_SUFFIX = -dev
+PLIB_DATE = 02.05.2026
 
 # Tool-specific versions
 CFINFO_VERSION = 1.37
@@ -21,10 +35,15 @@ PCMCIASPEED_DATE = 02.01.2026
 PCMCIACHECK_VERSION = 1.38
 PCMCIACHECK_DATE = 22.01.2026
 
-# Derived version
+# Derived versions
 VERSION = $(VERSION_MAJOR).$(VERSION_MINOR)$(VERSION_SUFFIX)
 VERSION_NODOT = $(VERSION_MAJOR)$(VERSION_MINOR)
+CFD_VERSION = $(CFD_MAJOR).$(CFD_MINOR)$(CFD_VERSION_SUFFIX)
 VERSION_INC = src/cfd_version.i
+
+# ptable.library version include (auto-generated like cfd_version.i)
+PLIB_VERSION = $(PLIB_MAJOR).$(PLIB_MINOR)$(PLIB_VERSION_SUFFIX)
+PLIB_VERSION_INC = src/lib/ptable_version.i
 
 # Verbose mode (V=1 for verbose output)
 ifeq ($(V),1)
@@ -66,24 +85,88 @@ VBCCFLAGS = +aos68k -O2 -c99 -INDK/Include_H
 # inside src/cfd.s. Must not be set for the 68000 tier.
 VASMCPU_020 = -m68020 -D__68020__=1
 VASMCPU_000 = -m68000
+# Aliases used by the static-pattern recipes via $(VASMCPU_$(cpu))
+# where cpu is the directory name "68020" / "68000".
+VASMCPU_68020 = $(VASMCPU_020)
+VASMCPU_68000 = $(VASMCPU_000)
 
 # Directories
 SRCDIR = src
-OUTDIR_DEVS = dist/devs
-OUTDIR_DEVS_020 = $(OUTDIR_DEVS)/68020
-OUTDIR_DEVS_000 = $(OUTDIR_DEVS)/68000
-OUTDIR_C = dist/c
+LIBSRC = src/lib
+OUTDIR = dist
+OUTDIR_C = $(OUTDIR)/c
 
 # Files: Driver
-# 68020+ is the default build (A1200 and 68020+ accelerators) and sits
-# at the devs/68020/ path. 68000 build ships under devs/68000/ for
-# stock A600.
 SOURCE = $(SRCDIR)/cfd.s
-TARGET_FULL = $(OUTDIR_DEVS_020)/compactflash.device
-TARGET_SMALL = $(OUTDIR_DEVS_020)/compactflash.device.small
-TARGET_FULL_000 = $(OUTDIR_DEVS_000)/compactflash.device
-TARGET_SMALL_000 = $(OUTDIR_DEVS_000)/compactflash.device.small
-DRIVER_TARGETS = $(TARGET_FULL) $(TARGET_SMALL) $(TARGET_FULL_000) $(TARGET_SMALL_000)
+# Extra sources pulled in via "include" from cfd.s.  Listed here so
+# a change to them triggers a rebuild of the driver targets below.
+SOURCE_DEPS = $(LIBSRC)/ptable_pub.i \
+              $(LIBSRC)/umul32.i \
+              $(LIBSRC)/log2.i \
+              $(LIBSRC)/udivmod32.i \
+              $(LIBSRC)/raw_debug.i
+
+# Files: ptable.library
+LIB_SOURCE = $(LIBSRC)/ptable_lib.s
+# Extra sources pulled in via "include" from ptable_lib.s.  Listed here
+# so a change to any of them triggers a rebuild of the library targets.
+LIB_SOURCE_DEPS = $(LIBSRC)/ptable_boot.s $(LIBSRC)/ptable_fs.s \
+                  $(LIBSRC)/ptable_hunk.s $(LIBSRC)/ptable_dosdiag.i \
+                  $(LIBSRC)/ptable_pub.i \
+                  $(LIBSRC)/umul32.i $(LIBSRC)/log2.i \
+                  $(LIBSRC)/raw_debug.i
+
+# Per-flavor / per-cpu output drawers.
+#
+# dist/<flavor>/<cpu>/{devs,libs}/<file> mirrors the AmigaOS install
+# tree: dragging the contents of dist/<flavor>/<cpu>/ into SYS:
+# installs both the device (devs/) and the library (libs/) at once,
+# with their final filenames - no .small suffix to drop.
+DEVICE_TARGETS = \
+  $(OUTDIR)/full/68020/devs/compactflash.device  \
+  $(OUTDIR)/full/68000/devs/compactflash.device  \
+  $(OUTDIR)/small/68020/devs/compactflash.device \
+  $(OUTDIR)/small/68000/devs/compactflash.device
+
+LIBRARY_TARGETS = \
+  $(OUTDIR)/full/68020/libs/ptable.library  \
+  $(OUTDIR)/full/68000/libs/ptable.library  \
+  $(OUTDIR)/small/68020/libs/ptable.library \
+  $(OUTDIR)/small/68000/libs/ptable.library
+
+DRIVER_TARGETS = $(DEVICE_TARGETS)
+
+# Convenience aliases (used by the readme template substitutions and
+# the per-tier convenience phonies further down).
+TARGET_FULL      = $(OUTDIR)/full/68020/devs/compactflash.device
+TARGET_SMALL     = $(OUTDIR)/small/68020/devs/compactflash.device
+TARGET_FULL_000  = $(OUTDIR)/full/68000/devs/compactflash.device
+TARGET_SMALL_000 = $(OUTDIR)/small/68000/devs/compactflash.device
+LIB_FULL         = $(OUTDIR)/full/68020/libs/ptable.library
+LIB_SMALL        = $(OUTDIR)/small/68020/libs/ptable.library
+LIB_FULL_000     = $(OUTDIR)/full/68000/libs/ptable.library
+LIB_SMALL_000    = $(OUTDIR)/small/68000/libs/ptable.library
+
+# List of all artifacts for checksum generation (name:target:desc triples).
+# name  - label printed in the readme; desc - optional parenthetical tag.
+TOOLS_ALL = \
+  full/68020/devs/compactflash.device:$(TARGET_FULL):$(CFD_VERSION):$(CFD_DATE) \
+  small/68020/devs/compactflash.device:$(TARGET_SMALL):$(CFD_VERSION):$(CFD_DATE) \
+  full/68000/devs/compactflash.device:$(TARGET_FULL_000):$(CFD_VERSION):$(CFD_DATE) \
+  small/68000/devs/compactflash.device:$(TARGET_SMALL_000):$(CFD_VERSION):$(CFD_DATE) \
+  full/68020/libs/ptable.library:$(LIB_FULL):$(PLIB_VERSION):$(PLIB_DATE) \
+  small/68020/libs/ptable.library:$(LIB_SMALL):$(PLIB_VERSION):$(PLIB_DATE) \
+  full/68000/libs/ptable.library:$(LIB_FULL_000):$(PLIB_VERSION):$(PLIB_DATE) \
+  small/68000/libs/ptable.library:$(LIB_SMALL_000):$(PLIB_VERSION):$(PLIB_DATE) \
+  CFInfo:$(TARGET_CFINFO):$(CFINFO_VERSION):$(CFINFO_DATE) \
+  pcmciaspeed:$(TARGET_PCMCIASPEED):$(PCMCIASPEED_VERSION):$(PCMCIASPEED_DATE) \
+  pcmciacheck:$(TARGET_PCMCIACHECK):$(PCMCIACHECK_VERSION):$(PCMCIACHECK_DATE)
+
+# Lookup tables consumed by the static-pattern recipes below.
+# DEBUG_<flavor> resolves to the per-flavor extra vasm flags;
+# VASMCPU_<cpu> already exists above (-m68020 -D__68020__=1 vs -m68000).
+DEBUG_full  = -DDEBUG=1
+DEBUG_small =
 
 # Files: Tools
 SOURCE_CFINFO = $(SRCDIR)/cfinfo.c
@@ -94,7 +177,12 @@ SOURCE_PCMCIACHECK = $(SRCDIR)/pcmciacheck.c
 TARGET_PCMCIACHECK = $(OUTDIR_C)/pcmciacheck
 
 # Files: Release
-RELEASE_NAME = cfd$(VERSION_NODOT)
+DATE_YYYYMMDD = $(shell echo "$(DATE)" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)/\3\2\1/')
+ifneq ($(VERSION_SUFFIX),)
+  RELEASE_NAME = cfd.v$(VERSION)$(DATE_YYYYMMDD)
+else
+  RELEASE_NAME = cfd.v$(VERSION)
+endif
 ARCHIVE_NAME = $(RELEASE_NAME).lha
 README_NAME = $(RELEASE_NAME).readme
 README_TEMPLATE = dist.readme.in
@@ -104,8 +192,8 @@ README_INFO = dist/cfd.readme.info
 # Build targets
 # ============================================================
 
-# Default target - build both versions and tools
-all: check-vasm version-readme $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+# Default target - build all driver tiers, library, and tools
+all: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Generate version include file (always check, only update if changed)
 # Uses a stamp file to track the current version string
@@ -114,7 +202,7 @@ VERSION_STAMP = .version-stamp
 FORCE:
 
 $(VERSION_STAMP): FORCE
-	$(Q)echo "$(VERSION) $(DATE)" > $(VERSION_STAMP).tmp
+	$(Q)echo "$(CFD_VERSION) $(CFD_DATE)" > $(VERSION_STAMP).tmp
 	$(Q)if ! cmp -s $(VERSION_STAMP).tmp $(VERSION_STAMP) 2>/dev/null; then \
 		mv $(VERSION_STAMP).tmp $(VERSION_STAMP); \
 	else \
@@ -122,61 +210,74 @@ $(VERSION_STAMP): FORCE
 	fi
 
 $(VERSION_INC): $(VERSION_STAMP)
-	$(Q)echo "  VERSION $(VERSION)"
+	$(Q)echo "  VERSION compactflash.device $(CFD_VERSION)"
 	$(Q)echo "; Auto-generated by Makefile" > $@
-	$(Q)echo "FILE_VERSION	= $(VERSION_MAJOR)" >> $@
-	$(Q)echo "FILE_REVISION	= $(VERSION_MINOR)" >> $@
+	$(Q)echo "FILE_VERSION	= $(CFD_MAJOR)" >> $@
+	$(Q)echo "FILE_REVISION	= $(CFD_MINOR)" >> $@
 	$(Q)echo "VERSION_STRING	macro" >> $@
 	$(Q)echo "	ifd	__68020__" >> $@
-	$(Q)echo "	dc.b	\"compactflash.device $(VERSION) ($(DATE)) [68020]\"" >> $@
+	$(Q)echo "	dc.b	\"compactflash.device $(CFD_VERSION) ($(CFD_DATE)) [68020]\"" >> $@
 	$(Q)echo "	else" >> $@
-	$(Q)echo "	dc.b	\"compactflash.device $(VERSION) ($(DATE)) [68000]\"" >> $@
+	$(Q)echo "	dc.b	\"compactflash.device $(CFD_VERSION) ($(CFD_DATE)) [68000]\"" >> $@
+	$(Q)echo "	endc" >> $@
+	$(Q)echo "	endm" >> $@
+
+# ptable.library version include - regenerated whenever the library
+# version macros above change (the stamp file already tracks the
+# device VERSION; library version is bound to it because both are
+# released as one archive).
+$(PLIB_VERSION_INC): $(VERSION_STAMP)
+	$(Q)echo "  VERSION ptable.library $(PLIB_VERSION)"
+	$(Q)echo "; Auto-generated by Makefile" > $@
+	$(Q)echo "LIB_VERSION	= $(PLIB_MAJOR)" >> $@
+	$(Q)echo "LIB_REVISION	= $(PLIB_MINOR)" >> $@
+	$(Q)echo "LIB_VERSION_STRING	macro" >> $@
+	$(Q)echo "	ifd	__68020__" >> $@
+	$(Q)echo "	dc.b	\"ptable.library $(PLIB_VERSION) ($(PLIB_DATE)) [68020]\"" >> $@
+	$(Q)echo "	else" >> $@
+	$(Q)echo "	dc.b	\"ptable.library $(PLIB_VERSION) ($(PLIB_DATE)) [68000]\"" >> $@
 	$(Q)echo "	endc" >> $@
 	$(Q)echo "	endm" >> $@
 
 # Update version suffix in README.md (in-place)
 # Updates the "What's New" section header: ### v1.36 or ### v1.36-dev
 version-readme:
-	$(Q)sed -i 's/^### v$(VERSION_MAJOR)\.$(VERSION_MINOR)[^[:space:]]*/### v$(VERSION)/' README.md
-	$(Q)echo "  README  version updated to $(VERSION)"
+	$(Q)sed -i 's/^### v$(VERSION_MAJOR)\.$(VERSION_MINOR)[^ ]* ([0-9]\{2\}\.[0-9]\{2\}\.[0-9]\{4\})/### v$(VERSION) ($(DATE))/' README.md
+	$(Q)echo "  README  version updated to v$(VERSION) ($(DATE))"
 
-# Full version, 68020+ (with serial debug capability)
-$(TARGET_FULL): $(SOURCE) $(VERSION_INC)
-	$(Q)mkdir -p $(OUTDIR_DEVS_020)
-	$(Q)echo "  VASM    $@ [full, 68020+${TEXT}]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_020) -DDEBUG=1 -o $@ $<
+# Driver: dist/<flavor>/<cpu>/devs/compactflash.device
+#
+# Static-pattern rule -- $* matches "<flavor>/<cpu>" (e.g. "full/68020"),
+# from which we derive vasm flags via the DEBUG_<flavor> / VASMCPU_<cpu>
+# lookup tables defined above.
+$(DEVICE_TARGETS): $(OUTDIR)/%/devs/compactflash.device: $(SOURCE) $(SOURCE_DEPS) $(VERSION_INC)
+	$(eval flav := $(word 1,$(subst /, ,$*)))
+	$(eval cpu  := $(word 2,$(subst /, ,$*)))
+	$(Q)mkdir -p $(@D)
+	$(Q)echo "  VASM    $@ [$(flav), $(cpu)$(TEXT)]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_$(cpu)) $(DEBUG_$(flav)) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
-# Small version, 68020+ (no debug code/strings)
-$(TARGET_SMALL): $(SOURCE) $(VERSION_INC)
-	$(Q)mkdir -p $(OUTDIR_DEVS_020)
-	$(Q)echo "  VASM    $@ [small, 68020+$(TEXT)]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_020) -o $@ $<
+# ptable.library: dist/<flavor>/<cpu>/libs/ptable.library
+$(LIBRARY_TARGETS): $(OUTDIR)/%/libs/ptable.library: $(LIB_SOURCE) $(LIB_SOURCE_DEPS) $(PLIB_VERSION_INC)
+	$(eval flav := $(word 1,$(subst /, ,$*)))
+	$(eval cpu  := $(word 2,$(subst /, ,$*)))
+	$(Q)mkdir -p $(@D)
+	$(Q)echo "  VASM    $@ [$(flav), $(cpu)]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_$(cpu)) $(DEBUG_$(flav)) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
-# Full version, 68000 (with serial debug capability)
-$(TARGET_FULL_000): $(SOURCE) $(VERSION_INC)
-	$(Q)mkdir -p $(OUTDIR_DEVS_000)
-	$(Q)echo "  VASM    $@ [full, 68000${TEXT}]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_000) -DDEBUG=1 -o $@ $<
-	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
-
-# Small version, 68000 (no debug code/strings)
-$(TARGET_SMALL_000): $(SOURCE) $(VERSION_INC)
-	$(Q)mkdir -p $(OUTDIR_DEVS_000)
-	$(Q)echo "  VASM    $@ [small, 68000$(TEXT)]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_000) -o $@ $<
-	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
-
-# Build only full version (68020+)
-full: check-vasm $(TARGET_FULL)
-
-# Build only small version (68020+)
-small: check-vasm $(TARGET_SMALL)
-
-# Build only 68000 variants
-full-000: check-vasm $(TARGET_FULL_000)
+# Per-tier convenience phonies (subsets of DEVICE_TARGETS / LIBRARY_TARGETS)
+full:      check-vasm $(TARGET_FULL)
+small:     check-vasm $(TARGET_SMALL)
+full-000:  check-vasm $(TARGET_FULL_000)
 small-000: check-vasm $(TARGET_SMALL_000)
+
+library:           check-vasm $(LIBRARY_TARGETS)
+library-full:      check-vasm $(LIB_FULL)
+library-small:     check-vasm $(LIB_SMALL)
+library-full-000:  check-vasm $(LIB_FULL_000)
+library-small-000: check-vasm $(LIB_SMALL_000)
 
 # Tools only target
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
@@ -187,7 +288,7 @@ guides:
 	$(Q)tools/md2guide.py docs/CFInfo.md dist/docs/CFInfo.guide --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
 	$(Q)tools/md2guide.py docs/pcmciaspeed.md dist/docs/pcmciaspeed.guide --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
 	$(Q)tools/md2guide.py docs/pcmciacheck.md dist/docs/pcmciacheck.guide --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
-	$(Q)tools/md2guide.py README.md dist/docs/cfd.guide --version $(VERSION) --date $(DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
+	$(Q)tools/md2guide.py README.md dist/docs/cfd.guide --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
 
 # CFInfo utility (requires vbcc)
 $(TARGET_CFINFO): $(SOURCE_CFINFO)
@@ -215,71 +316,52 @@ $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
 # ============================================================
 
 # Generate readme from template
-$(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+$(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 	@echo "Generating $(README_NAME) from template..."
-	$(eval FULL_SIZE := $(shell stat -c%s $(TARGET_FULL)))
-	$(eval FULL_MD5 := $(shell md5sum $(TARGET_FULL) | cut -d' ' -f1))
-	$(eval FULL_SHA256 := $(shell sha256sum $(TARGET_FULL) | cut -d' ' -f1))
-	$(eval SMALL_SIZE := $(shell stat -c%s $(TARGET_SMALL)))
-	$(eval SMALL_MD5 := $(shell md5sum $(TARGET_SMALL) | cut -d' ' -f1))
-	$(eval SMALL_SHA256 := $(shell sha256sum $(TARGET_SMALL) | cut -d' ' -f1))
-	$(eval FULL_SIZE_000 := $(shell stat -c%s $(TARGET_FULL_000)))
-	$(eval FULL_MD5_000 := $(shell md5sum $(TARGET_FULL_000) | cut -d' ' -f1))
-	$(eval FULL_SHA256_000 := $(shell sha256sum $(TARGET_FULL_000) | cut -d' ' -f1))
-	$(eval SMALL_SIZE_000 := $(shell stat -c%s $(TARGET_SMALL_000)))
-	$(eval SMALL_MD5_000 := $(shell md5sum $(TARGET_SMALL_000) | cut -d' ' -f1))
-	$(eval SMALL_SHA256_000 := $(shell sha256sum $(TARGET_SMALL_000) | cut -d' ' -f1))
-	$(eval CFINFO_SIZE := $(shell stat -c%s $(TARGET_CFINFO)))
-	$(eval CFINFO_MD5 := $(shell md5sum $(TARGET_CFINFO) | cut -d' ' -f1))
-	$(eval CFINFO_SHA256 := $(shell sha256sum $(TARGET_CFINFO) | cut -d' ' -f1))
-	$(eval PCMCIASPEED_SIZE := $(shell stat -c%s $(TARGET_PCMCIASPEED)))
-	$(eval PCMCIASPEED_MD5 := $(shell md5sum $(TARGET_PCMCIASPEED) | cut -d' ' -f1))
-	$(eval PCMCIASPEED_SHA256 := $(shell sha256sum $(TARGET_PCMCIASPEED) | cut -d' ' -f1))
-	$(eval PCMCIACHECK_SIZE := $(shell stat -c%s $(TARGET_PCMCIACHECK)))
-	$(eval PCMCIACHECK_MD5 := $(shell md5sum $(TARGET_PCMCIACHECK) | cut -d' ' -f1))
-	$(eval PCMCIACHECK_SHA256 := $(shell sha256sum $(TARGET_PCMCIACHECK) | cut -d' ' -f1))
-	@sed -e 's|@VERSION@|$(VERSION)|g' \
-		 -e 's|@DATE@|$(DATE)|g' \
-		 -e 's|@DATE_SHORT@|$(DATE_SHORT)|g' \
-		 -e 's|@FULL_SIZE@|$(FULL_SIZE)|g' \
-		 -e 's|@FULL_MD5@|$(FULL_MD5)|g' \
-		 -e 's|@FULL_SHA256@|$(FULL_SHA256)|g' \
-		 -e 's|@SMALL_SIZE@|$(SMALL_SIZE)|g' \
-		 -e 's|@SMALL_MD5@|$(SMALL_MD5)|g' \
-		 -e 's|@SMALL_SHA256@|$(SMALL_SHA256)|g' \
-		 -e 's|@FULL_SIZE_000@|$(FULL_SIZE_000)|g' \
-		 -e 's|@FULL_MD5_000@|$(FULL_MD5_000)|g' \
-		 -e 's|@FULL_SHA256_000@|$(FULL_SHA256_000)|g' \
-		 -e 's|@SMALL_SIZE_000@|$(SMALL_SIZE_000)|g' \
-		 -e 's|@SMALL_MD5_000@|$(SMALL_MD5_000)|g' \
-		 -e 's|@SMALL_SHA256_000@|$(SMALL_SHA256_000)|g' \
-		 -e 's|@CFINFO_SIZE@|$(CFINFO_SIZE)|g' \
-		 -e 's|@CFINFO_MD5@|$(CFINFO_MD5)|g' \
-		 -e 's|@CFINFO_SHA256@|$(CFINFO_SHA256)|g' \
-		 -e 's|@PCMCIASPEED_SIZE@|$(PCMCIASPEED_SIZE)|g' \
-		 -e 's|@PCMCIASPEED_MD5@|$(PCMCIASPEED_MD5)|g' \
-		 -e 's|@PCMCIASPEED_SHA256@|$(PCMCIASPEED_SHA256)|g' \
-		 -e 's|@PCMCIACHECK_SIZE@|$(PCMCIACHECK_SIZE)|g' \
-		 -e 's|@PCMCIACHECK_MD5@|$(PCMCIACHECK_MD5)|g' \
-		 -e 's|@PCMCIACHECK_SHA256@|$(PCMCIACHECK_SHA256)|g' \
-		 $(README_TEMPLATE) > $@
+	@tool_checksums=""; \
+	for tool_info in $(TOOLS_ALL); do \
+		tool_name=$$(echo "$$tool_info" | cut -d: -f1); \
+		tool_target=$$(echo "$$tool_info" | cut -d: -f2); \
+		tool_version=$$(echo "$$tool_info" | cut -d: -f3); \
+		tool_date=$$(echo "$$tool_info" | cut -d: -f4); \
+		if [ -f "$$tool_target" ]; then \
+			tool_size=$$(stat -c%s "$$tool_target" 2>/dev/null || echo 0); \
+			tool_md5=$$(md5sum "$$tool_target" 2>/dev/null | cut -d' ' -f1 || echo "N/A"); \
+			tool_sha256=$$(sha256sum "$$tool_target" 2>/dev/null | cut -d' ' -f1 || echo "N/A"); \
+			tool_checksums="$$tool_checksums$$tool_name $$tool_version ($$tool_date) ($$tool_size bytes):\n  MD5:    $$tool_md5\n  SHA256: $$tool_sha256\n\n"; \
+		fi; \
+	done; \
+	sed -e "s|@VERSION@|$(VERSION)|g" \
+	    -e "s|@DATE@|$(DATE)|g" \
+	    -e "s|@CFD_VERSION@|$(CFD_VERSION)|g" \
+	    -e "s|@PLIB_VERSION@|$(PLIB_VERSION)|g" \
+	    -e "s|@TOOL_CHECKSUMS@|$$tool_checksums|" \
+	    $(README_TEMPLATE) > $@
 	@echo "Generated: $@"
 
 # Generate readme only
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: check-vasm version-readme $(DRIVER_TARGETS) $(README_NAME) guides check-lha
+release: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(README_NAME) guides check-lha
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
 	@echo "=================================="
 	$(eval STAGING := $(shell mktemp -d))
-	@mkdir -p "$(STAGING)/cfd/src"
+	@mkdir -p "$(STAGING)/cfd/src/lib"
 	@echo "Copying files..."
-	@# Copy dist/ contents (binaries, docs, images, icons)
-	@cp -r dist/c dist/devs dist/docs dist/images "$(STAGING)/cfd/"
-	@cp dist/*.info "$(STAGING)/cfd/"
+	@# Per-flavor binary trees (cfd/full/<cpu>/{devs,libs}/<file>)
+	@cp -r dist/full dist/small "$(STAGING)/cfd/"
+	@# Flavor-shared assets (tools, mountlist, docs, images)
+	@cp -r dist/c dist/Storage dist/docs dist/images "$(STAGING)/cfd/"
+	@# Top-level icons paired with the top-level drawers/files above.
+	@# (devs.info / libs.info are reused per-flavor below, not at
+	@# the cfd/ root - there are no top-level devs/ or libs/ drawers.)
+	@cp dist/full.info dist/small.info \
+	    dist/c.info dist/docs.info dist/images.info dist/src.info \
+	    dist/LICENSE.info dist/def_CF0.info "$(STAGING)/cfd/"
 	@# Source code
 	@cp src/*.* "$(STAGING)/cfd/src/"
+	@cp src/lib/*.* "$(STAGING)/cfd/src/lib/"
 	@# Documentation and license
 	@cp $(README_NAME) "$(STAGING)/cfd/cfd.readme"
 	@cp $(README_INFO) "$(STAGING)/cfd/cfd.readme.info"
@@ -335,9 +417,9 @@ check-lha:
 # Utility targets
 # ============================================================
 
-# Show checksums for both versions
-checksums: $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
-	@for target in $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK); do \
+# Show checksums for all built artifacts
+checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+	@for target in $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK); do \
 		if [ -f "$$target" ]; then \
 			echo "=== $${target} ==="; \
 			ls -l "$$target"; \
@@ -350,9 +432,10 @@ checksums: $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCM
 
 # Clean build artifacts
 clean:
-	rm -f $(DRIVER_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(VERSION_INC) $(VERSION_STAMP)
-	$(Q)[ ! -d $(OUTDIR_DEVS_020) ] || rmdir --ignore-fail-on-non-empty $(OUTDIR_DEVS_020)
-	$(Q)[ ! -d $(OUTDIR_DEVS_000) ] || rmdir --ignore-fail-on-non-empty $(OUTDIR_DEVS_000)
+	rm -f $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(VERSION_INC) $(PLIB_VERSION_INC) $(VERSION_STAMP)
+	$(Q)for d in $(OUTDIR)/full $(OUTDIR)/small ; do \
+		[ ! -d $$d ] || find $$d -depth -type d -empty -delete ; \
+	done
 
 # Clean everything including release archives
 distclean: clean
@@ -363,19 +446,29 @@ help:
 	@echo "Usage: make [V=1] [target]"
 	@echo ""
 	@echo "Build targets:"
-	@echo "  all       - Build driver (both CPU tiers) + tools (default)"
-	@echo "  full      - Build 68020+ full driver only (with serial debug capability)"
-	@echo "  small     - Build 68020+ small driver only (no serial debug code)"
-	@echo "  full-000  - Build 68000 full driver only (stock A600)"
-	@echo "  small-000 - Build 68000 small driver only (stock A600)"
-	@echo "  tools     - Build all tools"
-	@echo "  guides    - Generate AmigaGuide documentation from Markdown"
+	@echo "  all              - Build driver + ptable.library + tools (default)"
+	@echo "  full             - Build 68020+ full driver only (with serial debug capability)"
+	@echo "  small            - Build 68020+ small driver only (no serial debug code)"
+	@echo "  full-000         - Build 68000 full driver only (stock A600)"
+	@echo "  small-000        - Build 68000 small driver only (stock A600)"
+	@echo "  library          - Build all ptable.library variants"
+	@echo "  library-full     - Build 68020+ full ptable.library only"
+	@echo "  library-small    - Build 68020+ small ptable.library only"
+	@echo "  library-full-000 - Build 68000 full ptable.library only"
+	@echo "  library-small-000- Build 68000 small ptable.library only"
+	@echo "  tools            - Build all tools"
+	@echo "  guides           - Generate AmigaGuide documentation from Markdown"
 	@echo ""
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
 	@echo "  GTIMING=1           - Enable Gayle timing optimization (experimental)"
 	@echo "  VASM_HOME=/opt/vbcc - vasm installation path"
 	@echo "  VBCC_HOME=/opt/vbcc - vbcc installation path"
+	@echo ""
+	@echo "Note: every device build carries a tiny RTF_COLDSTART stub"
+	@echo "      that OpenLibrarys ptable.library at Kickstart cold start."
+	@echo "      Make sure ptable.library ends up in ROM (Remus / Capitoline)"
+	@echo "      for autoboot to fire."
 	@echo ""
 	@echo "Release targets:"
 	@echo "  version-readme - Update version suffix in README.md (in-place)"
@@ -389,16 +482,20 @@ help:
 	@echo "  help      - Show this help"
 	@echo ""
 	@echo "Output files:"
-	@echo "  $(TARGET_FULL) - 68020+ full (A1200 stock + 68020+ accelerators)"
+	@echo "  $(TARGET_FULL) - 68020+ full (A1200 stock; 68020+)"
 	@echo "  $(TARGET_SMALL) - 68020+ small"
-	@echo "  $(TARGET_FULL_000) - 68000 full (stock A600)"
-	@echo "  $(TARGET_SMALL_000) - 68000 small (stock A600)"
+	@echo "  $(TARGET_FULL_000) - 68000 full (stock A600; 68000+)"
+	@echo "  $(TARGET_SMALL_000) - 68000 small"
+	@echo "  $(LIB_FULL) - 68020+ full ptable.library"
+	@echo "  $(LIB_SMALL) - 68020+ small ptable.library"
+	@echo "  $(LIB_FULL_000) - 68000 full ptable.library"
+	@echo "  $(LIB_SMALL_000) - 68000 small ptable.library"
 	@echo "  $(TARGET_CFINFO) - card info utility"
 	@echo "  $(TARGET_PCMCIASPEED) - pcmcia speed/timing benchmark utility"
 	@echo "  $(TARGET_PCMCIACHECK) - pcmcia check utility"
 	@echo "  $(README_NAME) - Aminet readme"
 	@echo "  $(ARCHIVE_NAME) - Aminet release archive"
 	@echo ""
-	@echo "Version: $(VERSION) ($(DATE))"
+	@echo "Release: $(VERSION) ($(DATE)); compactflash.device: $(CFD_VERSION) ($(CFD_DATE)); ptable.library: $(PLIB_VERSION) ($(PLIB_DATE))"
 
-.PHONY: all full small full-000 small-000 tools guides version-readme readme release check-lha checksums clean distclean help
+.PHONY: all full small full-000 small-000 library library-full library-small library-full-000 library-small-000 tools guides version-readme readme release check-lha checksums clean distclean help

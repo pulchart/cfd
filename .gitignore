@@ -4,3 +4,5 @@ NDK
 *.lha
 *.readme
 .version-stamp
+tools/kickstart/workdir_*/
+tools/kickstart/out/

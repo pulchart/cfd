@@ -62,7 +62,7 @@
 ; --- Includes ---
 	include	"cfd_version.i"
 	include	"cfd_debug.i"
-	;include	"cfd_cis.i"
+	include	"lib/ptable_pub.i"
 
 ;--- from exec.library -------------------------------------
 
@@ -87,39 +87,22 @@ INITLIST macro
 	move.l	\1,8(\1)
 	endm
 
-; --- 32-bit math: inline on 68020+, bsr to helper on 68000 ---
-
-UMUL32	macro				;d0 = d0 * d1 (u32)
-	ifd	__68020__
-	mulu.l	d1,d0
-	else
-	bsr.w	UMul32
-	endif
-	endm
-
-UDIVMOD32 macro				;d0 = d0/d1, d1 = d0 mod d1 (u32)
-	ifd	__68020__
-	divul.l	d1,d1:d0
-	else
-	bsr.w	UDivMod32
-	endif
-	endm
-
-LOG2	macro				;d0 = log2(d0), d0 != 0
-	ifd	__68020__
-	bfffo	d0{0:32},d0
-	eori.w	#31,d0
-	else
-	bsr.w	Log2
-	endif
-	endm
+	include	"lib/umul32.i"
+	include	"lib/log2.i"
+	include	"lib/udivmod32.i"
 
 _AbsExecBase	= 4
 
+;SysBase offsets (subset)
+SB_DeviceList	= 350			;ExecBase->DeviceList head
+
+FindResident	= -96
+InitResident	= -102
 Disable		= -120
 Enable		= -126
 Forbid		= -132
 Permit		= -138
+FindName	= -276
 AddIntServer	= -168
 RemIntServer	= -174
 AllocMem	= -198
@@ -174,10 +157,13 @@ LN_Name		= 10
 LN_Sizeof	= 14
 
 ;LN_Type
+NT_UNKNOWN	= 0
 NT_TASK		= 1
 NT_INTERRUPT	= 2
 NT_DEVICE	= 3
+NT_MSGPORT	= 4
 NT_MESSAGE	= 5
+NT_RESOURCE	= 8
 NT_PROCESS	= 13
 
 ;struct MsgPort
@@ -203,6 +189,7 @@ IS_Sizeof	= 22
 MEMF_NORM	= 0
 MEMF_PUBLIC	= 1
 MEMF_CLEAR	= $10000
+MEMF_REVERSE	= $40000			;AllocMem from top of free pool
 
 ;struct Library
 LIB_Node	= 0
@@ -250,6 +237,7 @@ RT_Init		= 22
 RT_Sizeof	= 26
 
 RTC_MATCHWORD	= $4afc
+RT_INIT		= $16			;Resident.rt_Init offset (dos.library init fn)
 RTF_AUTOINIT	= $80
 
 ;struct Task
@@ -408,7 +396,7 @@ TDERR_NOMEM	   = 31
 TDERR_BADUNITNUM   = 32
 TDERR_DRIVEINUSE   = 34
 
-;--- from scsi.device --------------------------------------
+;--- SCSI device command interface -------------------------
 
 ;struct SCSICmd
 SCSI_Data	 = 0
@@ -573,7 +561,16 @@ CFD_DosBase	= 40			;dos.library base pointer
 CFD_CardBase	= 44			;card.resource base pointer
 CFD_SegList	= 48			;segment list for expunge
 CFD_Unit	= 52			;pointer to CFU (single unit)
-CFD_Sizeof	= 56
+; CFD extension for autoboot cooperation with ptable.library.  Always
+; present so the build is autoboot-capable in ROM without any
+; compile-time toggle.  When ptable.library is not loaded the slot
+; stays zero (CFD allocation is MEMF_CLEAR).
+;
+;   offset  size  field
+;     56     1    CFD_BootDone   one-shot re-entry guard set by the
+;                                RTF_COLDSTART stub at end of scan
+CFD_BootDone	= 56
+CFD_Sizeof	= 60
 
 ;---------------------------------------------------------------------------
 ; CompactFlashUnit (CFU) - Per-unit state structure
@@ -742,11 +739,14 @@ Start:
 s_resident:
 	dc.w	RTC_MATCHWORD
 	dc.l	s_resident
-	dc.l	s_codeend
+	dc.l	s_resident_boot		;EndSkip: continue ROM scan into the
+					;cold-start stub Resident below.
 	dc.b	RTF_AUTOINIT
 	dc.b	FILE_VERSION
 	dc.b	NT_DEVICE
-	dc.b	0			;Priority
+	dc.b	21			;Priority: must exceed s_resident_boot
+					;(20) so AddDevice runs before our
+					;cold-start stub.
 	dc.l	s_name
 	dc.l	s_idstring
 	dc.l	s_inittable
@@ -972,7 +972,7 @@ Open:
 	move.l	CFD_Unit(a4),d2
 	bne.s	op_ok
 
-	bsr.w	NewUnit
+	bsr	NewUnit
 	move.l	d0,d2
 	beq.s	op_error
 
@@ -1024,7 +1024,7 @@ cl_1:
 	and.b	LIB_Flags(a4),d1
 	beq.s	cl_end			;may still stay
 
-	bsr.s	Expunge			;or not
+	bsr	Expunge			;or not
 cl_end:
 	movem.l	(sp)+,a2-a4
 	rts
@@ -1048,7 +1048,7 @@ ex_now:
 	CALLSAME Remove
 	CALLSAME Permit
 	move.l	CFD_Unit(a4),a1
-	bsr.w	KillUnit
+	bsr	KillUnit
 	move.l	CFD_SegList(a4),d2
 	moveq.l	#0,d0
 	move.w	LIB_NegSize(a4),d0
@@ -1070,7 +1070,7 @@ BeginIO:
 	move.l	a1,a2			;IORequest
 	move.l	IO_Unit(a2),a3		;&Unit
 	move.l	a6,a4			;&Device
-	bsr.s	FunctionIndex
+	bsr	FunctionIndex
 	move.l	#$2ffffff3,d1
 	btst	d0,d1
 	bne.s	bio_quick
@@ -1565,7 +1565,7 @@ _Write64:
 ;--- read data ---------------------------------------------
 
 _Read:
-	clr.l	IO_Actual(a2)
+	clr.l	IO_Actual(a2)		;CMD_READ: high32 = 0 (32-bit only)
 _Read64:
 	lea	_ReadBlocks(pc),a6
 _r_start:
@@ -1676,7 +1676,7 @@ _sc_ready:
 
 	move.w	SCSI_SenseLength(a2),d1
 	move.l	SCSI_SenseData(a2),a1
-	bsr.w	_GetSense
+	bsr	_GetSense
 	move.w	d0,SCSI_SenseActual(a2)
 _sc_err2:
 	moveq.l	#45,d0			;"general SCSI error"..
@@ -1691,7 +1691,7 @@ _sc_end:
 
 _sc_atapi:
 	move.l	a2,a0
-	bsr.w	_Packet
+	bsr	_Packet
 	bra.s	_sc_end
 
 _sc_tab:
@@ -1759,7 +1759,7 @@ _RequestSense:
 	move.w	CFU_SCSIState(a3),d0
 	move.l	SCSI_Length(a2),d1
 	move.l	(a2),a1			;SCSI_Data
-	bsr.w	_GetSense
+	bsr	_GetSense
 	move.l	d0,SCSI_Actual(a2)
 	moveq.l	#0,d0
 	rts
@@ -2252,8 +2252,8 @@ _t_1:
 	lea	CFU_CardHandle(a3),a1
 	CALLSAME OwnCard
 
-	bsr.w	_CfdFirst		;the HACK
-	bsr.w	_SocketOn		;another HACK
+	bsr	_CfdFirst		;the HACK
+	bsr	_SocketOn		;another HACK
 
 	move.b	#NT_INTERRUPT,CFU_WatchInt+LN_Type(a3)
 	move.w	#-1,CFU_WatchTimer(a3)
@@ -2322,7 +2322,7 @@ _t_check:
 	move.l	d0,CFU_Request(a3)	;got request
 	bne.s	_t_do
 
-	bsr.w	ATAPIPoll		;check for removable media
+	bsr	ATAPIPoll		;check for removable media
 
 	bclr	#1,CFU_EventFlags(a3)
 	bne.s	_t_identify		;card inserted
@@ -2333,7 +2333,7 @@ _t_check:
 _t_do:
 	move.l	d0,a2			;&IORequest
 	clr.b	CFU_IOErr(a3)
-	bsr.w	FunctionIndex
+	bsr	FunctionIndex
 	lsl.l	#1,d0
 	lea	bio_tab(pc),a6
 	add.w	(a6,d0.w),a6		;d0 high bits cleared in FunctionIndex, .w is 68000-safe
@@ -2365,7 +2365,7 @@ _t_identify:
 	lea	CFU_TimeReq(a3),a1
 	CALLEXEC WaitIO
 	or.b	#$20,CFU_EventFlags(a3)	;Interrupt OFF
-	bsr.w	Wait40			;wait 100ms for stable 5V
+	bsr	Wait40			;wait 100ms for stable 5V
 _t_ireset:
 	btst	#2,CFU_OpenFlags+1(a3)
 	bne.s	_t_ir1			;Kompatibility mode
@@ -2390,9 +2390,7 @@ _t_i1:
 	subq.w	#1,d2
 	bmi.s	_t_i2			;Timeout
 
-	;bsr.w	LedOff	; debug led
-
-	bsr.w	Wait40			;..or go on waiting
+	bsr	Wait40			;..or go on waiting
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.w	_t_ibreak
@@ -2403,7 +2401,7 @@ _t_i1:
 	bne.s	_t_i1			;card ready after resetting..
 _t_i2:
 	DBGMSG	dbg_config
-	bsr.w	ConfigureHBA
+	bsr	ConfigureHBA
 	DBGMSG	dbg_done
 	and.b	#$df,CFU_EventFlags(a3)	;Interrupt ON
 	moveq.l	#600>>3,d1
@@ -2460,14 +2458,14 @@ _t_i2:
 	DBGMSG	dbg_cis_device
 	moveq.l	#0,d0
 	move.b	CFU_DTType(a3),d0
-	bsr.w	_DebugHexByte
+	bsr	_DebugHexByte
 	DBGMSG	dbg_cis_device_speed
 	move.l	CFU_DTSpeed(a3),d0
-	bsr.w	_DebugDecimal32
+	bsr	_DebugDecimal32
 	DBGMSG	dbg_cis_device_size
 	move.l	CFU_DTSize(a3),d0
-	bsr.w	_DebugHex
-	bsr.w	_DebugNewline
+	bsr	_DebugHex
+	bsr	_DebugNewline
 	endc
 
 	; Accept only whitelisted CISTPL_DEVICE types expected to behave
@@ -2501,8 +2499,8 @@ _t_devtuple_skip:
 	ifd	DEBUG
 	DBGMSG	dbg_cis_funcid
 	move.l	d2,d0
-	bsr.w	_DebugHexByte
-	bsr.w	_DebugNewline
+	bsr	_DebugHexByte
+	bsr	_DebugNewline
 	endc
 	cmp.b	#4,d2			;0x04 = Fixed Disk
 	beq.s	_t_cis_funcid_ok
@@ -2562,7 +2560,7 @@ _t_gotconfig:
 	beq.s	_t_gotconfig_skip
 	DBGMSG	dbg_cis_config
 	move.l	d2,d0			;output config address
-	bsr.w	_DebugHex
+	bsr	_DebugHex
 	DBGMSG	dbg_cis_config_end
 _t_gotconfig_skip:
 	endc
@@ -2584,16 +2582,16 @@ _t_faddr:
 	move.l	a2,CFU_ConfigAddr(a3)
 
 	;ifd	DEBUG
-	;bsr.w	_DebugCISCftable
+	;bsr	_DebugCISCftable
 	;endc
 
 	btst	#2,CFU_OpenFlags+1(a3)
 	beq.s	_t_i4
 
 	move.b	#$80,(a2)		;soft reset ON..
-	bsr.w	Wait40
+	bsr	Wait40
 	move.b	#0,(a2)			;..and OFF
-	bsr.w	Wait40
+	bsr	Wait40
 _t_i4:
 	move.b	#0,6(a2)		;Socket & Copy #0
 	nop
@@ -2602,13 +2600,13 @@ _t_i4:
 	move.b	#0,2(a2)		;turn on, 16bit, ...
 	nop
 	move.b	#$41,(a2)		;level mode IRQ and I/O mode 16 bytes
-	bsr.w	Wait40			;wait for settle
+	bsr	Wait40			;wait for settle
 	move.l	CFU_IOPtr(a3),CFU_IDEAddr(a3)
 	lea	CFU_CardHandle(a3),a2
 	move.l	CFU_DTSpeed(a3),d0
 	move.l	a2,a1
 	CALLCARD CardAccessSpeed
-	bsr.w	ConfigureHBA
+	bsr	ConfigureHBA
 	and.b	#~4,CFU_EventFlags(a3)	;avoid double identify
 _t_iswap:
 	lea	CFU_CardHandle(a3),a2
@@ -2617,39 +2615,33 @@ _t_iswap:
 	and.b	#CARD_STATUSF_CCDET,d0
 	beq.w	_t_ibreak
 
-	bsr.w	BusyWait
+	bsr	BusyWait
 	move.l	d0,d1			;save status
 	and.b	#$a0,d0			;BSY, DWF
 	beq.s	_t_itest
 
 	ifd	DEBUG
 	move.l	d1,d0
-	bsr.w	_DebugIDEStatus		;show status when error
+	bsr	_DebugIDEStatus		;show status when error
 	endc
 	btst	#0,CFU_ActiveHacks(a3)
 	bne.w	_t_ibreak
 	bra.w	_t_inodisk		;ATA removable media???
 _t_itest:
 	DBGMSG	dbg_rwtest
-	bsr.w	RWTest			;find a working transfer mode
+	bsr	RWTest			;find a working transfer mode
 	ifd	DEBUG
-	bsr.w	_DebugTransferMode	;d0 = RWTest result, show which transfer mode
+	bsr	_DebugTransferMode	;d0 = RWTest result, show which transfer mode
 	endc
 	DBGMSG	dbg_id_get
-	bsr.w	_GetIDEID		;read ATA configuration block
+	bsr	_GetIDEID		;read ATA configuration block
 	move.l	d0,d2
 	tst.l	d2
 	beq.w	_t_identify_failed	;IDENTIFY failed -> release card (avoid blocking others)
 
-	; Skip CIS tuple validation - use IDENTIFY-based identification instead
-	; This avoids unreliable CopyTuple for device validation
-	;
-	; Originally used CIS tuples for validation:
-	; - CISTPL_DEVICE (0x01): checked device type (0x0d = memory card)
-	; - CISTPL_FUNCID (0x21): checked function ID (0x04 = Fixed Disk)
-	; - CISTPL_FUNCEXT (0x22): checked interface type (ATA)
-	; - CISTPL_VERS_1 (0x15): checked for "FREECOM" and "PCCARD-IDE" strings
-	;   (vendor-specific check for Freecom adapters - not needed with IDENTIFY
+	; Skip CIS-tuple validation: IDENTIFY-based identification is
+	; sufficient for ATA CompactFlash and avoids unreliable
+	; CopyTuple behavior on some adapters.
 
 	; Validate IDENTIFY data - ensure it's an ATA device (not ATAPI)
 	cmp.l	#1,d0
@@ -2669,16 +2661,16 @@ _t_itest:
 
 _t_icf_ok:
 	ifd	DEBUG
-	bsr.w	_DebugCardInfo		;show card details
-	bsr.w	_DebugIdentifyFields	;show labeled IDENTIFY fields
-	bsr.w	_DebugHexDump		;dump full IDENTIFY structure
+	bsr	_DebugCardInfo		;show card details
+	bsr	_DebugIdentifyFields	;show labeled IDENTIFY fields
+	bsr	_DebugHexDump		;dump full IDENTIFY structure
 	endc
 	
 	btst	#6,CFU_ConfigBlock+167(a3)
 	beq.s	_t_i6
 
 	DBGMSG	dbg_spinup
-	bsr.w	_SpinUp			;try waking up the drive..
+	bsr	_SpinUp			;try waking up the drive..
 	DBGMSG	dbg_done
 	moveq.l	#0,d2
 _t_i6:
@@ -2688,13 +2680,13 @@ _t_i6:
 	moveq.l	#0,d0
 	moveq.l	#1,d1
 	lea	CFU_ConfigBlock(a3),a1
-	bsr.w	_ReadBlocks		;..one way or the other..
+	bsr	_ReadBlocks		;..one way or the other..
 	moveq.l	#0,d2
 _t_i7:
 	tst.l	d2
 	bne.s	_t_i8
 
-	bsr.w	_GetIDEID		;..then ask again
+	bsr	_GetIDEID		;..then ask again
 	move.l	d0,d2
 	beq.s	_t_inodisk
 _t_i8:
@@ -2702,18 +2694,18 @@ _t_i8:
 	bne.s	_t_iatapi
 
 	DBGMSG	dbg_multimode
-	bsr.w	_InitMultipleMode
-	bsr.w	_OptimizePIOSpeed	;set faster PIO if flag set
+	bsr	_InitMultipleMode
+	bsr	_OptimizePIOSpeed	;set faster PIO if flag set
 	bra.s	_t_iok
 _t_iatapi:
-	bsr.w	ATAPIPoll		;start monitoring media removals
+	bsr	ATAPIPoll		;start monitoring media removals
 	bra.s	_t_iok
 _t_inodisk:
 	clr.l	CFU_DriveSize(a3)
 _t_iok:
 	DBGMSG	dbg_id_ok
 	DBGMSG	dbg_notify
-	bsr.w	NotifyClients
+	bsr	NotifyClients
 	bra.w	_t_check
 
 _t_identify_failed:
@@ -2766,7 +2758,7 @@ _t_disown:
 .clr_loop:
 	clr.l	(a0)+
 	dbf	d0,.clr_loop
-	bsr.w	NotifyClients
+	bsr	NotifyClients
 	moveq.l	#0,d0
 	lea	CFU_CardHandle(a3),a1
 	CALLCARD ReleaseCard
@@ -2967,7 +2959,7 @@ _WatchCode:
 
 	move.w	#4,CFU_WatchTimer(a1)
 	move.w	#CFU_LostInts,d1
-	bsr.s	_IS1
+	bsr	_IS1
 	bra.s	_wc_end
 _wc_next:
 	subq.w	#1,d0
@@ -3068,9 +3060,9 @@ RWTest:
 	move.l	a0,a1
 	add.l	#$10000,a1
 	move.w	#$1234,d2		;the bit pattern used for testing
-	bsr.s	TestRun
+	bsr	TestRun
 	move.w	d0,d3
-	bsr.s	TestRun
+	bsr	TestRun
 	and.w	d0,d3
 	move.w	d3,CFU_RWFlags(a3)
 	clr.b	CFU_ReadMode(a3)
@@ -3081,7 +3073,7 @@ RWTest:
 	moveq.l	#1,d2
 rwt_1:
 	move.b	d2,CFU_WriteMode(a3)
-	bsr.w	_BindIOHandlers		;prime read/write handler pointers
+	bsr	_BindIOHandlers		;prime read/write handler pointers
 	move.l	d3,d0
 	movem.l	(sp)+,d2-d3
 	rts
@@ -3217,7 +3209,7 @@ _r3:
 ;
 BusyWait:
 	move.l	d2,-(sp)
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	move.l	CFU_IDEAddr(a3),a0	;ignore possibly ..
 	move.b	14(a0),d0		;..invalid status
 	move.b	#$e0,6(a0)		;select Master
@@ -3249,7 +3241,7 @@ bw_ok:
 	move.b	#8,14(a0)		;bit 1: free Interrupts
 bw_end:
 	move.l	d0,d2
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	move.l	d2,d0
 	move.l	(sp)+,d2
 	rts
@@ -3403,8 +3395,8 @@ _idee_1:
 _idee_2:
 	move.w	(a2),d2
 	move.w	#$e003,(a2)		;LW0, REQUEST SENSE
-	bsr.s	_IDECmd
-	bsr.w	WaitReady
+	bsr	_IDECmd
+	bsr	WaitReady
 	move.w	d2,(a2)
 	moveq.l	#-1,d2
 	moveq.l	#$ffffff81,d0		;BSY, ERR
@@ -3461,7 +3453,7 @@ _idec_w1:
 	and.b	#$40,d1			;DRDY
 	beq.s	_idec_end		;not ready
 
-	bsr.w	ClearWaitSignal
+	bsr	ClearWaitSignal
 	move.l	CFU_IDEAddr(a3),a0
 	addq.l	#2,a0
 	lea	CFU_IDESet+2(a3),a2
@@ -3545,10 +3537,10 @@ _xc_loop:
 _ReadIdentify:
 	clr.l	CFU_IDESet+2(a3)
 	move.w	d5,CFU_IDESet+6(a3)
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.s	_ri_fail
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#$29,d0			;DF, DRQ, ERR
 	and.b	CFU_IDEStatus(a3),d0
 	subq.b	#8,d0			;DRQ
@@ -3556,7 +3548,7 @@ _ReadIdentify:
 	lea	CFU_ConfigBlock(a3),a2
 	moveq.l	#512>>8,d0
 	lsl.l	#8,d0
-	bsr.w	_pio_in
+	bsr	_pio_in
 	moveq.l	#1,d0
 	rts
 _ri_fail:
@@ -3617,18 +3609,18 @@ _GetIDEID:
 	move.l	#500000,TR_Micros(a1)
 	CALLEXEC SendIO			; prepare Timeout
 _gid_retry:
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	move.w	#$e0ec,d5		;LBA, drive #0, IDENTIFY DEVICE
 	moveq.l	#0,d3			;the read mode
 _gid_command:
 	move.w	d3,CFU_ReceiveMode(a3)
 	clr.l	CFU_IDESet+2(a3)
 	move.w	d5,CFU_IDESet+6(a3)
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.w	_gid_error
 	
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.w	_gid_error		;card removed
@@ -3644,12 +3636,12 @@ _gid_command:
 	lea	CFU_ConfigBlock(a3),a2
 	moveq.l	#512>>8,d0
 	lsl.l	#8,d0
-	bsr.w	_pio_in			;read data
+	bsr	_pio_in			;read data
 	move.l	CFU_IDEAddr(a3),a0
 	move.l	#A_Pb,a1
 	moveq.l	#120,d1
 _gid_wait:
-	bsr.w	Wait1
+	bsr	Wait1
 	move.b	14(a0),d0
 	bpl.s	_gid_done
 
@@ -3660,8 +3652,8 @@ _gid_done:
 	beq.s	_gid_found		;that is all, OK
 
 	move.w	#$e000,CFU_IDESet+6(a3)	;NOP
-	bsr.w	_IDECmd			;abort
-	bsr.w	WaitReady
+	bsr	_IDECmd			;abort
+	bsr	WaitReady
 	cmp.b	#3,d3
 	bgt.s	_gid_break
 	beq.s	_gid_switch
@@ -3669,14 +3661,14 @@ _gid_done:
 	add.w	#$0101,d3		;try different read mode
 	bra.w	_gid_command
 _gid_switch:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	move.w	#$0404,d3
 	move.w	d3,CFU_ReceiveMode(a3)
 	move.l	CFU_ConfigAddr(a3),a0
 	move.b	#$40,(a0)
-	bsr.w	Wait40
+	bsr	Wait40
 	move.l	CFU_MemPtr(a3),CFU_IDEAddr(a3)
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	bra.w	_gid_command
 _gid_break:
 	move.w	#$a0a1,d1		;drive #0, IDENTIFY PACKET DEVICE
@@ -3699,23 +3691,23 @@ _gid_found:
 
 	; Step 1: Check for stuck FIFO
 	lea	CFU_ConfigBlock(a3),a0
-	bsr.w	_PatternCheck
+	bsr	_PatternCheck
 	tst.w	d0
 	beq.s	_gid_stuck
 
 	; Step 2: XOR checksum of first read
 	lea	CFU_ConfigBlock(a3),a0
-	bsr.w	_XORChecksum
+	bsr	_XORChecksum
 	move.w	d0,d4			;save checksum
 
 	; Step 3: Second read for verification
-	bsr.w	_ReadIdentify
+	bsr	_ReadIdentify
 	tst.w	d0
 	beq.s	_gid_verify_fail
 
 	; Step 4: XOR checksum of second read and compare
 	lea	CFU_ConfigBlock(a3),a0
-	bsr.w	_XORChecksum
+	bsr	_XORChecksum
 	cmp.w	d4,d0
 	beq.s	_gid_verified
 
@@ -3731,8 +3723,8 @@ _gid_stuck:
 	move.w	d0,-(sp)
 	DBGMSG	dbg_id_garbage
 	move.w	(sp)+,d0
-	bsr.w	_DebugHexWord
-	bsr.w	_DebugNewline
+	bsr	_DebugHexWord
+	bsr	_DebugNewline
 	endc
 	moveq.l	#0,d2
 	bra.w	_gid_end
@@ -3775,12 +3767,12 @@ _gid_a1:
 _gid_check_retry:
 	subq.l	#1,d6
 	beq.w	_gid_break		;ATA exhausted, try ATAPI
-	bsr.w	Wait40			;delay before retry
+	bsr	Wait40			;delay before retry
 	bra.w	_gid_retry
 
 _gid_end:
-	bsr.w	_IDEStop
-	bsr.w	_BindIOHandlers		;probe settled, rebind handlers
+	bsr	_IDEStop
+	bsr	_BindIOHandlers		;probe settled, rebind handlers
 	move.l	d2,d0
 	movem.l	(sp)+,d2-d6/a2
 	rts
@@ -3823,7 +3815,7 @@ _ReadBlocks:
 	tst.w	CFU_PLength(a3)
 	bgt.w	_rb_scsi
 
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 _rb_swath:
 	move.w	#5,CFU_Try(a3)
 	move.l	d2,CFU_Block(a3)
@@ -3867,7 +3859,7 @@ _rb_c01:
 	or.w	#$e021,d0		;"READ SECTORS"
 _rb_c02:
 	move.w	d0,(a0)			;start!
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.w	_rb_nodisk
 _rb_block:
@@ -3876,7 +3868,7 @@ _rb_block:
 
 	move.l	d4,d6
 _rb_2:
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.w	_rb_nodisk		;card removed
@@ -3904,7 +3896,7 @@ _rb_stop:
 	beq.s	_rb_skip_status		;skip if IDEAddr is NULL
 	move.b	14(a0),CFU_IDEStatus(a3)
 _rb_skip_status:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	tst.b	CFU_EventFlags(a3)
 	bpl.s	_rb_ready
 
@@ -3923,7 +3915,7 @@ _rb_end:
 
 _rb_break:
 	move.b	#TDERR_NOSECHDR,CFU_IOErr(a3)
-	bsr.w	_IDEError
+	bsr	_IDEError
 	addq.l	#1,CFU_ReadErrors(a3)
 	subq.w	#1,CFU_Try(a3)
 	beq.s	_rb_stop
@@ -3981,7 +3973,7 @@ _rb_s1:
 	lsl.l	#8,d0
 	move.l	d0,(a1)
 	lea	CFU_SCSIStruct(a3),a0
-	bsr.w	_Packet
+	bsr	_Packet
 	tst.b	d0
 	bne.s	_rb_serror
 
@@ -4212,11 +4204,10 @@ pi4_loop2:
 ; based on card capabilities and PCMCIA hardware.
 ;
 ; Conditionally compiled out of the default build: this helper has no
-; callers since the v1.41-dev runtime IO specialization moved per-block
-; writes onto the cached CFU_WriteBlockFn / a5 dispatch. _BindIOHandlers
-; binds po_modeN directly into CFU_WriteBlockFn, so the cold po_tab
-; indirection is no longer needed on the write side. Build with
-; -DDEADCODE to revive.
+; callers because _BindIOHandlers wires the appropriate po_modeN
+; routine directly into CFU_WriteBlockFn (cached on the CFU), bypassing
+; the po_tab indirection on the write side. Build with -DDEADCODE to
+; revive.
 	ifd	DEADCODE
 _pio_out:
 	moveq.l	#0,d1
@@ -4465,7 +4456,7 @@ _WriteBlocks:
 	tst.w	CFU_PLength(a3)
 	bgt.w	_wb_scsi
 
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	tst.l	CFU_DriveSize(a3)
 	beq.w	_wb_nodisk
 _wb_swath:
@@ -4509,7 +4500,7 @@ _wb_3:
 	beq.w	_wb_erase		;&buffer = -1 -> erase only
 
 	move.w	d0,(a0)			;go!
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.w	_wb_nodisk
 
@@ -4556,7 +4547,7 @@ _wb_w4:
 	add.l	d0,d0			;final *2 via add.l (faster than lsl.l #1)
 	jsr	(a5)			;dispatch via a5-cached handler (po_modeN)
 _wb_lnext:
-	bsr.w	WaitReady
+	bsr	WaitReady
 	add.l	d6,d2
 	sub.l	d6,d3
 	sub.l	d6,d4
@@ -4577,7 +4568,7 @@ _wb_snext:
 	tst.l	d3
 	bgt.w	_wb_swath
 _wb_stop:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 _wb_ready:
 	move.l	a2,a0
 	move.l	d5,d0
@@ -4588,11 +4579,11 @@ _wb_ready:
 _wb_erase:
 	move.b	#$c0,d0			;"CFA ERASE SECTORS"
 	move.w	d0,(a0)
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.s	_wb_nodisk
 
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.s	_wb_nodisk		;card removed
@@ -4602,7 +4593,7 @@ _wb_erase:
 	beq.s	_wb_eok
 _wb_eerror:
 	move.b	#IOERR_NOCMD,CFU_IOErr(a3)
-	bsr.w	_IDEError
+	bsr	_IDEError
 	bra.s	_wb_stop
 _wb_eok:
 	add.l	d4,d2
@@ -4615,28 +4606,28 @@ _wb_nodisk:
 
 _wb_bump:
 	move.w	#$e000,CFU_IDESet+6(a3)	;NOP
-	bsr.w	_IDECmd			;abort
-	bsr.w	WaitReady
+	bsr	_IDECmd			;abort
+	bsr	WaitReady
 	move.b	CFU_SendMode(a3),d0
 	cmp.b	#3,d0
 	bgt.s	_wb_break
 	beq.s	_wb_switch
 
 	addq.b	#1,CFU_SendMode(a3)	;try different transfer mode
-	bsr.w	_BindIOHandlers		;rebind for new send mode
+	bsr	_BindIOHandlers		;rebind for new send mode
 	bra.s	_wb_break
 _wb_switch:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	move.w	#$0404,CFU_ReceiveMode(a3)
-	bsr.w	_BindIOHandlers		;rebind for memory-mapped mode
+	bsr	_BindIOHandlers		;rebind for memory-mapped mode
 	move.l	CFU_ConfigAddr(a3),a0
 	move.b	#$40,(a0)
-	bsr.w	Wait40
+	bsr	Wait40
 	move.l	CFU_MemPtr(a3),CFU_IDEAddr(a3)
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 _wb_break:
 	move.b	#TDERR_NOSECHDR,CFU_IOErr(a3)
-	bsr.w	_IDEError
+	bsr	_IDEError
 	addq.l	#1,CFU_WriteErrors(a3)
 	subq.w	#1,CFU_Try(a3)
 	beq.w	_wb_stop
@@ -4678,7 +4669,7 @@ _wb_s1:
 	lsl.l	#8,d0
 	move.l	d0,(a1)
 	lea	CFU_SCSIStruct(a3),a0
-	bsr.w	_Packet
+	bsr	_Packet
 	tst.b	d0
 	bne.s	_wb_serror
 
@@ -4698,15 +4689,15 @@ _wb_serror:
 ;d0 -> Blocks/Interrupt
 
 _InitMultipleMode:
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	moveq.l	#0,d1
 	move.b	CFU_ConfigBlock+95(a3),d1	;word 47 bits 15:8 = MaxMulti count
 	ifd	DEBUG
 	move.l	d1,-(sp)
 	DBGMSG	dbg_multimax
 	move.l	(sp),d0
-	bsr.w	_DebugDecimal
-	bsr.w	_DebugNewline
+	bsr	_DebugDecimal
+	bsr	_DebugNewline
 	move.l	(sp)+,d1
 	endc
 	tst.b	d1
@@ -4716,7 +4707,7 @@ _InitMultipleMode:
 	move.l	d1,-(sp)
 	DBGMSG	dbg_multiset
 	move.l	(sp),d0
-	bsr.w	_DebugDecimal
+	bsr	_DebugDecimal
 	move.l	(sp)+,d1
 	endc
 	lea	CFU_IDESet+2(a3),a0
@@ -4725,11 +4716,11 @@ _InitMultipleMode:
 	moveq.l	#0,d1
 	move.w	d1,(a0)+
 	move.w	#$e0c6,(a0)		;"SET MULTIPLE MODE"
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.w	_imm_error
 
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#3,d1
 	and.b	CFU_EventFlags(a3),d1
 	bne.w	_imm_error		;card removed
@@ -4740,7 +4731,7 @@ _InitMultipleMode:
 
 	DBGMSG	dbg_multiok		;", OK"
 
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	moveq.l	#0,d0
 	move.b	CFU_ConfigBlock+95(a3),d0	;word 47 bits 15:8 = MaxMulti count
 _imm_end:
@@ -4761,7 +4752,7 @@ _imm_auto_detect:
 	;Test by reading 1 sector and checking if DRQ clears properly
 	;If DRQ clears after reading expected data, card works correctly -> use 256
 	;If DRQ stays high, card has issue -> use firmware value
-	bsr.w	_TestMultiSectorIssue
+	bsr	_TestMultiSectorIssue
 	tst.b	d0
 	bne.s	_imm_rw_drq_issue		;DRQ issue detected, use firmware value
 	DBGMSG	dbg_multi_ovr_ok
@@ -4788,8 +4779,8 @@ _imm_rw_debug:
 	DBGMSG	dbg_multirw
 	moveq.l	#0,d0
 	move.w	CFU_MultiSizeRW(a3),d0
-	bsr.w	_DebugDecimal
-	bsr.w	_DebugNewline
+	bsr	_DebugDecimal
+	bsr	_DebugNewline
 	move.l	(sp)+,d0
 	endc
 	rts
@@ -4804,7 +4795,7 @@ _imm_error:
 	ifd	DEBUG
 	moveq.l	#0,d0
 	move.b	CFU_IDEStatus(a3),d0
-	bsr.w	_DebugIDEStatus		;show what went wrong
+	bsr	_DebugIDEStatus		;show what went wrong
 	endc
 	moveq.l	#1,d0			;default to single blocks
 	bra.w	_imm_end
@@ -4835,19 +4826,19 @@ _TestMultiSectorIssue:
 	movem.l	d1-d2/a0-a1,-(sp)
 
 	;--- Start IDE access ---
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 
 	;--- Issue READ SECTORS command for LBA 0, 1 sector ---
 	lea	CFU_IDESet+2(a3),a0
 	move.w	#$0100,(a0)+		;1 sector, LBA bits 7:0 = 0
 	clr.w	(a0)+			;LBA bits 23:8 = 0
 	move.w	#$e020,(a0)		;LBA mode, drive 0, READ SECTORS ($20)
-	bsr.w	_IDECmd
+	bsr	_IDECmd
 	tst.w	d0
 	beq.s	_tms_ok			;command failed, assume card works
 
 	;--- Wait for DRQ ---
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.s	_tms_ok			;card removed, assume ok
@@ -4874,12 +4865,12 @@ _tms_read:
 	beq.s	_tms_ok			;DRQ cleared = card works
 
 	;--- DRQ still set = issue detected ---
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	moveq.l	#1,d0			;return 1 = issue, use firmware value
 	bra.s	_tms_end
 
 _tms_ok:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	moveq.l	#0,d0			;return 0 = card works, use 256
 _tms_end:
 	movem.l	(sp)+,d1-d2/a0-a1
@@ -4955,10 +4946,10 @@ _ops_set:
 	movem.l	d0-d1,-(sp)
 	DBGMSG	dbg_card_pio
 	move.l	4(sp),d0		;PIO mode (d1)
-	bsr.w	_DebugDecimal
+	bsr	_DebugDecimal
 	DBGMSG	dbg_gayle_speed
 	move.l	(sp),d0			;Gayle speed (d0)
-	bsr.w	_DebugDecimal
+	bsr	_DebugDecimal
 	DBGMSG	dbg_ns
 	movem.l	(sp)+,d0-d1
 	endc
@@ -4976,8 +4967,8 @@ _ops_set:
 	moveq.l	#0,d0
 	move.b	(a0),d0
 	and.b	#$0C,d0			;mask speed bits 2-3
-	bsr.w	_ops_bits_to_ns		;convert to nanoseconds
-	bsr.w	_DebugDecimal
+	bsr	_ops_bits_to_ns		;convert to nanoseconds
+	bsr	_DebugDecimal
 	DBGMSG	dbg_ns
 	endc
 	move.l	CFU_DTSpeed(a3),d0
@@ -4997,8 +4988,8 @@ _ops_direct:
 	moveq.l	#0,d0
 	move.b	(a0),d0
 	and.b	#$0C,d0			;mask speed bits 2-3
-	bsr.s	_ops_bits_to_ns		;convert to nanoseconds
-	bsr.w	_DebugDecimal
+	bsr	_ops_bits_to_ns		;convert to nanoseconds
+	bsr	_DebugDecimal
 	DBGMSG	dbg_ns
 	endc
 	;Convert nanoseconds to Gayle speed bits
@@ -5029,7 +5020,7 @@ _ops_d_set:
 	moveq.l	#0,d0
 	move.b	(a0),d0			;read back
 	and.b	#$0C,d0			;mask speed bits 2-3
-	bsr.s	_ops_bits_to_ns		;convert to nanoseconds
+	bsr	_ops_bits_to_ns		;convert to nanoseconds
 
 _ops_show_actual:
 	ifd	DEBUG
@@ -5037,7 +5028,7 @@ _ops_show_actual:
 	move.l	d0,-(sp)
 	DBGMSG	dbg_gayle_actual
 	move.l	(sp)+,d0
-	bsr.w	_DebugDecimal
+	bsr	_DebugDecimal
 	DBGMSG	dbg_ns
 	endc
 _ops_end:
@@ -5051,8 +5042,8 @@ _ops_end:
 	moveq.l	#0,d0
 	move.b	(a0),d0
 	and.b	#$0C,d0			;mask speed bits 2-3
-	bsr.s	_ops_bits_to_ns		;convert to nanoseconds
-	bsr.w	_DebugDecimal
+	bsr	_ops_bits_to_ns		;convert to nanoseconds
+	bsr	_DebugDecimal
 	DBGMSG	dbg_ns
 	endc
 	rts
@@ -5083,7 +5074,7 @@ _ops_b_720:
 ;--- start disk --------------------------------------------
 
 _SpinUp:	
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	move.l	CFU_IDEAddr(a3),a0
 	move.l	#A_Pb,a1
 	tst.b	(a1)
@@ -5096,7 +5087,7 @@ _su_wait:
 
 	move.b	#7,13(a0)		;Subcommand "Spin Up"
 	move.b	#$ef,7(a0)		;SET FEATURES
-	bsr.w	WaitReady
+	bsr	WaitReady
 	move.b	CFU_IDEStatus(a3),d0
 	bra.w	_IDEStop
 
@@ -5106,7 +5097,7 @@ _su_wait:
 _MediaStatus:
 	move.l	d2,-(sp)
 	moveq.l	#-1,d2
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	move.l	CFU_IDEAddr(a3),a0
 	move.b	7(a0),d0
 	and.b	#$c0,d0			;BSY, DRDY
@@ -5114,7 +5105,7 @@ _MediaStatus:
 	bne.s	_ms_end
 
 	move.b	#$da,7(a0)		;"GET MEDIA STATUS"
-	bsr.w	WaitReady
+	bsr	WaitReady
 	move.b	CFU_IDEStatus(a3),d0
 	bmi.s	_ms_end
 
@@ -5134,7 +5125,7 @@ _MediaStatus:
 
 	moveq.l	#-1,d2
 _ms_end:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	move.l	d2,d0
 	move.l	(sp)+,d2
 	rts
@@ -5171,7 +5162,7 @@ _p_4:
 	subq.w	#1,d2
 	bpl.s	_p_3
 
-	bsr.w	_IDEStart
+	bsr	_IDEStart
 	or.b	#$20,CFU_EventFlags(a3)	;Interrupt response OFF
 	move.l	CFU_IDEAddr(a3),a2
 	move.w	#5,CFU_Try(a3)
@@ -5227,7 +5218,7 @@ _p_wait2:
 	subq.b	#1,d0
 	bne.s	_p_try1
 
-	bsr.w	ClearWaitSignal
+	bsr	ClearWaitSignal
 	and.b	#$df,CFU_EventFlags(a3)	;Interrupt response ON
 	lea	CFU_Packet(a3),a0
 	move.w	CFU_PLength(a3),d1
@@ -5239,7 +5230,7 @@ _p_data:
 	tst.l	d6
 	bmi.w	_p_abort
 
-	bsr.w	WaitReady
+	bsr	WaitReady
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.w	_p_nodisk
@@ -5344,7 +5335,7 @@ _p_error:
 _p_checkc:
 	move.b	#2,SCSI_Status(a5)
 _p_stop:
-	bsr.w	_IDEStop
+	bsr	_IDEStop
 	sub.l	(a5),d4			;SCSI_Data
 	move.l	d4,SCSI_Actual(a5)
 	move.l	d5,d0
@@ -5359,7 +5350,7 @@ _p_nodisk:
 ; d0 -> # Blocks
 
 ATAPISize:
-	bsr.w	_MediaStatus
+	bsr	_MediaStatus
 	move.l	d0,d1
 	beq.s	as_end			;no Disk
 	bmi.s	as_rc			;error
@@ -5385,7 +5376,7 @@ as_rc:
 	clr.l	(a1)+
 	clr.l	(a1)
 	lea	CFU_SCSIStruct(a3),a0
-	bsr.w	_Packet
+	bsr	_Packet
 	moveq.l	#0,d1
 	tst.b	d0
 	bne.s	as_end
@@ -5420,13 +5411,13 @@ ATAPIPoll:
 
 	lea	CFU_TimeReq(a3),a1
 	CALLEXEC WaitIO
-	bsr.w	ATAPISize
+	bsr	ATAPISize
 	move.l	CFU_DriveSize(a3),d1
 	cmp.l	d0,d1
 	beq.s	ap_time			;still all the same
 
 	move.l	d0,CFU_DriveSize(a3)
-	bsr.w	NotifyClients
+	bsr	NotifyClients
 ap_time:
 	lea	CFU_TimeReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
@@ -5437,92 +5428,182 @@ ap_time:
 ap_end:
 	rts
 
-;*** Some math (68000 fallbacks; 020+ inlines via macros) ***
-	ifnd	__68020__
 
-; d0 *= d1
+;--- ROM AUTOBOOT STUB -------------------------------------
+; RTF_COLDSTART stub, always present. Only when both
+; compactflash.device and ptable.library are ROM-resident
+; ignored by ramlib at DOS time.
+;
+; Remus appends module binaries to the Kickstart image but
+; does not add them to the KickTag list, so Exec's InitCode
+; pass skips them. Recover by calling FindResident +
+; InitResident explicitly for both the device and the
+; library before use.
+;
+; Sequence:
+;   1. Find/init compactflash.device if not yet in DeviceList.
+;   2. Exit early if CFD_BootDone already set (2nd cold-start pass).
+;   3. Find/init ptable.library; if absent (disk-only install)
+;      exit silently - device still works, autoboot unavailable.
+;   4. BootScanRDB("compactflash.device", 0).
+;   5. Set CFD_BootDone, CloseLibrary, return.
 
-UMul32:
-	movem.l	d1-d3,-(sp)
-	move.w	d1,d2
-	mulu.w	d0,d2
-	move.l	d1,d3
-	swap	d3
-	mulu.w	d0,d3
-	swap	d3
-	clr.w	d3
-	add.l	d3,d2
-	swap	d0
-	mulu.w	d1,d0
-	swap	d0
-	clr.w	d0
-	add.l	d2,d0
-	movem.l	(sp)+,d1-d3
+	cnop	0,2
+s_resident_boot:
+	dc.w	RTC_MATCHWORD
+	dc.l	s_resident_boot
+	dc.l	s_codeend
+	dc.b	$01			;RTF_COLDSTART (no AUTOINIT)
+	dc.b	FILE_VERSION
+	dc.b	0			;NT_UNKNOWN
+	dc.b	20			;Priority (classic autoboot slot)
+	dc.l	s_boot_name
+	dc.l	s_idstring
+	dc.l	s_bootstub
+
+s_boot_name:
+	dc.b	"compactflash.boot",0
+RdbLibName:
+	dc.b	"ptable.library",0
+	even
+
+	ifd	DEBUG
+dbg_bs_open:
+	dc.b	"[CFD] boot: open ptable.library ...",13,10,0
+dbg_bs_preload:
+	dc.b	"[CFD] boot: ptable.library already resident",13,10,0
+dbg_bs_initres:
+	dc.b	"[CFD] boot: ptable.library not preloaded, InitResident()...",13,10,0
+dbg_bs_noires:
+	dc.b	"[CFD] boot: ptable.library not in ROM list - skip autoboot",13,10,0
+dbg_bs_initfail:
+	dc.b	"[CFD] boot: ptable.library InitResident failed",13,10,0
+dbg_bs_scan:
+	dc.b	"[CFD] boot: BootScanRDB(compactflash.device,0)",13,10,0
+	even
+	endc
+
+s_bootstub:
+	movem.l	d2-d7/a2-a6,-(sp)
+	move.l	a6,a5			;a5 = ExecBase
+
+;-- Probe DeviceList; InitResident if missing.
+	move.l	a5,a6
+	jsr	Forbid(a6)
+	lea	SB_DeviceList(a6),a0
+	lea	s_name(pc),a1
+	jsr	FindName(a6)
+	move.l	d0,d7
+	jsr	Permit(a6)
+
+	tst.l	d7
+	bne.s	_bs_devPresent
+	lea	s_resident(pc),a1
+	sub.l	a0,a0
+	jsr	InitResident(a6)
+;-- re-find after init so we have the live &CFD
+	jsr	Forbid(a6)
+	lea	SB_DeviceList(a6),a0
+	lea	s_name(pc),a1
+	jsr	FindName(a6)
+	move.l	d0,d7
+	jsr	Permit(a6)
+	tst.l	d7
+	beq.w	_bs_done
+
+_bs_devPresent:
+;-- 2nd-pass guard
+	move.l	d7,a0
+	tst.b	CFD_BootDone(a0)
+	bne.w	_bs_done
+
+;-- OpenLibrary "ptable.library", v1.
+	ifd	DEBUG
+	lea	dbg_bs_open(pc),a0
+	bsr	_bootDebug
+	endc
+	moveq.l	#1,d0
+	lea	RdbLibName(pc),a1
+	jsr	OpenLibrary(a6)
+	tst.l	d0
+	ifd	DEBUG
+	beq.s	_bs_dbg_after_open	;OpenLibrary failed - try InitResident
+	lea	dbg_bs_preload(pc),a0
+	bsr	_bootDebug
+	bra.w	_bs_libOk
+_bs_dbg_after_open:
+	else
+	bne.s	_bs_libOk
+	endc
+
+;-- Remus didn't auto-init ptable.library; find and init it manually.
+;   If absent (disk-only install) FindResident returns NULL -> exit.
+	ifd	DEBUG
+	lea	dbg_bs_initres(pc),a0
+	bsr	_bootDebug
+	endc
+	lea	RdbLibName(pc),a1
+	jsr	FindResident(a6)
+	tst.l	d0
+	ifd	DEBUG
+	bne.s	_bs_dbg_after_findres	;found - proceed to InitResident
+	lea	dbg_bs_noires(pc),a0
+	bsr	_bootDebug
+	bra.w	_bs_mark
+_bs_dbg_after_findres:
+	else
+	beq.w	_bs_mark		;not in ROM list - give up
+	endc
+	move.l	d0,a1			;a1 = &Resident
+	sub.l	a0,a0			;a0 = NULL (no SegList)
+	jsr	InitResident(a6)
+	moveq.l	#1,d0
+	lea	RdbLibName(pc),a1
+	jsr	OpenLibrary(a6)
+	tst.l	d0
+	ifd	DEBUG
+	bne.s	_bs_dbg_after_initopen	;second OpenLibrary succeeded
+	lea	dbg_bs_initfail(pc),a0
+	bsr	_bootDebug
+	bra.w	_bs_mark
+_bs_dbg_after_initopen:
+	else
+	beq.w	_bs_mark		;still failing - give up
+	endc
+
+_bs_libOk:
+	move.l	d0,a3			;a3 = ptable.library base
+	ifd	DEBUG
+	lea	dbg_bs_scan(pc),a0
+	bsr	_bootDebug
+	endc
+	moveq.l	#0,d0			;unit 0
+	lea	s_name(pc),a1		;deviceName = "compactflash.device"
+	move.l	a3,a6
+	jsr	_LVOBootScanRDB(a6)
+	move.l	a3,a1
+	move.l	a5,a6
+	jsr	CloseLibrary(a6)
+
+_bs_mark:
+	move.l	a5,a6
+	jsr	Forbid(a6)
+	lea	SB_DeviceList(a6),a0
+	lea	s_name(pc),a1
+	jsr	FindName(a6)
+	move.l	d0,d7
+	jsr	Permit(a6)
+	tst.l	d7
+	beq.s	_bs_done
+	move.l	d7,a0
+	move.b	#1,CFD_BootDone(a0)
+
+_bs_done:
+	moveq.l	#0,d0
+	movem.l	(sp)+,d2-d7/a2-a6
 	rts
 
-; d0 /= d1, d1 = d0 mod d1
-
-UDivMod32:
-	movem.l	d2/d3,-(sp)
-	swap	d1
-	tst.w	d1
-	bne.s	udm32_long		;Divisor > $ffff
-
-	swap	d1
-	move.w	d1,d3
-	move.w	d0,d2
-	clr.w	d0
-	swap	d0
-	divu.w	d3,d0
-	move.l	d0,d1
-	swap	d0
-	move.w	d2,d1
-	divu.w	d3,d1
-	move.w	d1,d0
-	clr.w	d1
-	swap	d1
-	movem.l	(sp)+,d2/d3
-	rts
-
-udm32_long:
-	swap	d1
-	move.l	d1,d3
-	move.l	d0,d1
-	clr.w	d1
-	swap	d1
-	swap	d0
-	clr.w	d0
-	moveq.l	#15,d2
-udm32_loop:
-	add.l	d0,d0
-	addx.l	d1,d1
-	cmp.l	d1,d3
-	bhi.s	udm32_next
-
-	sub.l	d3,d1
-	addq.w	#1,d0
-udm32_next:
-	dbf	d2,udm32_loop
-
-	movem.l	(sp)+,d2/d3
-	rts
-
-;--- dual Logarithm ----------------------------------------
-; d0 -> ld(d0)
-
-Log2:
-	move.l	d1,-(sp)
-	moveq.l	#-1,d1
-lg2_loop:
-	addq.l	#1,d1
-	lsr.l	#1,d0
-	bne.s	lg2_loop
-
-	move.l	d1,d0
-	move.l	(sp)+,d1
-	rts
-
-	endif	;__68020__
+	include	"lib/raw_debug.i"
 
 	cnop	0,4
 
