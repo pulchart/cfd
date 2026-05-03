@@ -5483,6 +5483,45 @@ dbg_bs_scan:
 	even
 	endc
 
+;-- Boot-stub-local DEBUG/non-DEBUG branch helpers.
+;
+;   DBG_BNE_MSG msg, target  -- DEBUG: tst d0; on NZ print msg and
+;                               unconditionally bra target.
+;                               non-DEBUG: tst d0; bne target.
+;                               (Use on the success / "proceed" leg.)
+;   DBG_BEQ_MSG msg, target  -- dual; prints on Z and jumps.
+;                               (Use on the failure / "give up" leg.)
+;
+;   Both fold the tst.l d0 inside themselves so the 3 OpenLibrary /
+;   FindResident / re-OpenLibrary call sites stay one line each.
+	ifd	DEBUG
+DBG_BNE_MSG	macro
+	tst.l	d0
+	beq.s	.bsdbg_skip\@
+	lea	\1(pc),a0
+	bsr	_bootDebug
+	bra.w	\2
+.bsdbg_skip\@:
+	endm
+DBG_BEQ_MSG	macro
+	tst.l	d0
+	bne.s	.bsdbg_skip\@
+	lea	\1(pc),a0
+	bsr	_bootDebug
+	bra.w	\2
+.bsdbg_skip\@:
+	endm
+	else
+DBG_BNE_MSG	macro
+	tst.l	d0
+	bne.w	\2
+	endm
+DBG_BEQ_MSG	macro
+	tst.l	d0
+	beq.w	\2
+	endm
+	endc
+
 s_bootstub:
 	movem.l	d2-d7/a2-a6,-(sp)
 	move.l	a6,a5			;a5 = ExecBase
@@ -5525,16 +5564,7 @@ _bs_devPresent:
 	moveq.l	#1,d0
 	lea	RdbLibName(pc),a1
 	jsr	OpenLibrary(a6)
-	tst.l	d0
-	ifd	DEBUG
-	beq.s	_bs_dbg_after_open	;OpenLibrary failed - try InitResident
-	lea	dbg_bs_preload(pc),a0
-	bsr	_bootDebug
-	bra.w	_bs_libOk
-_bs_dbg_after_open:
-	else
-	bne.s	_bs_libOk
-	endc
+	DBG_BNE_MSG dbg_bs_preload,_bs_libOk
 
 ;-- Remus didn't auto-init ptable.library; find and init it manually.
 ;   If absent (disk-only install) FindResident returns NULL -> exit.
@@ -5544,32 +5574,14 @@ _bs_dbg_after_open:
 	endc
 	lea	RdbLibName(pc),a1
 	jsr	FindResident(a6)
-	tst.l	d0
-	ifd	DEBUG
-	bne.s	_bs_dbg_after_findres	;found - proceed to InitResident
-	lea	dbg_bs_noires(pc),a0
-	bsr	_bootDebug
-	bra.w	_bs_mark
-_bs_dbg_after_findres:
-	else
-	beq.w	_bs_mark		;not in ROM list - give up
-	endc
+	DBG_BEQ_MSG dbg_bs_noires,_bs_mark
 	move.l	d0,a1			;a1 = &Resident
 	sub.l	a0,a0			;a0 = NULL (no SegList)
 	jsr	InitResident(a6)
 	moveq.l	#1,d0
 	lea	RdbLibName(pc),a1
 	jsr	OpenLibrary(a6)
-	tst.l	d0
-	ifd	DEBUG
-	bne.s	_bs_dbg_after_initopen	;second OpenLibrary succeeded
-	lea	dbg_bs_initfail(pc),a0
-	bsr	_bootDebug
-	bra.w	_bs_mark
-_bs_dbg_after_initopen:
-	else
-	beq.w	_bs_mark		;still failing - give up
-	endc
+	DBG_BEQ_MSG dbg_bs_initfail,_bs_mark
 
 _bs_libOk:
 	move.l	d0,a3			;a3 = ptable.library base
@@ -5585,16 +5597,11 @@ _bs_libOk:
 	move.l	a5,a6
 	jsr	CloseLibrary(a6)
 
+;-- Set the one-shot guard.  d7 still holds &CFD from the
+;   _bs_devPresent / post-InitResident find above; every path that
+;   reaches here (including the DBG_BEQ_MSG -> _bs_mark jumps) has
+;   already validated d7, so no second Forbid+FindName is needed.
 _bs_mark:
-	move.l	a5,a6
-	jsr	Forbid(a6)
-	lea	SB_DeviceList(a6),a0
-	lea	s_name(pc),a1
-	jsr	FindName(a6)
-	move.l	d0,d7
-	jsr	Permit(a6)
-	tst.l	d7
-	beq.s	_bs_done
 	move.l	d7,a0
 	move.b	#1,CFD_BootDone(a0)
 

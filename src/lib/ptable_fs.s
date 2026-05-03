@@ -147,7 +147,7 @@ _bao_fse_build:
 	move.l	d0,a0
 
 	move.b	#NT_UNKNOWN,LN_Type(a0)
-	lea	RdbCreator(pc),a1
+	lea	s_libname(pc),a1
 	move.l	a1,LN_Name(a0)
 	move.l	d2,fse_DosType(a0)
 
@@ -324,7 +324,7 @@ _bootGetFSResource:
 	move.b	#NT_RESOURCE,LN_Type(a0)
 	lea	FileSysResName(pc),a1
 	move.l	a1,LN_Name(a0)
-	lea	RdbCreator(pc),a1
+	lea	s_libname(pc),a1
 	move.l	a1,fsr_Creator(a0)
 	lea	fsr_FileSysEntries(a0),a1
 	move.l	a1,(a1)
