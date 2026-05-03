@@ -1085,7 +1085,7 @@ bio_end:
 
 bio_quick:
 	or.b	#IOF_QUICK,IO_Flags(a2)
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	lea	bio_tab(pc),a6
 	add.w	(a6,d0.w),a6		;d0 high bits cleared above, .w is 68000-safe
 	jsr	(a6)
@@ -2023,7 +2023,7 @@ _r06_2:
 	jsr	(a6)			;do read/write
 	move.l	d0,d1			;blocks transferred
 	lsl.l	#8,d0
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	move.l	d0,SCSI_Actual(a2)	;bytes transferred
 	moveq.l	#2,d0
 	cmp.l	d1,d2
@@ -2080,7 +2080,7 @@ _r10_1:
 	jsr	(a6)			;do read/write
 	move.l	d0,d1			;blocks transferred
 	lsl.l	#8,d0
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	move.l	d0,SCSI_Actual(a2)	;bytes transferred
 	moveq.l	#2,d0
 	cmp.l	d1,d2
@@ -2334,7 +2334,7 @@ _t_do:
 	move.l	d0,a2			;&IORequest
 	clr.b	CFU_IOErr(a3)
 	bsr	FunctionIndex
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	lea	bio_tab(pc),a6
 	add.w	(a6,d0.w),a6		;d0 high bits cleared in FunctionIndex, .w is 68000-safe
 	jsr	(a6)			;handle and..
@@ -3112,7 +3112,7 @@ tr_go:
 	jsr	(a6)			;write
 	moveq.l	#3,d0
 	and.w	d4,d0
-	lsl.w	#1,d0
+	add.w	d0,d0			;*2 via add.w (faster than lsl.w #1)
 	addq.w	#8,d0
 	lea	tr_tab(pc),a6
 	add.w	(a6,d0.w),a6
@@ -3958,7 +3958,7 @@ _rb_s1:
 	move.l	a2,(a0)+		;SCSI_Data
 	move.l	d4,d0
 	lsl.l	#8,d0
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	move.l	d0,(a0)+		;SCSI_Length
 	clr.l	(a0)+			;SCSI_Actual
 	lea	CFU_Packet(a3),a1
@@ -4023,7 +4023,7 @@ _pio_in:
 	bls.s	pi_ok
 	moveq.l	#0,d1			;out-of-range -> safe default (WORD mode)
 pi_ok:
-	lsl.l	#1,d1
+	add.l	d1,d1			;*2 via add.l (faster than lsl.l #1)
 	lea	pi_tab(pc),a1
 	add.w	(a1,d1.w),a1		;d1 high bits cleared above, .w is 68000-safe
 	jmp	(a1)
@@ -4654,7 +4654,7 @@ _wb_s1:
 	move.l	a2,(a0)+		;SCSI_Data
 	move.l	d4,d0
 	lsl.l	#8,d0
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	move.l	d0,(a0)+		;SCSI_Length
 	clr.l	(a0)+			;SCSI_Actual
 	lea	CFU_Packet(a3),a1

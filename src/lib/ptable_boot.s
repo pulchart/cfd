@@ -516,7 +516,7 @@ _bd_bl:	subq.l	#1,d0
 _bootReadBlock:
 	movem.l	d1-d2/a1,-(sp)
 	moveq.l	#0,d1			;high32 = 0 (block# always small)
-	lsl.l	#1,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
 	lsl.l	#8,d0			;d0 = block * 512 (low32)
 	exg	d0,d1			;d0=high32=0, d1=low32
 	move.l	#RDB_BLOCK_BYTES,d2
