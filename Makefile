@@ -15,7 +15,7 @@ DATE_SHORT = 05/2026
 CFD_MAJOR = 1
 CFD_MINOR = 42
 CFD_VERSION_SUFFIX = -dev
-CFD_DATE = 02.05.2026
+CFD_DATE = 03.05.2026
 
 # ptable.library version; bumped only on library-ABI changes:
 # - additive LVOs bump REVISION
@@ -23,7 +23,7 @@ CFD_DATE = 02.05.2026
 PLIB_MAJOR = 1
 PLIB_MINOR = 0
 PLIB_VERSION_SUFFIX = -dev
-PLIB_DATE = 02.05.2026
+PLIB_DATE = 03.05.2026
 
 # Tool-specific versions
 CFINFO_VERSION = 1.37
