@@ -608,10 +608,11 @@ Kickstart Early Startup boot menu sees the device. The entry is visible
 in expansion-board inspection tools (e.g. @{fg shine}ShowConfig@{fg text} ) as a board with
 the following identifiers:
 
-  @{b}Field@{ub}       @{b}Value@{ub}         
-  ----------  ------------  
-  Vendor ID   @{fg shine}2011 ($07DB)@{fg text}  
-  Product ID  @{fg shine}1@{fg text}             
+  @{b}Field@{ub}       @{b}Value@{ub}                                   
+  ----------  --------------------------------------  
+  Vendor ID   @{fg shine}65535 ($FFFF)@{fg text} (developer/test sentinel  
+              -- no vendor)                           
+  Product ID  @{fg shine}1@{fg text}                                       
 
 ----------------------------------------
 @{"<< Prev" link Installation}  @{"Contents" link Main}  @{"Next >>" link Hardware_Notes}

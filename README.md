@@ -291,7 +291,7 @@ With a full build, two components emit serial output: `compactflash.device` uses
 
 | Field | Value |
 |-------|-------|
-| Vendor ID | `2011 ($07DB)` |
+| Vendor ID  | `65535 ($FFFF)` (developer/test sentinel — no vendor) |
 | Product ID | `1` |
 
 ## Hardware Notes
