@@ -21,7 +21,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### v1.42-dev (03.05.2026)
+### v1.42-dev (04.05.2026)
 
 This release introduces **autoboot and automount from RDB-partitioned CF cards**.
 
