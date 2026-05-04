@@ -420,6 +420,7 @@ _bou_sig_ok:
 ;-- OpenDevice (caller-supplied name + unit)
 	move.l	BC_DevName(a4),a0
 	move.l	BC_Unit(a4),d0
+	;moveq.l	#9,d1			;Flags=1|8: SocketOn + serial debug
 	moveq.l	#0,d1
 	jsr	OpenDevice(a6)
 	tst.l	d0

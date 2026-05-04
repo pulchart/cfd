@@ -2273,10 +2273,22 @@ _t_1:
 	CALLSAME Signal
 
 ;- - card already inserted? - - - - - - - - - - - - - - - -
+;   Poll CCDET for up to 1s on cold boot: GAYLE VCC and the
+;   PCMCIA card-detect line may not be electrically stable
+;   the moment OwnCard returns.
 
+	moveq.l	#25,d2			;25 x 40ms = 1s
+_t_ccdet_poll:
+	lea	CFU_CardHandle(a3),a2
+	move.l	a2,a1
 	CALLCARD ReadCardStatus
 	and.b	#CARD_STATUSF_CCDET,d0
-	beq.w	_t_check		;no card, fine
+	bne.s	_t_have_ccdet
+	bsr	Wait40
+	subq.w	#1,d2
+	bne.s	_t_ccdet_poll
+	bra.w	_t_check		;no card after 1s
+_t_have_ccdet:
 
 	lea	CFU_TimeReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
@@ -2297,7 +2309,18 @@ _t_s1:
 	lea	CFU_TimeReq(a3),a1
 	CALLEXEC WaitIO
 	bclr	#1,CFU_EventFlags(a3)
-	bne.w	_t_identify		;card inserted
+	bne.w	_t_identify		;card inserted (insert IRQ fired)
+
+;-- Cold-boot fallback: the insert IRQ may not have arrived
+;   inside the 1s arbitration window. Re-read CCDET; if the
+;   card is still physically present, force identify anyway.
+;   _t_identify itself re-reads CCDET and bails to _t_ibreak
+;   if the slot is empty, so this is safe.
+	lea	CFU_CardHandle(a3),a2
+	move.l	a2,a1
+	CALLCARD ReadCardStatus
+	and.b	#CARD_STATUSF_CCDET,d0
+	bne.w	_t_identify		;still present -> identify
 	bra.s	_t_check
 
 ;- - control loop - - - - - - - - - - - - - - - - - - - - -
@@ -2417,17 +2440,28 @@ _t_i2:
 	; CIS gate report
 	DBGMSG	dbg_cis_scan
 
-	; Read CISTPL_DEVICE
+	; Read CISTPL_DEVICE.  On cold boot the card sometimes hasn't
+	; finished populating its attribute memory yet and returns an
+	; all-zero "NULL/hole" tuple (type=0x00).  Retry up to 10 times
+	; (~400ms) before giving up and falling through to FUNCID.
+	moveq.l	#10,d2
+_t_dev_retry:
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_CardHandle(a3),a1
 	moveq.l	#CISTPL_DEVICE,d1
 	moveq.l	#127,d0
 	CALLCARD CopyTuple
 	tst.w	d0
-	beq.s	_t_devtuple_skip
+	beq.w	_t_devtuple_skip	;tuple read failed -> FUNCID
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_DTSize(a3),a1
 	CALLCARD DeviceTuple
+	tst.b	CFU_DTType(a3)
+	bne.s	_t_dev_have		;real type seen -> stop retrying
+	bsr	Wait40
+	subq.w	#1,d2
+	bne.s	_t_dev_retry
+_t_dev_have:
 	; DeviceTuple fills CFU_DTType/CFU_DTSpeed/CFU_DTSize.
 	; We use CFU_DTSpeed later for CardAccessSpeed (timing setup).
 	ifd	DEBUG
@@ -2475,7 +2509,9 @@ _t_i2:
 	beq.s	_t_cis_gate_accept
 	cmp.b	#$05,CFU_DTType(a3)	;FLASH
 	beq.s	_t_cis_gate_accept
-	bra.w	_t_cis_reject
+	tst.b	CFU_DTType(a3)
+	beq.w	_t_devtuple_skip	;NULL tuple -> consult FUNCID
+	bra.w	_t_cis_reject		;non-zero, non-whitelisted -> reject
 _t_devtuple_skip:
 
 	; Fallback CIS gate by FUNCID if CISTPL_DEVICE is unavailable:
@@ -2522,20 +2558,24 @@ _t_cis_reject:
 
 _t_cis_gate_end:
 	; Try to locate CISTPL_CONFIG tuple for config register address.
-	; If tuple is missing/invalid, fallback to standard 0x200 offset.
+	; On cold boot the CIS attribute memory may parse OK structurally
+	; but every byte still reads as zero, yielding addr=0.  Retry the
+	; read up to 10 times (~400ms) before falling back to 0x200.
+	moveq.l	#10,d3
+_t_cfg_retry:
 	moveq.l	#CISTPL_CONFIG,d1
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_CardHandle(a3),a1
 	moveq.l	#127,d0
 	CALLCARD CopyTuple
 	tst.w	d0
-	beq.s	_t_config_fallback	;CopyTuple failed use fallback
+	beq.s	_t_cfg_again		;CopyTuple failed -> retry
 
 	; Parse CopyTuple buffer: [0]=code [1]=link [2..]=data
 	lea	CFU_ConfigBlock(a3),a0
 	addq.l	#1,a0			;skip tuple code
 	cmp.b	#4,(a0)+		;check tuple data length
-	bcs.s	_t_config_fallback	;invalid length, use fallback
+	bcs.s	_t_cfg_again		;invalid length -> retry
 
 	moveq.l	#3,d0
 	and.b	(a0)+,d0		;address length (1-4 bytes) - 1
@@ -2550,10 +2590,18 @@ _t_raddr:
 _t_saddr:
 	addq.w	#1,d1
 	cmp.w	#4,d1
-	bcc.s	_t_gotconfig
+	bcc.s	_t_cfg_check_addr
 
 	lsr.l	#8,d2
 	bra.s	_t_saddr
+_t_cfg_check_addr:
+	tst.l	d2
+	bne.s	_t_gotconfig		;non-zero address -> accept
+_t_cfg_again:
+	subq.w	#1,d3
+	beq.s	_t_config_fallback	;retries exhausted -> fallback
+	bsr	Wait40
+	bra.s	_t_cfg_retry
 _t_gotconfig:
 	ifd	DEBUG
 	btst	#3,CFU_OpenFlags+1(a3)
