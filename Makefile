@@ -8,7 +8,7 @@
 VERSION_MAJOR = 1
 VERSION_MINOR = 42
 VERSION_SUFFIX = -dev
-DATE = 04.05.2026
+DATE = 05.05.2026
 DATE_SHORT = 05/2026
 
 # compactflash.device version
