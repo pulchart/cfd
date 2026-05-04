@@ -307,11 +307,11 @@ bs_haveExp:
 	move.l	d0,a2
 	move.b	#NT_CONFIGDEV,CD_NODE_TYPE(a2)
 	move.l	BC_DevName(a4),CD_NODE_NAME(a2)
-	move.b	#ERTF_DIAGVALID|4,CD_ER_TYPE(a2)	;512KB: PCMCIA attr window
+	move.b	#$C0|ERTF_DIAGVALID|4,CD_ER_TYPE(a2)	;Z-II, diag, 512KB
 	lea	s_rdb_diag_rom(pc),a0
 	move.l	a0,CD_ER_RESERVED0C(a2)
 	move.b	#1,CD_ER_PRODUCT(a2)
-	move.w	#$07DB,CD_ER_MANUF(a2)
+	move.w	#$FFFF,CD_ER_MANUF(a2)		;no vendor
 	move.l	#$52444230,CD_ER_SERIAL(a2)	;'RDB0'
 	move.l	#$00A00000,CD_BOARDADDR(a2)	;PCMCIA attributes base
 	move.l	#$00080000,CD_BOARDSIZE(a2)	;512 KB
