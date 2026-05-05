@@ -137,6 +137,10 @@ _bao_not_hunk:
 	move.l	d0,d7
 
 _bao_fse_build:
+;-- I-cache flush before publishing the SegList
+	move.l	BC_ExecBase(a4),a6
+	jsr	CacheClearU(a6)
+
 ;-- Build a FileSysEntry; MEMF_REVERSE to keep it high.
 	moveq.l	#fse_Sizeof,d0
 	move.l	#MEMF_PUBLIC+MEMF_CLEAR+MEMF_REVERSE,d1

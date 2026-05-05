@@ -73,6 +73,7 @@ OpenResource	= -498
 OpenLibrary	= -552
 RawPutChar	= -516
 AddResource	= -486
+CacheClearU	= -636
 
 ;struct Node
 LN_Type		=  8
