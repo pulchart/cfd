@@ -15,15 +15,27 @@ CHANGES IN @VERSION@ (@DATE@)
 
 compactflash.device:
 
-* Autoboot from RDB:
-  a bootable RDB partition on the inserted CF card boots straight into Workbench.
-* Automount from RDB:
-  RDB partitions appear in Workbench at cold start without DEVS:DOSDrivers/ entries.
-* RDB filesystem handlers:
-  handlers stored in the card's RDB are loaded and registered automatically.
+* Autoboot from RDB at cold-boot:
 
-Autoboot and automount require a ROM-resident ptable.library (new companion library in this release).
-Without it, compactflash.device works as before.
+  a bootable RDB partition on the inserted card boots straight into Workbench.
+  All RDB partitions appear at cold start without `DEVS:DOSDrivers/` entries.
+  Filesystem handlers stored on the card are loaded automatically.
+
+  Requires `ptable.library` to be ROM-resident; disk-only install is
+  mountable-only without it.
+
+  When a card is present and stable all loops exit on the first iteration.
+  The worst-case extra delay (~1.8 s) is paid once on the first `OpenDevice`
+  with no card inserted.
+
+  No CF card is present pre-gate introduced, the autoboot stub checks PCMCIA
+  card presence and skips the hardware init entirely when the slot is empty.
+
+* Stricter CIS gate:
+
+  as the CIS detection code improved over time, the fallback that accepted
+  cards without a readable `CISTPL_FUNCID` was dropped. Such cards now fail
+  the CIS gate, freeing them for their proper driver.
 
 Others:
 
@@ -88,6 +100,7 @@ For OS 3.5+:
 
 AUTOBOOT/AUTOMOUNT
 ==================
+
 Autoboot is now provided by a separate ptable.library shipped under
 <flavor>/<cpu>/libs/. At Kickstart cold start the compactflash.device
 opens ptable.library and asks it to walk the RDB on the inserted card,
@@ -98,6 +111,9 @@ and publish each partition via AddBootNode (bootable) or AddDosNode
 The library MUST be ROM-resident for this to work a disk-only library
 install is silently ignored. The device driver still works as a normal
 mount-only device.
+
+On cold boot the driver tolerates slow cards and adapters by polling
+for up to ~1.8s. When a card is present and stable the delay is zero.
 
 MOUNT FLAGS
 ===========
@@ -113,16 +129,10 @@ Set in CF0 mountlist (can be combined, e.g. Flags = 24 for debug + enforce):
 
 SERIAL DEBUG EXAMPLE
 ====================
+
 With Flags = 8, connect serial cable and monitor at 9600 baud. The first
 line is a version banner that identifies the driver version and CPU tier
 ([68020] or [68000]):
-
-  [CFD] boot: open ptable.library ...
-  [CFD] boot: ptable.library not preloaded, InitResident()...
-  [CFD] boot: BootScanRDB(compactflash.device,0)
-  [RDB] scan
-  [RDB] no RDB
-  [RDB] done
 
   [CFD] compactflash.device 1.42 (03.05.2026) [68020]
   [CFD] Card inserted
@@ -134,8 +144,7 @@ line is a version banner that identifies the driver version and CPU tier
   [CFD] Voltage: 5V
   [CFD] CIS gate
   [CFD] ..DEVICE: type=0x0D speed=720ns size=0x00000000
-  [CFD] ..FUNCID: missing (compat)
-  (or: [CFD] ..FUNCID: 0x04)
+  [CFD] ..FUNCID: 0x04
   [CFD] ..RESULT: accept
   [CFD] ..CONFIG: addr=0x00000200
   (or: [CFD] ..CONFIG: default (0x200))
@@ -170,6 +179,21 @@ line is a version banner that identifies the driver version and CPU tier
   [CFD] Card identified OK
   [CFD] Notify clients
   [CFD] Card removed
+
+Serial debug output at cold boot comes from a full build only and is unconditional, 
+not gated by the mountlist Flags=8 setting. Two components emit output:
+compactflash.device uses the [CFD] boot: prefix, and ptable.library uses [RDB].
+
+Note that ptable.library opens the device with Flags=0, so the per-card identify
+log ([CFD] Reset, [CFD] CIS gate, etc.) is not printed during autoboot.
+
+  [CFD] boot: open ptable.library ...
+  [CFD] boot: ptable.library not preloaded, InitResident()...
+  [CFD] boot: BootScanRDB(compactflash.device,0)
+  [RDB] scan
+  [RDB] no RDB
+  [RDB] done
+
 
 ENFORCE MULTI MODE (FLAG 16)
 ============================

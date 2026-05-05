@@ -271,6 +271,10 @@ _brh_hunk_end:
 	move.l	BC_ExecBase(a4),a6
 	jsr	FreeMem(a6)
 
+;-- I-cache flush after RELOC32 fixups (required on 68040/060).
+	move.l	BC_ExecBase(a4),a6
+	jsr	CacheClearU(a6)
+
 	move.l	d7,d0
 	movem.l	(sp)+,d2-d7/a2-a6
 	rts

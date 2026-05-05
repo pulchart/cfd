@@ -866,8 +866,6 @@ dbg_cis_scan:
 	dc.b	"[CFD] CIS gate",13,10,0
 dbg_cis_funcid:
 	dc.b	"[CFD] ..FUNCID: 0x",0
-dbg_cis_funcid_missing:
-	dc.b	"[CFD] ..FUNCID: missing (compat)",13,10,0
 dbg_cis_device:
 	dc.b	"[CFD] ..DEVICE: type=0x",0
 dbg_cis_device_speed:
@@ -2485,7 +2483,7 @@ _t_dev_have:
 	;              yes -> ACCEPT
 	;              no  -> REJECT
 	;     no  -> CISTPL_FUNCID known?
-	;              no  -> ACCEPT (compat)
+	;              no  -> REJECT
 	;              yes -> FUNCID == 0x04 ?
 	;                        yes -> ACCEPT
 	;                        no  -> REJECT
@@ -2515,21 +2513,20 @@ _t_dev_have:
 _t_devtuple_skip:
 
 	; Fallback CIS gate by FUNCID if CISTPL_DEVICE is unavailable:
-	; - if FUNCID missing/unreadable => continue
-	; - if FUNCID == 0x04 => continue
-	; - otherwise => reject early (e.g. WiFi/LAN)
+	; - if FUNCID == 0x04 (Fixed Disk) => accept
+	; - otherwise (missing / unreadable / non-disk) => reject
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_CardHandle(a3),a1
 	moveq.l	#CISTPL_FUNCID,d1
 	moveq.l	#127,d0
 	CALLCARD CopyTuple
 	tst.w	d0
-	beq.s	_t_cis_funcid_missing	;missing/unreadable => continue
+	beq.w	_t_cis_reject		;missing/unreadable => reject
 
 	lea	CFU_ConfigBlock(a3),a0
 	addq.l	#1,a0			;-> link
 	cmp.b	#1,(a0)+		;need at least 1 byte of data
-	bcs.s	_t_cis_funcid_missing
+	bcs.w	_t_cis_reject		;short tuple => reject
 	moveq.l	#0,d2
 	move.b	(a0),d2			;FUNCID
 	ifd	DEBUG
@@ -2541,10 +2538,6 @@ _t_devtuple_skip:
 	cmp.b	#4,d2			;0x04 = Fixed Disk
 	beq.s	_t_cis_funcid_ok
 	bra.w	_t_cis_reject
-
-_t_cis_funcid_missing:
-	DBGMSG	dbg_cis_funcid_missing
-	nop
 
 _t_cis_funcid_ok:
 _t_cis_gate_accept:
@@ -5516,6 +5509,8 @@ RdbLibName:
 	even
 
 	ifd	DEBUG
+dbg_bs_no_card:
+	dc.b	"[CFD] boot: no PCMCIA card -> skip autoboot",13,10,0
 dbg_bs_open:
 	dc.b	"[CFD] boot: open ptable.library ...",13,10,0
 dbg_bs_preload:
@@ -5603,6 +5598,19 @@ _bs_devPresent:
 	move.l	d7,a0
 	tst.b	CFD_BootDone(a0)
 	bne.w	_bs_done
+
+;-- No-card pre-gate.  Read live Gayle CCDET ($DA8000 bit 6, set =
+;   card present); when the slot is empty skip OpenDevice to avoid
+;   the unit-task hardware footprint (OwnCard, AddIntServer #5,
+;   timer.device) at cold-start.
+	btst.b	#6,$00DA8000
+	bne.s	_bs_have_card
+	ifd	DEBUG
+	lea	dbg_bs_no_card(pc),a0
+	bsr	_bootDebug
+	endc
+	bra.w	_bs_mark
+_bs_have_card:
 
 ;-- OpenLibrary "ptable.library", v1.
 	ifd	DEBUG

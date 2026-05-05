@@ -21,17 +21,17 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### v1.42-dev (05.05.2026)
+### v1.42-dev (06.05.2026)
 
 This release introduces **autoboot and automount from RDB-partitioned CF cards**.
 
 #### Driver
 
-* **Autoboot from RDB**: a bootable RDB partition on the inserted card boots straight into Workbench
-* **Automount of all RDB partitions**: every partition on the card appears in Workbench at cold start without `DEVS:DOSDrivers/` entries.
-* **Filesystem handlers ride along on the card**: handlers stored in the card's RDB are loaded automatically
+* **Autoboot from RDB at cold-boot**: a bootable RDB partition on the inserted card boots straight into Workbench. All RDB partitions appear   at cold start without `DEVS:DOSDrivers/` entries. Filesystem handlers stored on the card are loaded automatically.
+Requires `ptable.library` to be ROM-resident; disk-only install is mountable-only without it.
+When a card is present and stable all loops exit on the first iteration. The worst-case extra delay (~1.8 s) is paid once on the first `OpenDevice` with no card inserted.
 
-Autoboot/automount is provided by a companion `ptable.library` that **must be ROM-resident** to fire. Disk-only installation leaves the device mountable-only and ptable.library is not needed.
+* **Stricter CIS gate**: as the CIS detection code improved over time, the fallback that accepted cards without a readable `CISTPL_FUNCID` was dropped. Such cards now fail the CIS gate, freeing them for their proper driver.
 
 #### Others
 
@@ -253,9 +253,13 @@ How each RDB partition is handled at boot:
 
 BootPri is stored in the RDB partition environment and controls boot order.
 
+*Cold-boot timing*
+
+On cold boot the the driver polls for up to ~1.8 s in total (1 s for card-detect, ~400 ms each for CIS tuples)
+
 *Boot debug output*
 
-With a full build, two components emit serial output: `compactflash.device` uses the `[CFD] boot:` prefix, and `ptable.library` uses `[RDB]`:
+`ptable.library` opens the device with `Flags=0`. Serial debug output at cold boot comes from a `full` build only and is unconditional, not gated by the mountlist `Flags = 8` setting. Two components emit output: `compactflash.device` uses the `[CFD] boot:` prefix, and `ptable.library` uses `[RDB]`:
 
 ```
 [CFD] boot: open ptable.library ...
@@ -481,7 +485,7 @@ flowchart TD
     DevType -- yes --> Accept([ACCEPT])
     DevType -- no --> Reject([REJECT])
     HasDev -- no --> HasFunc{CISTPL_FUNCID present?}
-    HasFunc -- no --> AcceptCompat([ACCEPT compat])
+    HasFunc -- no --> Reject
     HasFunc -- yes --> FuncId{FUNCID == 0x04?}
     FuncId -- yes --> Accept
     FuncId -- no --> Reject
@@ -504,11 +508,11 @@ flowchart TD
 
 CompactFlash cards normally report `0x0D` or `0x05`.
 
-`CISTPL_FUNCID` is only consulted when `CISTPL_DEVICE` is unavailable (some adapters/cards do not provide it). Shown in `[CFD] ..FUNCID: 0x..` or `[CFD] ..FUNCID: missing (compat)`:
+`CISTPL_FUNCID` is only consulted when `CISTPL_DEVICE` is unavailable (some adapters/cards do not provide it). Shown in `[CFD] ..FUNCID: 0x..`:
 
 | FUNCID | Meaning | CIS gate |
 |--------|---------|----------|
-| missing/unreadable | (e.g. some CF cards/adapters) | accept (compat) |
+| missing/unreadable | (no positive ATA evidence) | reject |
 | 0x04 | Fixed Disk | accept |
 | anything else | (e.g. WiFi/LAN, serial, ...) | reject |
 
@@ -645,7 +649,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start |
+| v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
 | v1.39 | 02/2026 | I/O port access reliability check |
