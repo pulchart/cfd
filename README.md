@@ -253,6 +253,21 @@ How each RDB partition is handled at boot:
 
 BootPri is stored in the RDB partition environment and controls boot order.
 
+*Boot order*
+
+The driver starts during Kickstart boot after the internal IDE is ready. The relevant modules in boot order are:
+
+| Module | Role |
+|--------|------|
+| `card.resource` | PCMCIA slot initialised |
+| `trackdisk.device` | floppy |
+| `carddisk.device` | Kickstart built-in PCMCIA handler |
+| `scsi.device` | internal IDE initialised |
+| **`compactflash.boot`** | **CF card check + partition scan** |
+| `strap` | boot menu / Workbench start |
+
+The driver runs after the internal IDE is initialised, so it does not interfere with it. If the IDE stalls at boot (e.g. no drive connected), CF autoboot will not trigger either.
+
 *Cold-boot timing*
 
 On cold boot the the driver polls for up to ~1.8 s in total (1 s for card-detect, ~400 ms each for CIS tuples)

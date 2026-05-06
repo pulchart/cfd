@@ -5497,7 +5497,7 @@ s_resident_boot:
 	dc.b	$01			;RTF_COLDSTART (no AUTOINIT)
 	dc.b	FILE_VERSION
 	dc.b	0			;NT_UNKNOWN
-	dc.b	20			;Priority (classic autoboot slot)
+	dc.b	9			;Priority: after scsi.device (10), before strap (-60)
 	dc.l	s_boot_name
 	dc.l	s_idstring
 	dc.l	s_bootstub

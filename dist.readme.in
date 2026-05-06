@@ -24,12 +24,15 @@ compactflash.device:
   Requires `ptable.library` to be ROM-resident; disk-only install is
   mountable-only without it.
 
-  When a card is present and stable all loops exit on the first iteration.
-  The worst-case extra delay (~1.8 s) is paid once on the first `OpenDevice`
-  with no card inserted.
+  No extra delay occurs when a card is present. Without a card, a
+  one-time delay of up to 1.8 s may occur on the first access.
 
-  No CF card is present pre-gate introduced, the autoboot stub checks PCMCIA
-  card presence and skips the hardware init entirely when the slot is empty.
+  When the slot is empty, the driver skips initialisation entirely
+  and does not touch the hardware.
+
+  The driver starts after the internal IDE, so it does not interfere
+  with it. If the IDE stalls at boot (e.g. no drive connected),
+  CF autoboot will not trigger either.
 
 * Stricter CIS gate:
 
