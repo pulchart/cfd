@@ -175,11 +175,7 @@ s_resident:
 	dc.b	RTF_AUTOINIT
 	dc.b	LIB_VERSION
 	dc.b	NT_LIBRARY
-	dc.b	22			;Priority: must exceed consuming
-					;device's NT_DEVICE Resident (21) so
-					;the library is up before that
-					;device's RTF_COLDSTART stub runs
-					;at prio 20.
+	dc.b	PRI_PTABLE_LIB		;see ptable_pub.i for priority rationale
 	dc.l	s_libname
 	dc.l	s_libidstring
 	dc.l	s_inittable
