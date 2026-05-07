@@ -744,9 +744,7 @@ s_resident:
 	dc.b	RTF_AUTOINIT
 	dc.b	FILE_VERSION
 	dc.b	NT_DEVICE
-	dc.b	21			;Priority: must exceed s_resident_boot
-					;(20) so AddDevice runs before our
-					;cold-start stub.
+	dc.b	PRI_CFD_DEVICE		;see ptable_pub.i for priority rationale
 	dc.l	s_name
 	dc.l	s_idstring
 	dc.l	s_inittable
@@ -5496,7 +5494,7 @@ s_resident_boot:
 	dc.b	$01			;RTF_COLDSTART (no AUTOINIT)
 	dc.b	FILE_VERSION
 	dc.b	0			;NT_UNKNOWN
-	dc.b	9			;Priority: after scsi.device (10), before strap (-60)
+	dc.b	PRI_CFD_BOOT		;see ptable_pub.i for priority rationale
 	dc.l	s_boot_name
 	dc.l	s_idstring
 	dc.l	s_bootstub
