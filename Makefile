@@ -8,14 +8,14 @@
 VERSION_MAJOR = 1
 VERSION_MINOR = 42
 VERSION_SUFFIX = -dev
-DATE = 06.05.2026
+DATE = 07.05.2026
 DATE_SHORT = 05/2026
 
 # compactflash.device version
 CFD_MAJOR = 1
 CFD_MINOR = 42
 CFD_VERSION_SUFFIX = -dev
-CFD_DATE = 06.05.2026
+CFD_DATE = 07.05.2026
 
 # ptable.library version; bumped only on library-ABI changes:
 # - additive LVOs bump REVISION
