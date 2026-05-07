@@ -942,14 +942,7 @@ s_initfunc:
 	move.l	#FILE_VERSION<<16+FILE_REVISION,LIB_Version(a4)
 	lea	s_idstring(pc),a0
 	move.l	a0,LIB_IdString(a4)
-	moveq.l	#36,d0
-	lea	CardName(pc),a1
-	CALLEXEC OpenResource
-	move.l	d0,CFD_CardBase(a4)
-	beq.s	s_if_end
-
-	move.l	a4,d0
-s_if_end:
+	move.l	a4,d0			;card.resource opened lazily in NewUnit
 	move.l	(sp)+,a4
 	rts
 
@@ -1227,6 +1220,12 @@ NewUnit:
 	move.l	d0,a3
 	tst.l	d0
 	beq.w	nu_end			;no memory
+
+	moveq.l	#36,d0
+	lea	CardName(pc),a1
+	CALLEXEC OpenResource
+	move.l	d0,CFD_CardBase(a4)
+	beq.w	nu_freeunit		;card.resource unavailable
 
 	move.l	a4,CFU_Device(a3)
 	move.l	#CFU_Sizeof,CFU_UnitSize(a3)
