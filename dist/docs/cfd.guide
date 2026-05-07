@@ -530,6 +530,13 @@ automount. To activate, it must be flashed into a ROM image; copying it
 to @{fg shine}SYS:Libs/@{fg text} alone is silently ignored because the early-startup
 environment runs before DOS volumes are accessible.
 
+@{i}Building your own ROM@{ui}
+
+A scripted Capitoline-based ROM builder lives at
+@{fg shine}tools/kickstart/build_rom.py@{fg text} for users who want to flash a 1 MB Hyperion
+3.2.3 Kickstart with @{fg shine}compactflash.device@{fg text} + @{fg shine}ptable.library@{fg text} embedded. See @{"  docs/kickstart.guide  " link "kickstart.guide/Main"}
+for prerequisites, usage, and flashing.
+
 @{i}Partition handling@{ui}
 
 How each RDB partition is handled at boot:
@@ -567,8 +574,15 @@ CF autoboot will not trigger either.
 
 @{i}Cold-boot timing@{ui}
 
-On cold boot the the driver polls for up to ~1.8 s in total (1 s for
-card-detect, ~400 ms each for CIS tuples)
+The boot stub starts with a @{b}no-card pre-gate@{ub} : a single read of the
+Gayle CCDET signal ( @{fg shine}$DA8000@{fg text} bit 6) tells it whether a CF card is in the
+slot. If the slot is empty, the stub returns immediately.
+
+If a card IS present, the driver tolerates slow cards/adapters by
+polling for up to ~1.8 s in total (1 s for card-detect stabilisation,
+~400 ms each for the two CIS tuple reads). Stable cards complete the
+first iteration of each loop, so a healthy card pays no measurable
+delay.
 
 @{i}Boot debug output@{ui}
 

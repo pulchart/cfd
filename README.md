@@ -241,6 +241,10 @@ At Kickstart cold start `compactflash.device` opens `ptable.library`, which walk
 
 `ptable.library` is **optional** for the driver. Without it, `compactflash.device` still works fully as a mount-only device via `DEVS:DOSDrivers/CF0` as example. It is **required** for autoboot and automount. To activate, it must be flashed into a ROM image; copying it to `SYS:Libs/` alone is silently ignored because the early-startup environment runs before DOS volumes are accessible.
 
+*Building your own ROM*
+
+A scripted Capitoline-based ROM builder lives at `tools/kickstart/build_rom.py` for users who want to flash a 1 MB Hyperion 3.2.3 Kickstart with `compactflash.device` + `ptable.library` embedded. See [docs/kickstart.md](docs/kickstart.md) for prerequisites, usage, and flashing.
+
 *Partition handling*
 
 How each RDB partition is handled at boot:
@@ -270,7 +274,9 @@ The driver runs after the internal IDE is initialised, so it does not interfere 
 
 *Cold-boot timing*
 
-On cold boot the the driver polls for up to ~1.8 s in total (1 s for card-detect, ~400 ms each for CIS tuples)
+The boot stub starts with a **no-card pre-gate**: a single read of the Gayle CCDET signal (`$DA8000` bit 6) tells it whether a CF card is in the slot. If the slot is empty, the stub returns immediately.
+
+If a card IS present, the driver tolerates slow cards/adapters by polling for up to ~1.8 s in total (1 s for card-detect stabilisation, ~400 ms each for the two CIS tuple reads). Stable cards complete the first iteration of each loop, so a healthy card pays no measurable delay.
 
 *Boot debug output*
 
