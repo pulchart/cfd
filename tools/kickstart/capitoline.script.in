@@ -1,0 +1,139 @@
+####################################################################################
+# CFD Kickstart ROM - 1 MB Hyperion AmigaOS 3.2.3 for @@MODEL@@
+# Auto-generated from tools/kickstart/capitoline.script.in by build_rom.sh
+#
+# F8 ROM: original modules + patched 1Mb_Scantable (required for 1 MB ROMs)
+# E0 ROM: workbench + icon (+ optional rexxsyslib) + ptable.library + compactflash.device
+####################################################################################
+
+# --------------------------------------------------------------------------
+# F8 ROM (0xF80000) - base AmigaOS with 1Mb_Scantable patch
+# --------------------------------------------------------------------------
+
+auditfiles ROMs
+var SOURCEROM "$@@SOURCEROM_CRC@@"
+
+auditfiles ADFs
+var ADF "$@@ADF_CRC@@"
+
+newrom 512k 255
+rombase 0xF80000
+
+add "$SOURCEROM" exec.library
+
+# Patch exec.library's embedded 28-byte 1Mb scantable IN PLACE to include the
+# E0 ROM range (0xE00000-0xE80000), matching Remus's F8 layout exactly.
+# Replaces the redundant (F80000, ENDSKIP) self-range with the E0 range.
+#
+# Layout before:
+#   (F80000, ENDSKIP), (F80000, 1000000), (F00000, F80000), FFFFFFFF
+# Layout after (matches Remus):
+#   (F80000, 1000000), (E00000, E80000), (F00000, F80000), FFFFFFFF
+#
+# Same total size (28 bytes), so no module shifting in the rest of F8 ROM.
+# This is what Remus's Blizkick/1MB_ROM does; it differs from the
+# Capitoline-docs "add new chunk + redirect" pattern which inserts ~36 bytes
+# after exec.library and shifts every subsequent module's absolute address.
+var ENDSKIP romdata $exec.library.(ROMTAG.ENDSKIP) 4
+var ENDSKIP mid 2
+find $exec.library 0x00F80000$ENDSKIP00F800000100000000F0000000F80000FFFFFFFF
+var FIND add $ROMBASE
+patch $FIND 0x00F8000001000000
+var FIND add 8
+patch $FIND 0x00E0000000E80000
+var FIND add 8
+patch $FIND 0x00F0000000F80000
+var FIND add 8
+patch $FIND 0xFFFFFFFF
+
+add "$SOURCEROM" expansion.library
+add "$SOURCEROM" mathieeesingbas.library
+add "$SOURCEROM" graphics.library
+add "$SOURCEROM" dos.library
+add "$SOURCEROM" filesystem
+add "$SOURCEROM" console.device
+add "$SOURCEROM" layers.library
+add "$SOURCEROM" scsi.device
+add "$SOURCEROM" con-handler
+add "$SOURCEROM" bootmenu
+add "$SOURCEROM" syscheck
+add "$SOURCEROM" audio.device
+add "$SOURCEROM" card.resource
+add "$SOURCEROM" utility.library
+add "$SOURCEROM" battclock.resource
+add "$SOURCEROM" carddisk.device
+add "$SOURCEROM" ramdrive.device
+add "$SOURCEROM" mathffp.library
+add "$SOURCEROM" cia.resource
+add "$SOURCEROM" battmem.resource
+add "$SOURCEROM" potgo.resource
+add "$SOURCEROM" FileSystem.resource
+add "$SOURCEROM" misc.resource
+add "$SOURCEROM" disk.resource
+add "$SOURCEROM" ramlib
+add "$SOURCEROM" keymap.library
+add "$SOURCEROM" timer.device
+add "$SOURCEROM" romboot
+add "$SOURCEROM" input.device
+add "$SOURCEROM" keyboard.device
+add "$SOURCEROM" gameport.device
+add "$SOURCEROM" trackdisk.device
+add "$SOURCEROM" ram-handler
+add "$SOURCEROM" shell
+add "$SOURCEROM" intuition.library
+add "$SOURCEROM" gadtools.library
+add "$SOURCEROM" system-startup
+add "$SOURCEROM" syslog
+add "$SOURCEROM" workbench.task
+
+add checksum
+add size
+add vectors
+checksum
+
+saverom @@OUTDIR@@/cfd.F8
+
+# --------------------------------------------------------------------------
+# E0 ROM (0xE00000) - workbench.library, icon.library, CFD modules
+# --------------------------------------------------------------------------
+
+newrom 512k 255
+rombase 0xE00000
+
+add "Components/BinaryChunks/ROMHeader_E0"
+
+# ROMHeader_E0 ships with a hardcoded ROM version 0x002D 000A (45.10, OS 3.0)
+# at data offset 0x0C.  Patch it to match the F8 ROM (47.115 = 0x002F 0073).
+# Required so ACA / MapROM bootloaders that cross-check F8 vs E0 versions
+# don't fall into a defensive path.
+var HDRVER $ROMHeader_E0.(START)
+var HDRVER add 0xC
+patch $HDRVER 0x002F0073
+
+loadadf "$ADF"
+add ADF:/LIBS/workbench.library
+add ADF:/LIBS/icon.library
+
+@@ADD_REXXSYSLIB@@
+
+# ptable.library first so its ROMTAG is registered before
+# compactflash.device's RTF_COLDSTART stub calls OpenLibrary()
+add ptable.library
+add compactflash.device
+
+add checksum
+add size
+add vectors
+checksum
+
+saverom @@OUTDIR@@/cfd.E0
+
+# --------------------------------------------------------------------------
+# Optional: byteswapped 512 KB halves for dual-chip EPROM burning
+# (A1200 has two Kickstart chips; A600 has a single 16-bit ROM and only
+# needs cfd.rom, so the saveprofile block is empty for A600.)
+# --------------------------------------------------------------------------
+
+@@SAVEPROFILE@@
+
+exit
