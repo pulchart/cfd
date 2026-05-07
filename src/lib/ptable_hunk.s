@@ -178,6 +178,12 @@ _brh_copy:
 	move.l	d5,d0
 	lsl.l	#2,d0
 	move.l	(a5,d0.l),a1
+	;-- verify body size fits the allocation: alloc stores
+	;   (header_d6*4 + 8) at offset 0; data area is alloc-8 bytes
+	move.l	(a1),d0
+	sub.l	#8,d0
+	cmp.l	d1,d0
+	blo.w	_brh_teardown
 	addq.l	#8,a1
 	tst.l	d6
 	beq.s	_brh_copy_done
@@ -193,6 +199,16 @@ _brh_bss:
 	bhs.w	_brh_teardown
 	move.l	(a2)+,d6
 	and.l	#$3FFFFFFF,d6
+	;-- verify body BSS size fits the allocation
+	move.l	d5,d0
+	lsl.l	#2,d0
+	move.l	(a5,d0.l),a1
+	move.l	(a1),d0
+	sub.l	#8,d0
+	move.l	d6,d1
+	lsl.l	#2,d1
+	cmp.l	d1,d0
+	blo.w	_brh_teardown
 	bra.w	_brh_body_loop
 
 _brh_reloc:
@@ -221,6 +237,13 @@ _brh_reloc_inner:
 	cmpa.l	a3,a2
 	bhs.w	_brh_teardown
 	move.l	(a2)+,d0
+	;-- bounds-check relocation offset against dst hunk's data area;
+	;   alloc size header is at -8(a0), data ends at alloc_size-8
+	;   bytes, max valid 4-byte write offset = alloc_size-12.
+	move.l	-8(a0),d3
+	sub.l	#12,d3
+	cmp.l	d3,d0
+	bhi.w	_brh_teardown
 	move.l	a1,d1
 	add.l	d1,(a0,d0.l)
 	subq.l	#1,d6
