@@ -1032,12 +1032,15 @@ Expunge:
 	moveq.l	#0,d0
 	bra.s	ex_end
 ex_now:
+	move.l	CFD_Unit(a4),a1
+	bsr	KillUnit
+	tst.l	d0
+	bne.s	ex_defer		;KillUnit failed: defer expunge
+
 	CALLEXEC Forbid
 	move.l	a4,a1
 	CALLSAME Remove
 	CALLSAME Permit
-	move.l	CFD_Unit(a4),a1
-	bsr	KillUnit
 	move.l	CFD_SegList(a4),d2
 	moveq.l	#0,d0
 	move.w	LIB_NegSize(a4),d0
@@ -1046,6 +1049,10 @@ ex_now:
 	add.w	LIB_PosSize(a4),d0
 	CALLEXEC FreeMem
 	move.l	d2,d0
+	bra.s	ex_end
+ex_defer:
+	or.b	#LIBF_DELEXP,LIB_Flags(a4)
+	moveq.l	#0,d0			;exec retries via Close once OpenCnt drops
 ex_end:
 	movem.l	(sp)+,d2/a4
 	rts
@@ -1301,6 +1308,7 @@ nu_freeall:
 	moveq.l	#TC_Sizeof,d0
 	add.l	d3,d0
 	move.l	a2,a1
+	sub.l	d3,a1			;a2 was &Task, alloc base = a2 - d3 (stack)
 	CALLSAME FreeMem
 nu_freemementry:
 	moveq.l	#24,d0
@@ -1319,18 +1327,18 @@ nu_freeunit:
 KillUnit:
 	movem.l	d2/a3-a4,-(sp)
 	move.l	a1,d0
-	beq.s	ku_end
+	beq.s	ku_ok			;NULL: nothing to do = success
 
 	move.l	a1,a3			;&Unit
 	move.l	CFU_Device(a3),a4	;&Device
 	moveq.l	#CFUF_TERM,d0
 	and.w	CFU_Flags(a3),d0
-	bne.s	ku_end
+	bne.s	ku_ok			;already terminated = success
 
 	moveq.l	#-1,d0
 	CALLEXEC AllocSignal
 	move.l	d0,d2
-	bmi.s	ku_end
+	bmi.s	ku_fail			;signal pool exhausted -> defer
 
 	moveq.l	#0,d1
 	bset	d0,d1
@@ -1349,7 +1357,11 @@ KillUnit:
 	move.l	#CFU_Sizeof,d0
 	move.l	a3,a1
 	CALLSAME FreeMem
-	moveq.l	#0,d0
+ku_ok:
+	moveq.l	#0,d0			;success
+	bra.s	ku_end
+ku_fail:
+	moveq.l	#-1,d0			;tell Expunge to defer
 ku_end:
 	movem.l	(sp)+,d2/a3-a4
 	rts
