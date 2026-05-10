@@ -533,9 +533,12 @@ environment runs before DOS volumes are accessible.
 @{i}Building your own ROM@{ui}
 
 A scripted Capitoline-based ROM builder lives at
-@{fg shine}tools/kickstart/build_rom.py@{fg text} for users who want to flash a 1 MB Hyperion
-3.2.3 Kickstart with @{fg shine}compactflash.device@{fg text} + @{fg shine}ptable.library@{fg text} embedded. See @{"  docs/kickstart.guide  " link "kickstart.guide/Main"}
-for prerequisites, usage, and flashing.
+@{fg shine}tools/kickstart/kickstart.py@{fg text} for users who want to flash a 1 MB AmigaOS
+3.2.3 or 3.1 Kickstart with @{fg shine}compactflash.device@{fg text} + @{fg shine}ptable.library@{fg text}
+embedded. See @{"  docs/kickstart.guide  " link "kickstart.guide/Main"} for prerequisites, usage, and flashing. For tested
+hardware combinations and which scantable pattern to use, see Pattern A
+/ B / C recommendations
+(docs/kickstart-scantable.md#pattern-a--b--c-recommendations).
 
 @{i}Partition handling@{ui}
 
@@ -543,12 +546,12 @@ How each RDB partition is handled at boot:
 
   @{b}RDB partition flag@{ub}   @{b}BootPri@{ub}  @{b}Result@{ub}                     
   -------------------  -------  -------------------------  
-  normal               >= 0     bootable -- appears in     
+  normal               >= 0     bootable: appears in       
                                 Early Startup boot device  
                                 list                       
-  normal               < 0      non-bootable -- mounted    
-                                as a DOS volume            
-  NOMOUNT (bit 1 set)  any      skipped entirely -- not    
+  normal               < 0      non-bootable: mounted as   
+                                a DOS volume               
+  NOMOUNT (bit 1 set)  any      skipped entirely: not      
                                 mounted, not in DOS list   
 
 BootPri is stored in the RDB partition environment and controls boot

@@ -1,0 +1,107 @@
+####################################################################################
+# CFD Kickstart ROM - 1 MB Hyperion AmigaOS 3.2.3 for {{ model }}
+####################################################################################
+
+{% from "_render_modules.j2" import render_modules -%}
+
+# --------------------------------------------------------------------------
+# F8 ROM (0xF80000) - base AmigaOS with 1Mb_Scantable patch
+# --------------------------------------------------------------------------
+
+auditfiles ROMs
+var SOURCEROM "${{ sourcerom_crc }}"
+
+auditfiles ADFs
+var ADF "${{ adf_crc }}"
+
+newrom 512k 255
+rombase 0xF80000
+
+add "$SOURCEROM" exec.library
+
+# Patch exec.library's embedded 28-byte 1Mb scantable IN PLACE so Exec scans
+# the E0 ROM bank in addition to F8.  Same 28 bytes, no module-offset shift.
+#
+# Default layout (4 longword pairs in exec.library at ~0x3F8):
+#   (F80000, ENDSKIP), (F80000, 1000000), (F00000, F80000), FFFFFFFF
+# After patch:
+#   (F80000, 1000000), (E00000, E80000), (F00000, F80000), FFFFFFFF
+#
+# Why in-place and not the canonical Capitoline "add chunk + redirect
+# pointer" pattern: that pattern inserts ~32 bytes after exec.library and
+# shifts every subsequent F8 module's absolute address.  The shift breaks
+# ACA1260/1240 cold boot when no internal IDE is attached.
+var ENDSKIP romdata $exec.library.(ROMTAG.ENDSKIP) 4
+var ENDSKIP mid 2
+find $exec.library 0x00F80000$ENDSKIP00F800000100000000F0000000F80000FFFFFFFF
+var FIND add $ROMBASE
+patch $FIND 0x00F8000001000000      # entry 0: (F80000, 1000000)   F8 skip
+var FIND add 8
+patch $FIND 0x00E0000000E80000      # entry 1: (E00000, E80000)   NEW: E0 skip
+var FIND add 8
+patch $FIND 0x00F0000000F80000      # entry 2: (F00000, F80000)   F0 skip
+var FIND add 8
+patch $FIND 0xFFFFFFFF              # terminator
+
+# Add each stock 3.2.3 F8 module in the source ROM's natural order, with
+# any `replace`-row substitution applied (driven by kickstart.yaml; same
+# shape as the 3.1 template's substitution loop).
+{% set stock_modules = [
+    "expansion.library", "mathieeesingbas.library", "graphics.library", "dos.library",
+    "filesystem", "console.device", "layers.library", "scsi.device",
+    "con-handler", "bootmenu", "syscheck", "audio.device",
+    "card.resource", "utility.library", "battclock.resource", "carddisk.device",
+    "ramdrive.device", "mathffp.library", "cia.resource", "battmem.resource",
+    "potgo.resource", "FileSystem.resource", "misc.resource", "disk.resource",
+    "ramlib", "keymap.library", "timer.device", "romboot",
+    "input.device", "keyboard.device", "gameport.device", "trackdisk.device",
+    "ram-handler", "shell", "intuition.library", "gadtools.library",
+    "system-startup", "syslog", "workbench.task"
+] %}
+
+{% for mod in stock_modules %}
+{%- if mod in patched_modules %}
+{{ patched_modules[mod] }}
+{%- else %}
+add "$SOURCEROM" {{ mod }}
+{%- endif %}
+{% endfor %}
+
+{{ render_modules(f8_modules) }}
+add checksum
+add size
+add vectors
+checksum
+
+saverom {{ outdir }}/cfd.F8
+
+# --------------------------------------------------------------------------
+# E0 ROM (0xE00000) - extra modules
+# --------------------------------------------------------------------------
+
+newrom 512k 255
+rombase 0xE00000
+
+add "Components/BinaryChunks/ROMHeader_E0"
+
+# ROMHeader_E0 ships with a hardcoded ROM version 0x002D 000A (45.10, OS 3.0)
+# at data offset 0x0C. Patch it to match the F8 ROM (47.115 = 0x002F 0073).
+var HDRVER $ROMHeader_E0.(START)
+var HDRVER add 0xC
+patch $HDRVER 0x002F0073
+
+{{ render_modules(e0_modules) }}
+add checksum
+add size
+add vectors
+checksum
+
+saverom {{ outdir }}/cfd.E0
+
+# --------------------------------------------------------------------------
+# Optional: byteswapped 512 KB halves for dual-chip EPROM burning
+# --------------------------------------------------------------------------
+
+{% if saveprofile %}{{ saveprofile }}
+{% endif %}
+exit

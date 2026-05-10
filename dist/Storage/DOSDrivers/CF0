@@ -1,4 +1,4 @@
-/* compactflash.device $VER: 1.37 (13.11.2026) */
+/* compactflash.device $VER: 1.42 (13.05.2026) */
 /*
  * Flags options (can be combined):
  *   0 = default
@@ -11,6 +11,7 @@
  */
 FileSystem = l:fat95
 Device = compactflash.device
+Control = "-d-D"
 Unit = 0
 Flags = 0
 LowCyl = 0

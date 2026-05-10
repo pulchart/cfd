@@ -243,7 +243,7 @@ At Kickstart cold start `compactflash.device` opens `ptable.library`, which walk
 
 *Building your own ROM*
 
-A scripted Capitoline-based ROM builder lives at `tools/kickstart/build_rom.py` for users who want to flash a 1 MB Hyperion 3.2.3 Kickstart with `compactflash.device` + `ptable.library` embedded. See [docs/kickstart.md](docs/kickstart.md) for prerequisites, usage, and flashing.
+A scripted Capitoline-based ROM builder lives at `tools/kickstart/kickstart.py` for users who want to flash a 1 MB AmigaOS 3.2.3 or 3.1 Kickstart with `compactflash.device` + `ptable.library` embedded. See [docs/kickstart.md](docs/kickstart.md) for prerequisites, usage, and flashing. For tested hardware combinations and which scantable pattern to use, see [Pattern A / B / C recommendations](docs/kickstart-scantable.md#pattern-a--b--c-recommendations).
 
 *Partition handling*
 
@@ -251,9 +251,9 @@ How each RDB partition is handled at boot:
 
 | RDB partition flag | BootPri | Result |
 |--------------------|---------|--------|
-| normal | ≥ 0 | bootable — appears in Early Startup boot device list |
-| normal | < 0 | non-bootable — mounted as a DOS volume |
-| NOMOUNT (bit 1 set) | any | skipped entirely — not mounted, not in DOS list |
+| normal | ≥ 0 | bootable: appears in Early Startup boot device list |
+| normal | < 0 | non-bootable: mounted as a DOS volume |
+| NOMOUNT (bit 1 set) | any | skipped entirely: not mounted, not in DOS list |
 
 BootPri is stored in the RDB partition environment and controls boot order.
 
