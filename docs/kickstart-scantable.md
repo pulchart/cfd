@@ -1,8 +1,8 @@
-# 1 MB AmigaOS 3.2.x Kickstart: the E0 bank scantable patch
+# 1 MB AmigaOS 3.x Kickstart: the E0 bank scantable patch
 
 A 1 MB Kickstart spans two memory banks: F8 (0xF80000–0x1000000) and E0 (0xE00000–0xE80000). Stock 512 KB exec.library was built to scan only F8. Producing a working 1 MB ROM therefore requires teaching Exec to also scan E0 so it can find anything you put in that bank (`workbench.library`, `icon.library`, extra devices, etc.).
 
-There are two distinct ways to do that. This document explains both.
+There are three distinct ways to do that. This document explains all three.
 
 ## Background
 
@@ -91,7 +91,7 @@ What each step does:
 4. Patch the placeholder first entry of the new chunk with `(F80000, ENDSKIP)` to mirror the original scantable's self-skip.
 5. `STSTART` := absolute address of the new chunk in ROM.
 6. Locate the original 28-byte scantable inside exec.library; `FIND` holds its address.
-7. `find $exec.library $FIND` -- look inside exec.library's code for the pointer that *references* the original scantable.  The match address replaces `FIND`.
+7. `find $exec.library $FIND`: look inside exec.library's code for the pointer that *references* the original scantable.  The match address replaces `FIND`.
 8. `patch $FIND $STSTART`: rewrite that pointer to reference the new chunk instead.
 
 Result: exec.library's embedded 28-byte scantable becomes unreferenced dead bytes; Exec follows the redirected pointer to the new chunk and walks the four-pair list there, which includes the E0 entry.
@@ -136,10 +136,10 @@ What each step does:
 1. `add "$SOURCEROM" exec.library` then `add Components/BinaryChunks/1Mb_Scantable.bin`: embed exec.library and append the pre-built 3.1 scantable chunk (the `.bin` variant, distinct from 3.2.x's `1Mb_Scantable.3.2.bin`). The chunk already contains `(F80000,1000000)(E00000,E80000)(F00000,F80000)FFFFFFFF`.
 2. `find $exec.library 0x...FFFFFFFF`: locate the 24-byte default scantable inside exec.library. `FIND` := its offset.
 3. `var FIND add $ROMBASE`: absolute address `0x00F8XXXX` of the original scantable.
-4. `var FIND mid 4`: keep only the low 16 bits -- this is the displacement value the LEA opcodes encode.
+4. `var FIND mid 4`: keep only the low 16 bits, this is the displacement value the LEA opcodes encode.
 5. `var OPCODE "LEA $FIND(PC),A0"`: build the 4-byte 68k opcode that loads exactly that address into A0. This is the byte pattern to find inside exec.library's code.
 6. First `findopcode + patch` block: locate the first LEA reference (`FIND` becomes its offset), step past the 2-byte opcode word with `var FIND add 2`, compute the new PC-relative displacement `REL := chunk_start - FIND`, keep its low 24 bits with `mid 6`, and `patch $FIND 0x$REL` rewrites the displacement.
-7. Second `findopcode + patch` block: same as #6 for the second LEA reference -- 3.1 exec.library loads the scantable address from two different places.
+7. Second `findopcode + patch` block: same as #6 for the second LEA reference, 3.1 exec.library loads the scantable address from two different places.
 
 Result: both LEA opcodes now address the new chunk. Exec walks the chunk's four-entry list, including the E0 range. exec.library's original 24-byte scantable becomes unreferenced dead bytes. Like pattern B, the new chunk lives after exec.library and shifts every subsequent F8 module's offset by its size.
 

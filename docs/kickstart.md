@@ -45,14 +45,10 @@ Output lands in `tools/kickstart/out/<MODEL>/` where `<MODEL>` is one of
 | `cfd.hi.bin`, `cfd.lo.bin` | (A1200 only) byteswapped halves for the A1200's two physical Kickstart chips |
 | `capitoline.log` | full Capitoline build log |
 | `capitoline.script` | rendered script that was fed to `capcli.Linux` |
-
+ 
 ## Customising the build
 
-The set of extra modules and the per-machine config live in `tools/kickstart/kickstart.yaml`. Run `tools/kickstart/kickstart.py --help` for the full schema.
-
-### `modules:` verbs
-
-Each entry in the `modules:` list uses one of these verbs.  **`rom:` is mandatory per row** (except on `skip:`, where it's rejected) -- every entry says explicitly where the module lands, no hidden per-verb defaults.
+The set of extra modules and the per-machine config live in `tools/kickstart/kickstart.yaml`. Run `tools/kickstart/kickstart.py --help` for the full schema. Each entry in the `modules:` list uses one of these verbs:
 
 | Verb (full signature) | Effect | Notes |
 |---|---|---|
@@ -69,11 +65,6 @@ All verbs accept the optional filters:
 - `os:  "3.1"   | "3.2.3"`: include only for the matching OS build.
 
 Order in the `modules:` list = order of `add` directives in the rendered Capitoline script.
-
-### Default config notes
-
-- **3.2.3** ships no `replace` / `skip` / `relocate` rows; Hyperion 47.115 stock is fine. The schema accepts them with `os: "3.2.3"` if needed (e.g. rolling back a module).
-- **3.1** by default substitutes **Hyperion v47.4** `card.resource` and `scsi.device` for the stock 3.1 versions. Both replacement binaries come straight from `Update3.2.3/ADFs/ModulesA<machine>_3.2.3.adf` (`LIBS/Resources/card.resource` and `DEVS/<machine>/scsi.device`) via Capitoline's own `loadadf` / `add ADF:/...` directives. The v47.4 `scsi.device` is too big for 3.1's F8 budget, so its `replace` row carries `rom: "E0"` to relocate the substitute into E0.
 
 ## Flashing
 
