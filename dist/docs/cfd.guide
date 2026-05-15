@@ -532,13 +532,10 @@ environment runs before DOS volumes are accessible.
 
 @{i}Building your own ROM@{ui}
 
-A scripted Capitoline-based ROM builder lives at
-@{fg shine}tools/kickstart/kickstart.py@{fg text} for users who want to flash a 1 MB AmigaOS
-3.2.3 or 3.1 Kickstart with @{fg shine}compactflash.device@{fg text} + @{fg shine}ptable.library@{fg text}
-embedded. See @{"  docs/kickstart.guide  " link "kickstart.guide/Main"} for prerequisites, usage, and flashing. For tested
-hardware combinations and which scantable pattern to use, see Pattern A
-/ B / C recommendations
-(docs/kickstart-scantable.md#pattern-a--b--c-recommendations).
+A scripted Capitoline-based ROM builder for creating a 1 MB AmigaOS
+3.2.3 / 3.1 / 2.05 Kickstart with @{fg shine}compactflash.device@{fg text} + @{fg shine}ptable.library@{fg text}
+embedded lives in the companion amigaos-kickstart-builder
+(https://github.com/pulchart/amigaos-kickstart-builder) repo.
 
 @{i}Partition handling@{ui}
 
@@ -562,14 +559,20 @@ order.
 The driver starts during Kickstart boot after the internal IDE is ready.
 The relevant modules in boot order are:
 
-  @{b}Module@{ub}             @{b}Role@{ub}                               
-  -----------------  ---------------------------------  
-  @{fg shine}card.resource@{fg text}      PCMCIA slot initialised            
-  @{fg shine}trackdisk.device@{fg text}   floppy                             
-  @{fg shine}carddisk.device@{fg text}    Kickstart built-in PCMCIA handler  
-  @{fg shine}scsi.device@{fg text}        internal IDE initialised           
-  @{b}@{fg shine}compactflash.boot@{fg text}@{ub}  @{b}CF card check + partition scan@{ub}     
-  @{fg shine}strap@{fg text}              boot menu / Workbench start        
+  @{b}Module@{ub}             @{b}Role@{ub}                                   
+  -----------------  -------------------------------------  
+  @{fg shine}card.resource@{fg text}      PCMCIA slot initialised                
+  @{fg shine}trackdisk.device@{fg text}   floppy                                 
+  @{fg shine}carddisk.device@{fg text}    Kickstart built-in PCMCIA handler      
+  @{fg shine}scsi.device@{fg text}        internal IDE initialised               
+  @{b}@{fg shine}compactflash.boot@{fg text}@{ub}  @{b}CF card check + partition scan@{ub} . It    
+                     opens @{fg shine}ptable.library@{fg text} . @{fg shine}ptable.library@{fg text}  
+                     walks the RDB, registers any           
+                     filesystem handlers it finds, and      
+                     publishes each partition via           
+                     @{fg shine}AddBootNode@{fg text} (bootable) or @{fg shine}AddDosNode@{fg text}   
+                     (mountable only).                      
+  @{fg shine}strap@{fg text}              boot menu / Workbench start            
 
 The driver runs after the internal IDE is initialised, so it does not
 interfere with it. If the IDE stalls at boot (e.g. no drive connected),
