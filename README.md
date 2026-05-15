@@ -243,7 +243,7 @@ At Kickstart cold start `compactflash.device` opens `ptable.library`, which walk
 
 *Building your own ROM*
 
-A scripted Capitoline-based ROM builder lives at `tools/kickstart/kickstart.py` for users who want to flash a 1 MB AmigaOS 3.2.3 or 3.1 Kickstart with `compactflash.device` + `ptable.library` embedded. See [docs/kickstart.md](docs/kickstart.md) for prerequisites, usage, and flashing. For tested hardware combinations and which scantable pattern to use, see [Pattern A / B / C recommendations](docs/kickstart-scantable.md#pattern-a--b--c-recommendations).
+A scripted Capitoline-based ROM builder for creating a 1 MB AmigaOS 3.2.3 / 3.1 / 2.05 Kickstart with `compactflash.device` + `ptable.library` embedded lives in the companion [amigaos-kickstart-builder](https://github.com/pulchart/amigaos-kickstart-builder) repo.
 
 *Partition handling*
 
@@ -267,7 +267,7 @@ The driver starts during Kickstart boot after the internal IDE is ready. The rel
 | `trackdisk.device` | floppy |
 | `carddisk.device` | Kickstart built-in PCMCIA handler |
 | `scsi.device` | internal IDE initialised |
-| **`compactflash.boot`** | **CF card check + partition scan** |
+| **`compactflash.boot`** | **CF card check + partition scan**. It opens `ptable.library`. `ptable.library` walks the RDB, registers any filesystem handlers it finds, and publishes each partition via `AddBootNode` (bootable) or `AddDosNode` (mountable only). |
 | `strap` | boot menu / Workbench start |
 
 The driver runs after the internal IDE is initialised, so it does not interfere with it. If the IDE stalls at boot (e.g. no drive connected), CF autoboot will not trigger either.
