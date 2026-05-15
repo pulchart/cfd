@@ -8,6 +8,8 @@ Prerequisites (pre-installed on this system):
   /opt/Capitoline/Components, /opt/Capitoline/Capitoline Hashes
   /opt/AmigaOS/Update3.2.3/{ROMs,ADFs}                 (3.2.3 builds)
   /opt/AmigaOS/AmigaOS3.1/{ROMs,ADFs}                  (3.1 builds)
+  /opt/AmigaOS/AmigaOS2.05/{ROMs,ADFs}                 (2.05 builds, A600)
+  /opt/AmigaOS/AmigaOS2.04/{ROMs,ADFs}                 (2.04 builds, A500+)
   /opt/AmigaOS/AmigaOS3.2/adf/...
 """
 
@@ -286,6 +288,7 @@ def render_template(
     tmpl = env.get_template(cfg["template"])
     text = tmpl.render(
         model=model,
+        os=cfg["os"],
         sourcerom_crc=cfg["sourcerom_crc"],
         adf_crc=cfg["adf_crc"],
         saveprofile=cfg["saveprofile"],
@@ -411,7 +414,7 @@ def parse_args(argv: list[str]) -> list[str]:
     parser = argparse.ArgumentParser(
         prog="kickstart.py",
         description=(
-            "CFD Kickstart ROM builder for Amiga 600 / 1200 (AmigaOS 3.1 and 3.2.3). "
+            "CFD Kickstart ROM builder for Amiga 600 / 1200 (AmigaOS 2.05, 3.1, 3.2.3). "
             "Produces 1 MB ROMs that include compactflash.device + ptable.library."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -420,7 +423,9 @@ def parse_args(argv: list[str]) -> list[str]:
             "  a600 / a1200                 AmigaOS 3.2.3\n"
             "  a600-3.2.3 / a1200-3.2.3     same as above (explicit)\n"
             "  a600-3.1   / a1200-3.1       AmigaOS 3.1\n"
-            "  3.1 / 3.2 / 3.2.3            all ROMs for one OS\n"
+            "  a600-2.05                    AmigaOS 2.05 (A600)\n"
+            "  a500plus-2.04                AmigaOS 2.04 (A500+)\n"
+            "  2.04 / 2.05 / 2.0x / 3.1 / 3.2 / 3.2.3   all ROMs for one OS\n"
             "  all                          every variant (default)\n"
             "\n"
             "kickstart.yaml schema (YAML 1.2; `# ...` comments supported):\n"
@@ -447,18 +452,24 @@ def parse_args(argv: list[str]) -> list[str]:
         help="which ROM(s) to build (default: all, every variant)",
     )
     aliases = {
-        "a600":        ["A600-3.2.3"],
-        "a1200":       ["A1200-3.2.3"],
-        "a600-3.2.3":  ["A600-3.2.3"],
-        "a1200-3.2.3": ["A1200-3.2.3"],
-        "a600-3.1":    ["A600-3.1"],
-        "a1200-3.1":   ["A1200-3.1"],
-        "3.1":         ["A600-3.1",   "A1200-3.1"],
-        "3.2":         ["A600-3.2.3", "A1200-3.2.3"],
-        "3.2.3":       ["A600-3.2.3", "A1200-3.2.3"],
-        "all":         ["A600-3.2.3", "A1200-3.2.3", "A600-3.1", "A1200-3.1"],
-        "both":        ["A600-3.2.3", "A1200-3.2.3"],
-        "":            ["A600-3.2.3", "A1200-3.2.3"],
+        "a600":            ["A600-3.2.3"],
+        "a1200":           ["A1200-3.2.3"],
+        "a600-3.2.3":      ["A600-3.2.3"],
+        "a1200-3.2.3":     ["A1200-3.2.3"],
+        "a600-3.1":        ["A600-3.1"],
+        "a1200-3.1":       ["A1200-3.1"],
+        "a600-2.05":       ["A600-2.05"],
+        "a500plus":        ["A500plus-2.04"],
+        "a500plus-2.04":   ["A500plus-2.04"],
+        "2.04":            ["A500plus-2.04"],
+        "2.05":            ["A600-2.05"],
+        "2.0x":            ["A600-2.05", "A500plus-2.04"],
+        "3.1":             ["A600-3.1",   "A1200-3.1"],
+        "3.2":             ["A600-3.2.3", "A1200-3.2.3"],
+        "3.2.3":           ["A600-3.2.3", "A1200-3.2.3"],
+        "all":             ["A600-3.2.3", "A1200-3.2.3", "A600-3.1", "A1200-3.1", "A600-2.05", "A500plus-2.04"],
+        "both":            ["A600-3.2.3", "A1200-3.2.3"],
+        "":                ["A600-3.2.3", "A1200-3.2.3"],
     }
     args = parser.parse_args(argv)
     target = args.target.lower()
@@ -466,7 +477,7 @@ def parse_args(argv: list[str]) -> list[str]:
         parser.error(
             f"Unknown target '{args.target}'. Try: a600 | a1200 | "
             f"a600-3.2.3 | a1200-3.2.3 | a600-3.1 | a1200-3.1 | "
-            f"3.1 | 3.2.3 | all"
+            f"a600-2.05 | a500plus-2.04 | 2.04 | 2.05 | 3.1 | 3.2.3 | all"
         )
     return aliases[target]
 

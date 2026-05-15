@@ -1,4 +1,4 @@
-# 1 MB AmigaOS 3.x Kickstart: the E0 bank scantable patch
+# 1 MB AmigaOS 3.x / 2.0x Kickstart: the E0 bank scantable patch
 
 A 1 MB Kickstart spans two memory banks: F8 (0xF80000–0x1000000) and E0 (0xE00000–0xE80000). Stock 512 KB exec.library was built to scan only F8. Producing a working 1 MB ROM therefore requires teaching Exec to also scan E0 so it can find anything you put in that bank (`workbench.library`, `icon.library`, extra devices, etc.).
 
@@ -141,7 +141,9 @@ What each step does:
 6. First `findopcode + patch` block: locate the first LEA reference (`FIND` becomes its offset), step past the 2-byte opcode word with `var FIND add 2`, compute the new PC-relative displacement `REL := chunk_start - FIND`, keep its low 24 bits with `mid 6`, and `patch $FIND 0x$REL` rewrites the displacement.
 7. Second `findopcode + patch` block: same as #6 for the second LEA reference, 3.1 exec.library loads the scantable address from two different places.
 
-Result: both LEA opcodes now address the new chunk. Exec walks the chunk's four-entry list, including the E0 range. exec.library's original 24-byte scantable becomes unreferenced dead bytes. Like pattern B, the new chunk lives after exec.library and shifts every subsequent F8 module's offset by its size.
+**Result**: both LEA opcodes now address the new chunk. Exec walks the chunk's four-entry list, including the E0 range. exec.library's original 24-byte scantable becomes unreferenced dead bytes. Like pattern B, the new chunk lives after exec.library and shifts every subsequent F8 module's offset by its size.
+
+**2.0x variant.** AmigaOS 2.04 and 2.05 (Kickstart v37) use the same mechanism, but exec.library v37 carries **two independent scantables** instead of one referenced from two places. The redirect therefore runs the LEA-patch sequence twice against two separate `find` results: locate the first scantable + patch its LEA; step past the first match (`var FIND add 2`) and `find` the second scantable's byte pattern further down in exec.library; patch its LEA. Both LEAs end up pointing at the same shared new chunk. See `tools/kickstart/capitoline.script.2.0x.j2`.
 
 ### Trade-off: ACA1260/1240 cold boot
 
@@ -161,7 +163,8 @@ For ROMs targeted at that hardware, prefer pattern A.
 | 3.2.y | 1 MB ROM targeted at ACA1234/1221lc | A or B (both fine) |
 | 3.2.y | 1 MB ROM targeted at ACA1240/1260  | A (only) |
 | 3.2.y | 1 MB ROM with unknown hardware mix | A  |
-| 3.1 | 1 MB ROM (any target) | C |
+| 3.1 | 1 MB ROM (any target) | C (one scantable, two LEAs) |
+| 2.0x | 1 MB ROM (A600 / A500+, any target) | C (two scantables, one LEA each) |
 
 ### Extracting a runnable script from a Capitoline `.test` reference
 

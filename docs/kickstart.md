@@ -1,6 +1,6 @@
 # Building a Custom Kickstart ROM with cfd + ptable
 
-A scripted ROM builder at `tools/kickstart/kickstart.py` produces 1 MB AmigaOS 3.2.3 / 3.1 Kickstart ROMs that embed `compactflash.device` and `ptable.library` directly. Such a ROM autoboots from RDB-partitioned CF cards before any disk-loaded driver is available required for cold-boot autoboot.
+A scripted ROM builder at `tools/kickstart/kickstart.py` produces 1 MB AmigaOS 3.2.3 / 3.1 / 2.05 / 2.04 Kickstart ROMs that embed `compactflash.device` and `ptable.library` directly (except 2.04). Such a ROM autoboots from RDB-partitioned CF card in PCMCIA.
 
 For mount-only use without autoboot, a regular install of `compactflash.device` and `ptable.library` into `SYS:Devs/` and `SYS:Libs/` is sufficient (see the [Autoboot / Automount (ROM-resident)](../README.md#autoboot--automount-rom-resident) section in the main README). This document is only relevant if you want to flash a custom Kickstart ROM.
 
@@ -15,9 +15,11 @@ The builder runs on Linux and shells out to Cloanto's Capitoline CLI tool.
 | 3 | Hyperion AmigaOS 3.2.3 Update (`ROMs/`, `ADFs/`) | `/opt/AmigaOS/Update3.2.3/` | 3.2.3 builds |
 | 4 | Workbench 3.2 ADF (`workbench3.2.adf`) | `/opt/AmigaOS/AmigaOS3.2/adf/` | 3.2.3 builds |
 | 5 | AmigaOS 3.1 (`ROMs/`, `ADFs/`) | `/opt/AmigaOS/AmigaOS3.1/` | 3.1 builds |
-| 6 | pfs3aio | `/opt/AmigaOS/pfs/v20,0/` | all builds |
-| 7 | fat95 (68000 + 68020) | `/opt/AmigaOS/fat95/3.22/{68000,68020}/` | all builds |
-| 8 | Built driver + library | `dist/` (run `make full` first) | all builds |
+| 6 | AmigaOS 2.05 ROM (v37.350, CRC `0x43b0df7b`) | `/opt/AmigaOS/AmigaOS2.05/ROMs/` | 2.05 build (A600) |
+| 7 | AmigaOS 2.04 ROM (v37.175 A500+, CRC `0xc3bdb240`) | `/opt/AmigaOS/AmigaOS2.04/ROMs/` | 2.04 build (A500+) |
+| 8 | pfs3aio | `/opt/AmigaOS/pfs/v20,0/` | all builds |
+| 9 | fat95 (68000 + 68020) | `/opt/AmigaOS/fat95/3.22/{68000,68020}/` | all builds |
+| 10 | Built driver + library | `dist/` (run `make full` first) | all builds |
 
 If any required prerequisite for a target you're building is missing, the script reports an error and stops. Targets you don't build don't need their source trees.
 
@@ -28,14 +30,17 @@ For the technical details behind the 3.2.3 template's scantable patch (and how i
 From the repo root:
 
 ```sh
-tools/kickstart/kickstart.py             # default: every variant (3.2.3 + 3.1)
+tools/kickstart/kickstart.py             # default: every variant (3.2.3 + 3.1 + 2.05 + 2.04)
 tools/kickstart/kickstart.py 3.2.3       # both 3.2.3 ROMs
 tools/kickstart/kickstart.py 3.1         # both 3.1 ROMs
+tools/kickstart/kickstart.py 2.0x        # both 2.0x ROMs (A600-2.05 + A500plus-2.04)
+tools/kickstart/kickstart.py 2.05        # A600-2.05 ROM only
+tools/kickstart/kickstart.py 2.04        # A500plus-2.04 ROM only
 tools/kickstart/kickstart.py a1200-3.1   # one specific model
 ```
 
 Output lands in `tools/kickstart/out/<MODEL>/` where `<MODEL>` is one of
-`A600-3.2.3`, `A1200-3.2.3`, `A600-3.1`, `A1200-3.1`:
+`A600-3.2.3`, `A1200-3.2.3`, `A600-3.1`, `A1200-3.1`, `A600-2.05`, `A500plus-2.04`:
 
 | File | Description |
 |---|---|
@@ -69,7 +74,7 @@ Order in the `modules:` list = order of `add` directives in the rendered Capitol
 ## Flashing
 
 - **A1200**: has two physical Kickstart chips. Flash `cfd.hi.bin` to the upper chip and `cfd.lo.bin` to the lower chip; the dual-EPROM word layout is already byteswapped for you.
-- **A600**: has a single 16-bit Kickstart ROM. Flash the merged 1 MB image `cfd.rom` to the replacement chip; a 1 MB Kickstart adapter takes one chip with the merged image.
+- **A600**: has a single 16-bit Kickstart ROM. Flash the merged 1 MB image `cfd.rom` to the replacement chip.
 
 Use whatever EPROM / flash programmer you normally use; the builder produces standard binary images with no further wrapping.
 

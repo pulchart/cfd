@@ -45,6 +45,28 @@ models:
     template:      "capitoline.script.3.1.j2"
     amigaos_dir:   "/opt/AmigaOS/AmigaOS3.1"
 
+  # Kickstart v37 revision matrix:
+  # <= 37.299  "ROM 2.04" no HD, no PCMCIA
+  #    37.300  "ROM 2.05" IDE up to 40 MB, PCMCIA flaky
+  #    37.350  "ROM 2.05" IDE up to 2 GB, PCMCIA OK
+  A600-2.05:
+    os:            "2.05"
+    cpu:           "68000"
+    sourcerom_crc: "0x43b0df7b"     # rev 37.350 (A600HD)
+    adf_crc:       ""               # 2.0x has no Modules ADF
+    saveprofile:   ""
+    template:      "capitoline.script.2.0x.j2"
+    amigaos_dir:   "/opt/AmigaOS/AmigaOS2.05"
+
+  A500plus-2.04:
+    os:            "2.04"
+    cpu:           "68000"
+    sourcerom_crc: "0xc3bdb240"     # rev 37.175 (A500+)
+    adf_crc:       ""               # 2.0x has no Modules ADF
+    saveprofile:   ""
+    template:      "capitoline.script.2.0x.j2"
+    amigaos_dir:   "/opt/AmigaOS/AmigaOS2.04"
+
 
 modules:
   # NOTE: `adf_path:` is case-sensitive (capcli's `add ADF:/` does an
@@ -84,22 +106,27 @@ modules:
   - {adf_modules: "LIBS/workbench.library", os: "3.2.3", rom: "E0"}
   - {adf_modules: "LIBS/icon.library", os: "3.2.3", rom: "E0"}
 
-  # rexxsyslib from a specific Workbench ADF, per OS.  rom: "E0" required.
-  # NB: workbench ADFs use `Libs/` (mixed case), not `LIBS/` like Modules ADFs.
+  # rexxsyslib from a specific Workbench ADF, per OS.
   - {adf: "/opt/AmigaOS/AmigaOS3.2/adf/workbench3.2.adf", adf_path: "Libs/rexxsyslib.library", os: "3.2.3", rom: "E0"}
   - {adf: "/opt/AmigaOS/AmigaOS3.1/ADFs/wbench31.adf", adf_path: "Libs/rexxsyslib.library", os: "3.1", rom: "E0"}
 
-  # Filesystems (both 3.2.3 and 3.1 builds):
+  # Filesystems (all builds):
   - {file: "/opt/AmigaOS/pfs/v20,0/pfs3aio", rom: "E0"}
   - {file: "/opt/AmigaOS/fat95/3.22/68000/fat95", cpu: "68000", rom: "E0"}
   - {file: "/opt/AmigaOS/fat95/3.22/68020/fat95", cpu: "68020", rom: "E0"}
 
-  # Our compiled artifacts.  3.2.3 has room in F8 for ptable.library;
-  # 3.1's F8 is space-full so ptable goes to E0 there.  compactflash.device
-  # is always in E0.
+  # Compiled artifacts.
+  # - 3.2.3 has room in F8 for ptable.library
+  # - 3.1 / 2.05's F8 is space-full so ptable goes to E0.
+  # - 2.04 omits both modules entirely as A500plus has no PCMCIA slot and no internal IDE.
   - {file: "dist/full/68000/libs/ptable.library",      cpu: "68000", os: "3.2.3", rom: "F8"}
   - {file: "dist/full/68020/libs/ptable.library",      cpu: "68020", os: "3.2.3", rom: "F8"}
   - {file: "dist/full/68000/libs/ptable.library",      cpu: "68000", os: "3.1",   rom: "E0"}
   - {file: "dist/full/68020/libs/ptable.library",      cpu: "68020", os: "3.1",   rom: "E0"}
-  - {file: "dist/full/68000/devs/compactflash.device", cpu: "68000",              rom: "E0"}
-  - {file: "dist/full/68020/devs/compactflash.device", cpu: "68020",              rom: "E0"}
+  - {file: "dist/full/68000/libs/ptable.library",      cpu: "68000", os: "2.05",  rom: "E0"}
+
+  - {file: "dist/full/68020/devs/compactflash.device", cpu: "68020", os: "3.2.3", rom: "E0"}
+  - {file: "dist/full/68000/devs/compactflash.device", cpu: "68000", os: "3.2.3", rom: "E0"}
+  - {file: "dist/full/68000/devs/compactflash.device", cpu: "68000", os: "3.1",   rom: "E0"}
+  - {file: "dist/full/68000/devs/compactflash.device", cpu: "68020", os: "3.1",   rom: "E0"}
+  - {file: "dist/full/68000/devs/compactflash.device", cpu: "68000", os: "2.05",  rom: "E0"}
