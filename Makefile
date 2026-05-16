@@ -7,23 +7,23 @@
 # Release version (controls archive name and readme; update for each release)
 VERSION_MAJOR = 1
 VERSION_MINOR = 42
-VERSION_SUFFIX = -dev
-DATE = 07.05.2026
+VERSION_SUFFIX =
+DATE = 16.05.2026
 DATE_SHORT = 05/2026
 
 # compactflash.device version
 CFD_MAJOR = 1
 CFD_MINOR = 42
-CFD_VERSION_SUFFIX = -dev
-CFD_DATE = 07.05.2026
+CFD_VERSION_SUFFIX =
+CFD_DATE = 16.05.2026
 
 # ptable.library version; bumped only on library-ABI changes:
 # - additive LVOs bump REVISION
 # - breaking changes bump MAJOR
 PLIB_MAJOR = 1
 PLIB_MINOR = 0
-PLIB_VERSION_SUFFIX = -dev
-PLIB_DATE = 07.05.2026
+PLIB_VERSION_SUFFIX =
+PLIB_DATE = 16.05.2026
 
 # Tool-specific versions
 CFINFO_VERSION = 1.37

@@ -80,8 +80,8 @@ Choose based on your needs:
 Steps for normal mount-only use (no autoboot):
 1. Drag the contents of <flavor>/<cpu>/ onto SYS: the inner devs/
    and libs/ drawers map onto SYS:Devs/ and SYS:Libs/ directly.
-     - A1200 + accelerators: full/68020/  (or small/68020/)
-     - Stock A600:           full/68000/  (or small/68000/)
+     - A1200 (68020+): full/68020/ (or small/68020/)
+     - A600  (68000+): full/68000/ (or small/68000/)
 2. Copy c/CFInfo to C: (optional, card info utility)
 3. Have fat95 installed on your system
 4. Mount the drive by double-clicking Storage/DOSDrivers/CF0
@@ -101,12 +101,14 @@ load any filesystem handlers carried in into FileSystem.resource,
 and publish each partition via AddBootNode (bootable) or AddDosNode
 (non-bootable).
 
-The library MUST be ROM-resident for this to work a disk-only library
-install is silently ignored. The device driver still works as a normal
-mount-only device.
+Both the compactflash.device and the ptable.library MUST be ROM-resident
+for this to work. A disk-only ptable.library install is silently ignored.
+The device driver still works as a normal mount-only device.
 
 On cold boot the driver tolerates slow cards and adapters by polling
 for up to ~1.8s. When a card is present and stable the delay is zero.
+
+More details can be found in fat95's guide and GitHub project page.
 
 MOUNT FLAGS
 ===========

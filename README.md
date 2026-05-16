@@ -21,25 +21,20 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### v1.42-dev (07.05.2026)
+### v1.42 (16.05.2026)
 
 This release introduces **autoboot and automount from RDB-partitioned CF cards**.
 
 #### Driver
 
-* **Autoboot from RDB at cold-boot**: a bootable RDB partition on the inserted card boots straight into Workbench. All RDB partitions appear   at cold start without `DEVS:DOSDrivers/` entries. Filesystem handlers stored on the card are loaded automatically.
-Requires `ptable.library` to be ROM-resident; disk-only install is mountable-only without it.
-When a card is present and stable all loops exit on the first iteration. The worst-case extra delay (~1.8 s) is paid once on the first `OpenDevice` with no card inserted.
+* **Autoboot from RDB at cold-boot**: a bootable RDB partition on the inserted card boots straight into Workbench. All RDB partitions appear   at cold start without `DEVS:DOSDrivers/` entries. Filesystem handlers stored on the card are loaded automatically. Requires `ptable.library` to be ROM-resident; disk-only install is mountable-only without it. When a card is present and stable all loops exit on the first iteration. The worst-case extra delay (~1.8 s) is paid once on the first `OpenDevice` with no card inserted.
 
 * **Stricter CIS gate**: as the CIS detection code improved over time, the fallback that accepted cards without a readable `CISTPL_FUNCID` was dropped. Such cards now fail the CIS gate, freeing them for their proper driver.
 
 #### Others
 
-* Release archive version and compactflash.device version are now tracked independently
-* New distribution layout: two build flavors per CPU tier in dedicated folders:
-`dist/full/<cpu>/` - debug-capable (serial output enabled)
-`dist/small/<cpu>/` - no debug code
-where `<cpu>` is `68000` (any 68k) or `68020` (68020+)
+* Release archive version and compactflash.device version are now tracked independently (Makefile change)
+* New distribution layout: two build flavors per CPU tier in dedicated folders. `dist/full/<cpu>/` as debug-capable (serial output enabled) and `dist/small/<cpu>/` without any debug output via serial line, The `<cpu>` is `68000` for any 68k or `68020` for 68020+.
 
 ### v1.41 (18.04.2026)
 
@@ -213,10 +208,10 @@ Pick the tier that matches your CPU, then pick the full or small flavour:
 - Use the **small** version for minimal memory footprint
 
 ```
-# A1200 (68020+) -- full flavour
+# A1200 (68020+) full flavour
 Copy from cfd/full/68020/  to SYS:   ALL
 
-# A600 (68000)   -- full flavour
+# A600 (68000) full flavour
 Copy from cfd/full/68000/  to SYS:   ALL
 
 # Plus the shared tools
@@ -239,7 +234,7 @@ At Kickstart cold start `compactflash.device` opens `ptable.library`, which walk
 
 *ROM-resident requirement*
 
-`ptable.library` is **optional** for the driver. Without it, `compactflash.device` still works fully as a mount-only device via `DEVS:DOSDrivers/CF0` as example. It is **required** for autoboot and automount. To activate, it must be flashed into a ROM image; copying it to `SYS:Libs/` alone is silently ignored because the early-startup environment runs before DOS volumes are accessible.
+`ptable.library` is **optional** for the driver. Without it, `compactflash.device` still works fully as a mount-only device via `DEVS:DOSDrivers/CF0` as example. It is **required** for autoboot and automount. To activate, both compactflash.device and ptable.library must be flashed into a ROM image.
 
 *Building your own ROM*
 
@@ -274,7 +269,7 @@ The driver runs after the internal IDE is initialised, so it does not interfere 
 
 *Cold-boot timing*
 
-The boot stub starts with a **no-card pre-gate**: a single read of the Gayle CCDET signal (`$DA8000` bit 6) tells it whether a CF card is in the slot. If the slot is empty, the stub returns immediately.
+The boot stub starts with a **no-card pre-gate**: a single read of the Gayle tells it whether a CF card is in the slot. If the slot is empty, the stub returns immediately.
 
 If a card IS present, the driver tolerates slow cards/adapters by polling for up to ~1.8 s in total (1 s for card-detect stabilisation, ~400 ms each for the two CIS tuple reads). Stable cards complete the first iteration of each loop, so a healthy card pays no measurable delay.
 
@@ -316,7 +311,7 @@ If a card IS present, the driver tolerates slow cards/adapters by polling for up
 
 | Field | Value |
 |-------|-------|
-| Vendor ID  | `65535 ($FFFF)` (developer/test sentinel — no vendor) |
+| Vendor ID  | `65535 ($FFFF)` (as 'no vendor') |
 | Product ID | `1` |
 
 ## Hardware Notes
@@ -771,9 +766,7 @@ make V=1
 | `make clean` | Remove built files |
 | `make help` | Show all available targets |
 
-> All targets write into `dist/<flavour>/<cpu>/{devs,libs}/<file>` -- e.g. `make` produces `dist/full/68020/devs/compactflash.device` and `dist/full/68020/libs/ptable.library` (and the same for the `small` flavour and the `68000` tier). Each `dist/<flavour>/<cpu>/` drawer is a partial sysroot: drop its contents onto `SYS:` to install both the device and `ptable.library` at once.
-
-> Every device build carries a tiny `RTF_COLDSTART` stub that opens `ptable.library` at Kickstart cold start. `ptable.library` must be ROM-resident for autoboot to fire; otherwise the device is mountable but not bootable.
+> All targets write into `dist/<flavour>/<cpu>/{devs,libs}/<file>`, e.g. `make` produces `dist/full/68020/devs/compactflash.device` and `dist/full/68020/libs/ptable.library` (and the same for the `small` flavour and the `68000` tier). Each `dist/<flavour>/<cpu>/` drawer is a partial sysroot: drop its contents onto `SYS:` to install both the device and `ptable.library` at once.
 
 ### Cross-Compilation Notes
 
