@@ -21,6 +21,17 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
+### v1.43 (19.05.2026)
+
+#### Driver
+
+* **Fix hot-plug regression introduced in v1.41**: inserting or removing a CF card no longer fails to notify filesystem handlers that live in a Kickstart ROM (e.g. fat95 in a custom ROM). Affected setups saw the card mount correctly but silently skip hot-plug events after that. With `Flags = 8` the bug was visible in the serial log as a spurious `..drop stale client` line on card removal:
+  ```
+  [CFD] Card removed
+  [CFD] ..client IS_Code=0x00E4D3AA
+  [CFD] ..drop stale client at 0x403DFC00
+  ```
+
 ### v1.42 (16.05.2026)
 
 This release introduces **autoboot and automount from RDB-partitioned CF cards**.
@@ -446,6 +457,23 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 [CFD] Card removed
 ```
 
+#### Capturing serial output without a null-modem cable
+
+If you don't have a null-modem cable, you can capture serial debug output on the Amiga itself using [Sashimi](https://aminet.net/package/dev/debug/Sashimi). This works at DOS time, not during cold boot.
+
+1. Download Sashimi from Aminet, extract it, and copy the binary to `C:Sashimi`.
+2. Make sure your CF0 mountlist contains `Flags = 8` (enables serial debug output).
+3. From CLI, start Sashim, optionally redirecting its output to a log file:
+   ```
+   run sashimi >SYS:cf.log
+   ```
+   Or just run it interactively (output goes to the current CLI window):
+   ```
+   sashimi
+   ```
+4. Mount the CF card: `mount cf0:`. You can also attach/detach the PCMCIA card and observe the output.
+5. Stop Sashimi with `CTRL+C` when done.
+
 ### Enforce Multi Mode (Flag 16)
 
 Read and Write IO path will use 256 sectors for single IO regardless of what the card supports in Multiple Sector Mode if this flag is set (same behaviour as v1.33). The IO sector count can be limited by `MaxTransfer` (0x200 = 1 sector per IO) value in CF0 file.
@@ -665,7 +693,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
+| v1.43, v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
 | v1.39 | 02/2026 | I/O port access reliability check |

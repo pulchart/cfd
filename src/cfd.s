@@ -3022,18 +3022,12 @@ _wc_end:
 
 ; Walks CFU_Clients (a list of IORequests left behind by TD_ADDCHANGEINT).
 ; Each node's IO_Data points to a client-supplied Interrupt struct whose
-; IS_Code is called with a6=SysBase, a1=IS_Data. Historically this was a
-; bare `jsr (a5)` that trusted the client completely. In practice clients
-; can exit without calling TD_REMCHANGEINT, leaving a stale Interrupt on
-; the list whose IS_Code now points into freed / remapped memory - the
-; next notify then jumps to a random address and the whole system Gurus.
+; IS_Code is called with a6=SysBase, a1=IS_Data.
 ;
-; The hardened version:
-;   - rejects NULL IO_Data / IS_Code,
-;   - runs exec.library/TypeOfMem on IS_Code and rejects pointers that
-;     exec does not track (freed or never allocated via AllocMem),
-;   - Remove's the rejected node from CFU_Clients so the same stale
-;     entry cannot re-fault on every subsequent change event.
+; Trust contract: callers are responsible for calling TD_REMCHANGEINT
+; before their IS_Code memory is freed.  We only reject NULL IO_Data /
+; NULL IS_Code defensively (cheap, catches accidental zero init) and
+; otherwise dispatch directly to the registered server.
 NotifyClients:
 	movem.l	d2/a2/a5,-(sp)
 	CALLEXEC Forbid			;a6 = SysBase on return
@@ -3056,10 +3050,6 @@ ncl_loop:
 	move.l	a1,d0
 	DBGNUM
 	DBGNL
-
-	jsr	TypeOfMem(a6)		;a1 preserved; d0 = memflags or 0
-	tst.l	d0
-	beq.s	ncl_drop		;not exec-tracked -> stale client
 
 	move.l	IS_Data(a5),a1		;Interrupt convention: a1 = IS_Data
 	move.l	IS_Code(a5),a5		;a5 = IS_Code

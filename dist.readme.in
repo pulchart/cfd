@@ -5,7 +5,7 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd141.lha
+Replaces:     driver/media/cfd.v1.42.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -15,28 +15,16 @@ CHANGES IN @VERSION@ (@DATE@)
 
 compactflash.device:
 
-* Autoboot from RDB at cold-boot:
+* Fix hot-plug regression introduced in v1.41: inserting or removing a CF card
+  no longer fails to notify filesystem handlers that live in a Kickstart ROM
+  (e.g. fat95 in a custom ROM). Affected setups saw the card mount correctly
+  but silently skip hot-plug events after that. With Flags=8 the bug was
+  visible in the serial log as a spurious "drop stale client" line on card
+  removal:
 
-  a bootable RDB partition on the inserted card boots straight into Workbench.
-  All RDB partitions appear at cold start without `DEVS:DOSDrivers/` entries.
-  Filesystem handlers stored on the card are loaded automatically.
-
-  Requires `ptable.library` to be ROM-resident; disk-only install is
-  mountable-only without it.
-
-* Stricter CIS gate:
-
-  as the CIS detection code improved over time, the fallback that accepted
-  cards without a readable `CISTPL_FUNCID` was dropped. Such cards now fail
-  the CIS gate, freeing them for their proper driver.
-
-Others:
-
-* Release archive version and compactflash.device version are now tracked independently
-* New distribution layout: two build flavors per CPU tier are stored in dedicated folders:
-    cfd/full/<cpu>/   - debug-capable (serial output enabled with Flags=8)
-    cfd/small/<cpu>/  - no debug code
-  where <cpu> is 68000 (any 68k) or 68020 (68020+)
+    [CFD] Card removed
+    [CFD] ..client IS_Code=0x00E4D3AA
+    [CFD] ..drop stale client at 0x403DFC00
 
 FEATURES
 ========
