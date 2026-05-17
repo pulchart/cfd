@@ -21,6 +21,10 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
+### v1.43-dev (18.05.2026)
+
+TBD: This release if focusing to a bugfixing
+
 ### v1.42 (16.05.2026)
 
 This release introduces **autoboot and automount from RDB-partitioned CF cards**.
@@ -665,6 +669,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.43 | 05/2026 | TBD |
 | v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
