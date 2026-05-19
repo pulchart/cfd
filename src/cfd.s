@@ -2760,6 +2760,15 @@ _t_iok:
 
 _t_identify_failed:
 	DBGMSG	dbg_id_failed_release
+	; Reset the card before releasing.  A failed IDENTIFY can leave
+	; the card holding the bus in a state where the subsequent
+	; ReleaseCard re-asserts CCDET / fires a phantom insert event,
+	; triggering an unbounded probe-release-probe loop on cards we
+	; could not identify (observed with ATAPI PCMCIA adapters that
+	; slip past the CIS gate).  CardResetCard returns the slot to a
+	; known-clean state; we ignore its return value.
+	move.l	a2,a1
+	CALLCARD CardResetCard
 	bra.w	_t_ibreak
 
 _t_ibreak:

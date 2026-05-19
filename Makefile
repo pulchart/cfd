@@ -6,15 +6,15 @@
 
 # Release version (controls archive name and readme; update for each release)
 VERSION_MAJOR = 1
-VERSION_MINOR = 43
-VERSION_SUFFIX =
+VERSION_MINOR = 44
+VERSION_SUFFIX = -dev
 DATE = 19.05.2026
 DATE_SHORT = 05/2026
 
 # compactflash.device version
 CFD_MAJOR = 1
-CFD_MINOR = 43
-CFD_VERSION_SUFFIX =
+CFD_MINOR = 44
+CFD_VERSION_SUFFIX = -dev
 CFD_DATE = 19.05.2026
 
 # ptable.library version; bumped only on library-ABI changes:

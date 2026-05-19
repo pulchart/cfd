@@ -5,7 +5,7 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v1.42.lha
+Replaces:     driver/media/cfd.v1.43.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -15,16 +15,7 @@ CHANGES IN @VERSION@ (@DATE@)
 
 compactflash.device:
 
-* Fix hot-plug regression introduced in v1.41: inserting or removing a CF card
-  no longer fails to notify filesystem handlers that live in a Kickstart ROM
-  (e.g. fat95 in a custom ROM). Affected setups saw the card mount correctly
-  but silently skip hot-plug events after that. With Flags=8 the bug was
-  visible in the serial log as a spurious "drop stale client" line on card
-  removal:
-
-    [CFD] Card removed
-    [CFD] ..client IS_Code=0x00E4D3AA
-    [CFD] ..drop stale client at 0x403DFC00
+TBD: #47+#46 fixes
 
 FEATURES
 ========
