@@ -37,7 +37,7 @@ import sys
 import os
 from datetime import datetime
 
-SCRIPT_VERSION = '1.4 (17.04.2026)'
+SCRIPT_VERSION = '1.5 (20.05.2026)'
 
 # Constants for text formatting
 DEFAULT_WRAP_WIDTH = 72
@@ -906,6 +906,19 @@ def md2guide(md_content, title=None, version="1.0", date=None, ver_title=None):
             table_lines = []
             # Continue processing current line
         
+        # HTML used in README.md but unsupported by AmigaGuide -
+        # drop entirely.  Covers GitHub's collapse wrapper
+        # (<details>/<summary>/</details>) and HTML comments
+        # (e.g. COMPONENTS:BEGIN/END markers).  The content nested
+        # under <details> is kept and rendered flat in the guide.
+        stripped = line.strip()
+        if stripped in ('<details>', '</details>'):
+            continue
+        if stripped.startswith('<summary>') and stripped.endswith('</summary>'):
+            continue
+        if stripped.startswith('<!--') and stripped.endswith('-->'):
+            continue
+
         # Process various markdown elements
         if process_markdown_line(line, current_content):
             continue
