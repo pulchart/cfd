@@ -21,6 +21,33 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
+### 20260520-dev
+
+#### Driver
+
+* **PCMCIA CD/DVD adapters no longer confuse the driver.** Some ATAPI cards (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in their identification data. The CF driver now spots them and steps aside so the system can hand them to their proper driver. Regular CF cards are unaffected.
+
+#### Tools
+
+* **`pcmciacheck -cis`**: new option that prints a readable summary of the identification data carried by the inserted PCMCIA card (manufacturer, card type, version, etc.). Handy when you want to understand why an unusual card is or isn't accepted by the driver, or when reporting a problem card.
+
+#### Packaging
+
+* **Archive version is now a date (YYYYMMDD).** The release bundle ships several independently-versioned pieces (`compactflash.device`, `ptable.library`, `CFInfo`, `pcmciaspeed`, `pcmciacheck`), each on its own cadence, so a single `v1.x` number for the whole archive never matched what was actually inside. The archive (`cfd.vYYYYMMDD.lha`) is now named after its release date, while each component keeps its own version, visible via `version <name>`. No installation steps change.
+
+<!-- COMPONENTS:BEGIN -->
+#### Components in this release
+
+- compactflash.device 1.44-dev (20.05.2026)
+- ptable.library 1.0 (16.05.2026)
+- CFInfo 1.37 (11.01.2026)
+- pcmciaspeed 1.36 (02.01.2026)
+- pcmciacheck 1.39-dev (20.05.2026)
+<!-- COMPONENTS:END -->
+
+<details>
+<summary>Older releases</summary>
+
 ### v1.43 (19.05.2026)
 
 #### Driver
@@ -193,6 +220,8 @@ Reworks CIS handling to avoid side effects with non-storage PCMCIA cards (e.g. W
 * Improved compatibility with >=2014 Firmware CF cards
   - Workaround for "get IDE ID" on large capacity cards
   - Multi-sector IO uses firmware reported value to improve compatibility
+
+</details>
 
 ## System Requirements
 
@@ -526,13 +555,15 @@ Decision flow:
 flowchart TD
     Start([CIS gate]) --> HasDev{CISTPL_DEVICE present?}
     HasDev -- yes --> DevType{type in 0x0D, 0x05?}
-    DevType -- yes --> Accept([ACCEPT])
     DevType -- no --> Reject([REJECT])
+    DevType -- yes --> FuncExt{CISTPL_FUNCEXT<br/>declares non-IDE disk?}
     HasDev -- no --> HasFunc{CISTPL_FUNCID present?}
     HasFunc -- no --> Reject
     HasFunc -- yes --> FuncId{FUNCID == 0x04?}
-    FuncId -- yes --> Accept
     FuncId -- no --> Reject
+    FuncId -- yes --> FuncExt
+    FuncExt -- "yes (e.g. ATAPI)" --> Reject
+    FuncExt -- no / absent / sparse --> Accept([ACCEPT])
 ```
 
 `CISTPL_DEVICE` type values shown in `[CFD] ..DEVICE: type=0x..`:
@@ -557,8 +588,17 @@ CompactFlash cards normally report `0x0D` or `0x05`.
 | FUNCID | Meaning | CIS gate |
 |--------|---------|----------|
 | missing/unreadable | (no positive ATA evidence) | reject |
-| 0x04 | Fixed Disk | accept |
+| 0x04 | Fixed Disk | accept (subject to FUNCEXT veto below) |
 | anything else | (e.g. WiFi/LAN, serial, ...) | reject |
+
+`CISTPL_FUNCEXT` (function extension, code `0x22`) is an optional follow-up tuple consulted only after `CISTPL_DEVICE` / `CISTPL_FUNCID` have tentatively accepted the card. When the extension explicitly declares a non-IDE disk interface (e.g. ATAPI), the tentative accept is vetoed:
+
+| FUNCEXT | Meaning | CIS gate |
+|---------|---------|----------|
+| absent / sparse / unparseable | (no evidence either way) | no change (accept stands) |
+| TPLFE_TYPE != 1 | not a Disk Interface extension | no change (accept stands) |
+| TPLFE_TYPE = 1, Interface = 1 (IDE) | ATA disk confirmed | no change (accept stands) |
+| TPLFE_TYPE = 1, Interface != 1 | non-ATA disk (e.g. ATAPI) | **reject** (veto) |
 
 Rejected cards are released back to the system (`ReleaseCard`), so another PCMCIA driver can claim them. The driver does not attempt an ATA IDENTIFY on rejected cards, which prevents `compactflash.device` from interfering with non-storage PCMCIA cards.
 

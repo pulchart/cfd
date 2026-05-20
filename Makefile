@@ -4,18 +4,16 @@
 # Usage: make [options] [target]
 #   help - show detailed usage output
 
-# Release version (controls archive name and readme; update for each release)
-VERSION_MAJOR = 1
-VERSION_MINOR = 43
-VERSION_SUFFIX =
-DATE = 19.05.2026
-DATE_SHORT = 05/2026
+# Release version: YYYYMMDD package date + optional in-progress suffix
+# (-dev, -rc1, ...). Empty suffix for a final release.
+RELEASE_DATE = 20260520
+VERSION_SUFFIX = -dev
 
 # compactflash.device version
 CFD_MAJOR = 1
-CFD_MINOR = 43
-CFD_VERSION_SUFFIX =
-CFD_DATE = 19.05.2026
+CFD_MINOR = 44
+CFD_VERSION_SUFFIX = -dev
+CFD_DATE = 20.05.2026
 
 # ptable.library version; bumped only on library-ABI changes:
 # - additive LVOs bump REVISION
@@ -25,25 +23,64 @@ PLIB_MINOR = 0
 PLIB_VERSION_SUFFIX =
 PLIB_DATE = 16.05.2026
 
-# Tool-specific versions
-CFINFO_VERSION = 1.37
+# Tool-specific versions (MAJOR/MINOR + optional in-progress suffix,
+# same shape as CFD_* and PLIB_* above)
+CFINFO_MAJOR = 1
+CFINFO_MINOR = 37
+CFINFO_VERSION_SUFFIX =
 CFINFO_DATE = 11.01.2026
 
-PCMCIASPEED_VERSION = 1.36
+PCMCIASPEED_MAJOR = 1
+PCMCIASPEED_MINOR = 36
+PCMCIASPEED_VERSION_SUFFIX =
 PCMCIASPEED_DATE = 02.01.2026
 
-PCMCIACHECK_VERSION = 1.39
-PCMCIACHECK_DATE = 20.06.2026
+PCMCIACHECK_MAJOR = 1
+PCMCIACHECK_MINOR = 39
+PCMCIACHECK_VERSION_SUFFIX = -dev
+PCMCIACHECK_DATE = 20.05.2026
 
 # Derived versions
-VERSION = $(VERSION_MAJOR).$(VERSION_MINOR)$(VERSION_SUFFIX)
-VERSION_NODOT = $(VERSION_MAJOR)$(VERSION_MINOR)
+VERSION = $(RELEASE_DATE)$(VERSION_SUFFIX)
+# Human-readable date derived from RELEASE_DATE (YYYYMMDD -> DD.MM.YYYY)
+DATE = $(shell echo "$(RELEASE_DATE)" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\3.\2.\1/')
 CFD_VERSION = $(CFD_MAJOR).$(CFD_MINOR)$(CFD_VERSION_SUFFIX)
 VERSION_INC = src/cfd_version.i
 
 # ptable.library version include (auto-generated like cfd_version.i)
 PLIB_VERSION = $(PLIB_MAJOR).$(PLIB_MINOR)$(PLIB_VERSION_SUFFIX)
 PLIB_VERSION_INC = src/lib/ptable_version.i
+
+# Tool versions (derived)
+CFINFO_VERSION      = $(CFINFO_MAJOR).$(CFINFO_MINOR)$(CFINFO_VERSION_SUFFIX)
+PCMCIASPEED_VERSION = $(PCMCIASPEED_MAJOR).$(PCMCIASPEED_MINOR)$(PCMCIASPEED_VERSION_SUFFIX)
+PCMCIACHECK_VERSION = $(PCMCIACHECK_MAJOR).$(PCMCIACHECK_MINOR)$(PCMCIACHECK_VERSION_SUFFIX)
+
+# Component table driving TOOLS_ALL and the README/dist auto-gen blocks.
+COMPONENTS = CFD PLIB CFINFO PCMCIASPEED PCMCIACHECK
+
+CFD_NAME          = compactflash.device
+CFD_KIND          = device
+PLIB_NAME         = ptable.library
+PLIB_KIND         = library
+CFINFO_NAME       = CFInfo
+CFINFO_KIND       = tool
+PCMCIASPEED_NAME  = pcmciaspeed
+PCMCIASPEED_KIND  = tool
+PCMCIACHECK_NAME  = pcmciacheck
+PCMCIACHECK_KIND  = tool
+
+# Flavor x CPU fan-out for assembled artifacts (device, library).
+FLAVORS = full/68020 small/68020 full/68000 small/68000
+_subdir_device  = devs
+_subdir_library = libs
+
+# Per-component "name:target:version:date" entries; device/library fan out over $(FLAVORS).
+define _artifact_entries
+$(if $(filter tool,$($(1)_KIND)),\
+$($(1)_NAME):$(OUTDIR_C)/$($(1)_NAME):$($(1)_VERSION):$($(1)_DATE),\
+$(foreach f,$(FLAVORS),$(f)/$(_subdir_$($(1)_KIND))/$($(1)_NAME):$(OUTDIR)/$(f)/$(_subdir_$($(1)_KIND))/$($(1)_NAME):$($(1)_VERSION):$($(1)_DATE)))
+endef
 
 # Verbose mode (V=1 for verbose output)
 ifeq ($(V),1)
@@ -147,20 +184,7 @@ LIB_SMALL        = $(OUTDIR)/small/68020/libs/ptable.library
 LIB_FULL_000     = $(OUTDIR)/full/68000/libs/ptable.library
 LIB_SMALL_000    = $(OUTDIR)/small/68000/libs/ptable.library
 
-# List of all artifacts for checksum generation (name:target:desc triples).
-# name  - label printed in the readme; desc - optional parenthetical tag.
-TOOLS_ALL = \
-  full/68020/devs/compactflash.device:$(TARGET_FULL):$(CFD_VERSION):$(CFD_DATE) \
-  small/68020/devs/compactflash.device:$(TARGET_SMALL):$(CFD_VERSION):$(CFD_DATE) \
-  full/68000/devs/compactflash.device:$(TARGET_FULL_000):$(CFD_VERSION):$(CFD_DATE) \
-  small/68000/devs/compactflash.device:$(TARGET_SMALL_000):$(CFD_VERSION):$(CFD_DATE) \
-  full/68020/libs/ptable.library:$(LIB_FULL):$(PLIB_VERSION):$(PLIB_DATE) \
-  small/68020/libs/ptable.library:$(LIB_SMALL):$(PLIB_VERSION):$(PLIB_DATE) \
-  full/68000/libs/ptable.library:$(LIB_FULL_000):$(PLIB_VERSION):$(PLIB_DATE) \
-  small/68000/libs/ptable.library:$(LIB_SMALL_000):$(PLIB_VERSION):$(PLIB_DATE) \
-  CFInfo:$(TARGET_CFINFO):$(CFINFO_VERSION):$(CFINFO_DATE) \
-  pcmciaspeed:$(TARGET_PCMCIASPEED):$(PCMCIASPEED_VERSION):$(PCMCIASPEED_DATE) \
-  pcmciacheck:$(TARGET_PCMCIACHECK):$(PCMCIACHECK_VERSION):$(PCMCIACHECK_DATE)
+TOOLS_ALL = $(foreach c,$(COMPONENTS),$(call _artifact_entries,$(c)))
 
 # Lookup tables consumed by the static-pattern recipes below.
 # DEBUG_<flavor> resolves to the per-flavor extra vasm flags;
@@ -177,12 +201,7 @@ SOURCE_PCMCIACHECK = $(SRCDIR)/pcmciacheck.c
 TARGET_PCMCIACHECK = $(OUTDIR_C)/pcmciacheck
 
 # Files: Release
-DATE_YYYYMMDD = $(shell echo "$(DATE)" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)/\3\2\1/')
-ifneq ($(VERSION_SUFFIX),)
-  RELEASE_NAME = cfd.v$(VERSION)$(DATE_YYYYMMDD)
-else
-  RELEASE_NAME = cfd.v$(VERSION)
-endif
+RELEASE_NAME = cfd.v$(VERSION)
 ARCHIVE_NAME = $(RELEASE_NAME).lha
 README_NAME = $(RELEASE_NAME).readme
 README_TEMPLATE = dist.readme.in
@@ -239,11 +258,20 @@ $(PLIB_VERSION_INC): $(VERSION_STAMP)
 	$(Q)echo "	endc" >> $@
 	$(Q)echo "	endm" >> $@
 
-# Update version suffix in README.md (in-place)
-# Updates the "What's New" section header: ### v1.36 or ### v1.36-dev
+# Rewrite the topmost "What's New" header and the COMPONENTS block in
+# README.md from current Makefile vars. Add new release headers by hand.
 version-readme:
-	$(Q)sed -i 's/^### v$(VERSION_MAJOR)\.$(VERSION_MINOR)[^ ]* ([0-9]\{2\}\.[0-9]\{2\}\.[0-9]\{4\})/### v$(VERSION) ($(DATE))/' README.md
-	$(Q)echo "  README  version updated to v$(VERSION) ($(DATE))"
+	$(Q)sed -i '0,/^### [0-9]\{8\}[^[:space:]]*/s/^### [0-9]\{8\}[^[:space:]]*/### $(VERSION)/' README.md
+	$(Q)block=$$(printf '%s\n' \
+	    '#### Components in this release' \
+	    '' \
+	    $(foreach c,$(COMPONENTS),'- $($(c)_NAME) $($(c)_VERSION) ($($(c)_DATE))') \
+	    ); \
+	awk -v block="$$block" ' \
+	    /<!-- COMPONENTS:BEGIN -->/{print; print block; in_block=1; next} \
+	    /<!-- COMPONENTS:END -->/{in_block=0} \
+	    !in_block' README.md > README.md.tmp && mv README.md.tmp README.md
+	$(Q)echo "  README  topmost header + components updated to $(VERSION) ($(DATE))"
 
 # Driver: dist/<flavor>/<cpu>/devs/compactflash.device
 #
@@ -283,7 +311,7 @@ library-small-000: check-vasm $(LIB_SMALL_000)
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Generate AmigaGuide documentation from Markdown
-guides:
+guide guides:
 	$(Q)echo "  GUIDE   dist/docs/*.guide"
 	$(Q)tools/md2guide.py docs/CFInfo.md dist/docs/CFInfo.guide --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
 	$(Q)tools/md2guide.py docs/pcmciaspeed.md dist/docs/pcmciaspeed.guide --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
@@ -315,6 +343,9 @@ $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
 # Release targets
 # ============================================================
 
+# Component summary with literal `\n` for GNU sed substitution.
+COMPONENT_VERSIONS_NL = $(shell printf -- '- %s %s (%s)\\n' $(foreach c,$(COMPONENTS),$($(c)_NAME) $($(c)_VERSION) $($(c)_DATE)))
+
 # Generate readme from template
 $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 	@echo "Generating $(README_NAME) from template..."
@@ -335,6 +366,7 @@ $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET
 	    -e "s|@DATE@|$(DATE)|g" \
 	    -e "s|@CFD_VERSION@|$(CFD_VERSION)|g" \
 	    -e "s|@PLIB_VERSION@|$(PLIB_VERSION)|g" \
+	    -e "s|@COMPONENT_VERSIONS@|$(COMPONENT_VERSIONS_NL)|" \
 	    -e "s|@TOOL_CHECKSUMS@|$$tool_checksums|" \
 	    $(README_TEMPLATE) > $@
 	@echo "Generated: $@"
@@ -457,7 +489,7 @@ help:
 	@echo "  library-full-000 - Build 68000 full ptable.library only"
 	@echo "  library-small-000- Build 68000 small ptable.library only"
 	@echo "  tools            - Build all tools"
-	@echo "  guides           - Generate AmigaGuide documentation from Markdown"
+	@echo "  guide / guides   - Generate AmigaGuide documentation from Markdown"
 	@echo ""
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
@@ -498,4 +530,4 @@ help:
 	@echo ""
 	@echo "Release: $(VERSION) ($(DATE)); compactflash.device: $(CFD_VERSION) ($(CFD_DATE)); ptable.library: $(PLIB_VERSION) ($(PLIB_DATE))"
 
-.PHONY: all full small full-000 small-000 library library-full library-small library-full-000 library-small-000 tools guides version-readme readme release check-lha checksums clean distclean help
+.PHONY: all full small full-000 small-000 library library-full library-small library-full-000 library-small-000 tools guide guides version-readme readme release check-lha checksums clean distclean help

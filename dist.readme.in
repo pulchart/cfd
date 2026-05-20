@@ -5,26 +5,43 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v1.42.lha
+Replaces:     driver/media/cfd.v1.43.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
-CHANGES IN @VERSION@ (@DATE@)
-============================
+CHANGES IN @DATE@
+=====================
 
 compactflash.device:
 
-* Fix hot-plug regression introduced in v1.41: inserting or removing a CF card
-  no longer fails to notify filesystem handlers that live in a Kickstart ROM
-  (e.g. fat95 in a custom ROM). Affected setups saw the card mount correctly
-  but silently skip hot-plug events after that. With Flags=8 the bug was
-  visible in the serial log as a spurious "drop stale client" line on card
-  removal:
+* PCMCIA CD/DVD adapters no longer confuse the driver. Some ATAPI cards
+  (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in
+  their identification data. The CF driver now spots them and steps aside
+  so the system can hand them to their proper driver. Regular CF cards
+  are unaffected.
 
-    [CFD] Card removed
-    [CFD] ..client IS_Code=0x00E4D3AA
-    [CFD] ..drop stale client at 0x403DFC00
+pcmciacheck:
+
+* New `pcmciacheck -cis` option prints a readable summary of the
+  identification data carried by the inserted PCMCIA card (manufacturer,
+  card type, version, etc.). Handy when you want to understand why an
+  unusual card is or isn't accepted by the driver, or when reporting a
+  problem card.
+
+packaging:
+
+* Archive version is now a date (YYYYMMDD). The release bundle ships
+  several independently-versioned pieces (compactflash.device,
+  ptable.library, CFInfo, pcmciaspeed, pcmciacheck), each on its own
+  cadence, so a single v1.x number for the whole archive never matched
+  what was actually inside. The archive (cfd.vYYYYMMDD.lha) is now named
+  after its release date, while each component keeps its own version,
+  visible via `version <name>`. No installation steps change.
+
+COMPONENTS IN THIS RELEASE
+==========================
+@COMPONENT_VERSIONS@
 
 FEATURES
 ========
