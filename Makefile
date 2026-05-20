@@ -6,14 +6,14 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev, -rc1, ...). Empty suffix for a final release.
-RELEASE_DATE = 20260520
+RELEASE_DATE = 20260521
 VERSION_SUFFIX = -dev
 
 # compactflash.device version
 CFD_MAJOR = 1
 CFD_MINOR = 44
 CFD_VERSION_SUFFIX = -dev
-CFD_DATE = 20.05.2026
+CFD_DATE = 21.05.2026
 
 # ptable.library version; bumped only on library-ABI changes:
 # - additive LVOs bump REVISION
@@ -101,6 +101,20 @@ ifeq ($(GTIMING),1)
   DEFINITIONS += -DGTIMING=$(GTIMING)
 else
   TEXT=", -gayletiming"
+endif
+
+# CIS gate: enforce CISTPL_FUNCEXT declares IDE (default on).
+# FUNCEXT_VOTING=0 relaxes the gate: FUNCEXT values are still parsed
+# and logged in debug builds, but the card is always accepted at this
+# stage.  Useful on hardware whose attribute-memory reads are unstable
+# (e.g. A1200 + ACA1234) where a corrupted FUNCEXT would otherwise
+# reject an otherwise-good CF card.
+FUNCEXT_VOTING ?= 1
+ifeq ($(FUNCEXT_VOTING),1)
+  TEXT := $(TEXT), +funcextvoting
+  DEFINITIONS += -DFUNCEXT_VOTING=$(FUNCEXT_VOTING)
+else
+  TEXT := $(TEXT), -funcextvoting
 endif
 
 # Tools (override these for different installations)
@@ -494,6 +508,7 @@ help:
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
 	@echo "  GTIMING=1           - Enable Gayle timing optimization (experimental)"
+	@echo "  FUNCEXT_VOTING=0    - Relaxed CIS gate: report FUNCEXT but always accept (default: enforce IDE)"
 	@echo "  VASM_HOME=/opt/vbcc - vasm installation path"
 	@echo "  VBCC_HOME=/opt/vbcc - vbcc installation path"
 	@echo ""
