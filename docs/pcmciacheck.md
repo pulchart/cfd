@@ -15,11 +15,16 @@
 
 ```
 pcmciacheck [-w] <logfile>
+pcmciacheck -cis
 ```
 
 Options:
 - **`<logfile>`**: Output file for test results (IFF format)
 - **`-w`**: Enable write testing (WARNING: overwrites sectors 1-4 on the CF card)
+- **`-cis`**: Dump the PCMCIA Card Information Structure (CIS) tuples from
+  attribute memory and exit. Read-only, does not use `card.resource` or
+  `compactflash.device`, so it can be used to inspect cards that hang the
+  regular driver path.
 
 Examples:
 
@@ -37,6 +42,97 @@ pcmciacheck -w RAM:test.log
 ```
 pcmciacheck -w >SER: RAM:test.log
 ```
+
+**Dump CIS tuples (no driver interaction):**
+```
+pcmciacheck -cis
+pcmciacheck -cis >RAM:card.cis
+```
+
+The CIS dump decodes the common tuples (`CISTPL_DEVICE`, `CISTPL_FUNCID`,
+`CISTPL_FUNCE`, `CISTPL_VERS_1`, `CISTPL_MANFID`, ...) and hex-dumps any
+others. Useful for diagnosing cards that the driver mis-identifies, or
+that cause the driver's probe path to hang.
+
+Sample `CISTPL_DEVICE` decode:
+
+```
+0x000: 0x01 CISTPL_DEVICE (length=4)
+    type=0xD (FUNCSPEC), speed=0x2 (200ns)
+    size=0x00004000 (16384 B), size_code=0x18  (units=4, unit=0x0=512B)
+```
+
+The `size=` line is the decoded byte count (units × unit-size); it
+matches the value the OS `DeviceTuple` call stores in cfd's
+`CFU_DTSize`. `size_code` is the raw CIS byte for cross-reference.
+
+### Checking CIS read stability
+
+CIS is static data in the card's attribute memory, so running
+`pcmciacheck -cis` several times in succession (without removing or
+re-inserting the card) should produce **byte-for-byte identical
+output every time**. If consecutive runs disagree, the PCMCIA
+attribute-memory read path is producing random bit-flips, and the
+driver's CIS gate may reject the card on a corrupted run even though
+its I/O path is unaffected.
+
+Observed so far on the **A1200 + ACA1234** combination with certain
+CF cards (notably Transcend TS4GCF133 with manfid=0x004F). Bare A1200
+and ACA1240 / ACA1260 on the same card are unaffected. Gayle's PCMCIA
+memory-speed register (`$DAB000` bits 2-3) does not remediate this:
+100ns, 150ns, 250ns, and 720ns all produce the same instability.
+
+**Stable run** (a healthy reading; every run looks like this):
+
+```
+0x017: 0x15 CISTPL_VERS_1 (length=24)
+    major=4, minor=1
+    string[0]: "TRANSCEND"
+    string[1]: "TS4GCF133"
+0x031: 0x21 CISTPL_FUNCID (length=2)
+    function=0x04 (FIXED_DISK)
+    sysinit=0x01
+0x035: 0x22 CISTPL_FUNCE (FUNCEXT) (length=2)
+    extension_type=0x01 (Disk Interface), interface=0x01 (IDE)
+```
+
+**Unstable runs** (same card, same insertion; three further
+consecutive runs, excerpts showing the kind of corruption seen):
+
+FUNCID length byte flipped (0x02 to 0x00), making the parser walk
+into the data and treat the next bytes as fresh tuple codes:
+
+```
+0x031: 0x21 CISTPL_FUNCID (length=0)
+0x033: 0x04 (unknown) (length=1)
+    data: 22
+0x036: 0x02 (unknown) (length=1)
+    data: 01
+```
+
+VERS_1 strings garbled by random bit flips:
+
+```
+0x017: 0x15 CISTPL_VERS_1 (length=24)
+    major=0, minor=1
+    string[0]: "TPA@S@E@D"
+    string[1]: "T"
+    string[2]: "4GCF133"
+```
+
+FUNCEXT interface byte flipped from IDE (0x01) to undefined (0x00),
+which is enough to make a strict CIS gate refuse the card:
+
+```
+0x035: 0x22 CISTPL_FUNCE (FUNCEXT) (length=2)
+    extension_type=0x01 (Disk Interface), interface=0x00 ((undefined))
+```
+
+When opening an issue about a card that the driver mis-identifies or
+rejects, capture and attach **several `-cis` runs back-to-back** so
+the failure mode is visible. A single dump cannot distinguish "card's
+CIS is genuinely malformed" from "attribute-memory reads are unstable
+on this host"; the multi-run capture can.
 
 ## Test Results Interpretation
 

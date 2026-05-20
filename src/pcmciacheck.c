@@ -800,6 +800,349 @@ int SaveLog(const char *filename)
     return 1;
 }
 
+/*
+ * CIS tuple-name lookup for human-readable output.
+ */
+static const char *TupleName(UBYTE code)
+{
+    switch (code) {
+        case CISTPL_NULL:          return "CISTPL_NULL";
+        case CISTPL_DEVICE:        return "CISTPL_DEVICE";
+        case CISTPL_LONGLINK_MFC:  return "CISTPL_LONGLINK_MFC";
+        case CISTPL_CHECKSUM:      return "CISTPL_CHECKSUM";
+        case CISTPL_LONGLINK_A:    return "CISTPL_LONGLINK_A";
+        case CISTPL_LONGLINK_C:    return "CISTPL_LONGLINK_C";
+        case CISTPL_LINKTARGET:    return "CISTPL_LINKTARGET";
+        case CISTPL_NO_LINK:       return "CISTPL_NO_LINK";
+        case CISTPL_VERS_1:        return "CISTPL_VERS_1";
+        case CISTPL_ALTSTR:        return "CISTPL_ALTSTR";
+        case CISTPL_JEDEC_C:       return "CISTPL_JEDEC_C";
+        case CISTPL_JEDEC_A:       return "CISTPL_JEDEC_A";
+        case CISTPL_CONFIG:        return "CISTPL_CONFIG";
+        case CISTPL_CFTABLE_ENTRY: return "CISTPL_CFTABLE_ENTRY";
+        case CISTPL_DEVICE_OC:     return "CISTPL_DEVICE_OC";
+        case CISTPL_MANFID:        return "CISTPL_MANFID";
+        case CISTPL_FUNCID:        return "CISTPL_FUNCID";
+        case CISTPL_FUNCE:         return "CISTPL_FUNCE (FUNCEXT)";
+        case CISTPL_VERS_2:        return "CISTPL_VERS_2";
+        case CISTPL_ORG:           return "CISTPL_ORG";
+        case CISTPL_END:           return "CISTPL_END";
+        default:                   return "(unknown)";
+    }
+}
+
+static const char *DeviceTypeName(UBYTE type)
+{
+    switch (type) {
+        case 0x0: return "NULL";
+        case 0x1: return "ROM";
+        case 0x2: return "OTPROM";
+        case 0x3: return "EPROM";
+        case 0x4: return "EEPROM";
+        case 0x5: return "FLASH";
+        case 0x6: return "SRAM";
+        case 0x7: return "DRAM";
+        case 0xD: return "FUNCSPEC";
+        case 0xE: return "EXTEND";
+        default:  return "?";
+    }
+}
+
+static const char *FuncIDName(UBYTE id)
+{
+    switch (id) {
+        case 0:  return "MULTIFUNCTION";
+        case 1:  return "MEMORY";
+        case 2:  return "SERIAL";
+        case 3:  return "PARALLEL";
+        case 4:  return "FIXED_DISK";
+        case 5:  return "VIDEO";
+        case 6:  return "NETWORK_LAN";
+        case 7:  return "AIMS";
+        case 8:  return "SCSI";
+        default: return "?";
+    }
+}
+
+static const char *DeviceSpeedName(UBYTE n)
+{
+    switch (n) {
+        case 0x0: return "null";
+        case 0x1: return "250ns";
+        case 0x2: return "200ns";
+        case 0x3: return "150ns";
+        case 0x4: return "100ns";
+        case 0x5: return "70ns";
+        case 0x6: return "(reserved)";
+        case 0x7: return "ext-speed";
+        case 0xE: return "(use ext-speed)";
+        case 0xF: return "no info";
+        default:  return "?";
+    }
+}
+
+/* CISTPL_DEVICE size byte: bits 7..3 = (address_units - 1), bits
+ * 2..0 = unit-size code.  Returns size in bytes (matches the value
+ * the OS DeviceTuple call stores in CFU_DTSize).
+ */
+static ULONG DecodeDeviceSize(UBYTE sz)
+{
+    static const ULONG unit_bytes[8] = {
+        512UL,        /* 0: 512 B   */
+        2048UL,       /* 1: 2 KiB   */
+        8192UL,       /* 2: 8 KiB   */
+        32768UL,      /* 3: 32 KiB  */
+        131072UL,     /* 4: 128 KiB */
+        524288UL,     /* 5: 512 KiB */
+        2097152UL,    /* 6: 2 MiB   */
+        0UL           /* 7: reserved */
+    };
+    ULONG units = ((sz >> 3) & 0x1F) + 1UL;
+    return units * unit_bytes[sz & 0x07];
+}
+
+/*
+ * Read one CIS byte at logical offset n.
+ * PCMCIA cards in 8-bit attribute access put CIS bytes at every other
+ * byte address; the odd bytes are aliased / undefined.  Walk by 2.
+ */
+static UBYTE CisByte(int offset)
+{
+    return PCMCIA_ATTR[offset * 2];
+}
+
+/*
+ * Map a nanosecond value to the Gayle $DAB000 bits 2-3 encoding.
+ * Returns 0xFF for unsupported values.
+ */
+static UBYTE GayleSpeedBits(int ns)
+{
+    switch (ns) {
+        case 250: return 0x00;
+        case 150: return 0x04;
+        case 100: return 0x08;
+        case 720: return 0x0C;
+        default:  return 0xFF;
+    }
+}
+
+/*
+ * Decode the current Gayle PCMCIA speed bits to a human label.
+ */
+static const char *GayleSpeedLabel(UBYTE cfg)
+{
+    switch (cfg & 0x0C) {
+        case 0x00: return "250ns";
+        case 0x04: return "150ns";
+        case 0x08: return "100ns";
+        case 0x0C: return "720ns";
+    }
+    return "?";
+}
+
+static void DecodeDevice(int data_off, UBYTE link)
+{
+    UBYTE t;
+    static const char *unit_name[8] = {
+        "512B", "2K", "8K", "32K", "128K", "512K", "2M", "reserved"
+    };
+    if (link < 1) return;
+    t = CisByte(data_off);
+    printf("    type=0x%X (%s), speed=0x%X (%s)\r\n",
+           (t >> 4) & 0xF, DeviceTypeName((t >> 4) & 0xF),
+           t & 0xF, DeviceSpeedName(t & 0xF));
+    if (link >= 2) {
+        UBYTE sz = CisByte(data_off + 1);
+        ULONG nb = DecodeDeviceSize(sz);
+        ULONG units = ((sz >> 3) & 0x1F) + 1UL;
+        UBYTE ucode = sz & 0x07;
+        printf("    size=0x%08lX (%lu B), size_code=0x%02X  "
+               "(units=%lu, unit=0x%X=%s)\r\n",
+               nb, nb, (int)sz, units, (int)ucode, unit_name[ucode]);
+    }
+}
+
+static void DecodeFuncID(int data_off, UBYTE link)
+{
+    UBYTE id;
+    if (link < 1) return;
+    id = CisByte(data_off);
+    printf("    function=0x%02X (%s)\r\n", id, FuncIDName(id));
+    if (link >= 2)
+        printf("    sysinit=0x%02X\r\n", CisByte(data_off + 1));
+}
+
+static void DecodeFuncE(int data_off, UBYTE link)
+{
+    UBYTE type, iface;
+    const char *iname;
+    if (link < 1) {
+        printf("    (no data)\r\n");
+        return;
+    }
+    type = CisByte(data_off);
+    printf("    extension_type=0x%02X", type);
+    if (type == 1 && link >= 2) {
+        iface = CisByte(data_off + 1);
+        iname = "?";
+        if (iface == 0) iname = "(undefined)";
+        else if (iface == 1) iname = "IDE";
+        printf(" (Disk Interface), interface=0x%02X (%s)", iface, iname);
+    }
+    printf("\r\n");
+}
+
+static void DecodeVers1(int data_off, UBYTE link)
+{
+    int i, line, in_str;
+    UBYTE c;
+    if (link < 2) return;
+    printf("    major=%d, minor=%d\r\n",
+           (int)CisByte(data_off), (int)CisByte(data_off + 1));
+    line = 0;
+    i = 2;
+    while (i < link) {
+        printf("    string[%d]: \"", line++);
+        in_str = 1;
+        while (i < link && in_str) {
+            c = CisByte(data_off + i++);
+            if (c == 0 || c == 0xFF) {
+                in_str = 0;
+            } else if (c >= 32 && c < 127) {
+                putchar(c);
+            } else {
+                printf("\\x%02X", c);
+            }
+        }
+        printf("\"\r\n");
+        if (i < link && CisByte(data_off + i - 1) == 0xFF) break;
+    }
+}
+
+static void DecodeManfID(int data_off, UBYTE link)
+{
+    UWORD mfg, prod;
+    if (link < 4) return;
+    mfg  = CisByte(data_off) | (CisByte(data_off + 1) << 8);
+    prod = CisByte(data_off + 2) | (CisByte(data_off + 3) << 8);
+    printf("    manufacturer=0x%04X, product=0x%04X\r\n", mfg, prod);
+}
+
+static void HexDumpTuple(int data_off, UBYTE link)
+{
+    int i;
+    if (link == 0) return;
+    printf("    data:");
+    for (i = 0; i < link && i < 32; i++) {
+        if (i > 0 && (i % 16) == 0) printf("\r\n         ");
+        printf(" %02X", CisByte(data_off + i));
+    }
+    if (link > 32) printf(" ...");
+    printf("\r\n");
+}
+
+/*
+ * Walk the PCMCIA attribute-memory CIS and print each tuple in
+ * human-readable form.  Direct memory read at 0x00A00000, no
+ * card.resource interaction, no OwnCard, no arbitration with
+ * compactflash.device or other handlers.  Safe to run on cards that
+ * make the regular driver path hang.
+ *
+ * speed_ns: 0 leaves Gayle PCMCIA timing untouched; 100/150/250/720
+ * temporarily overrides $DAB000 bits 2-3 for the duration of the scan
+ * (restored on return).  Useful for diagnosing cards whose CIS reads
+ * are unstable at the default speed - rerun -cis with each value and
+ * compare results.
+ *
+ * Tuple stride: each CIS byte is at attribute_base + n*2 (PCMCIA 8-bit
+ * attribute access aliases odd bytes).  Walk terminates on CISTPL_END
+ * or after 32 tuples / 512 logical bytes - whichever comes first.
+ */
+int DumpCIS(int speed_ns)
+{
+    int pos = 0;
+    int count = 0;
+    UBYTE code, link;
+    UBYTE saved_cfg = 0;
+    int changed = 0;
+
+    if (!CardPresent()) {
+        printf("No card inserted (GAYLE CCDET clear).\r\n");
+        return 5;
+    }
+
+    if (speed_ns != 0) {
+        UBYTE want = GayleSpeedBits(speed_ns);
+        if (want == 0xFF) {
+            printf("Invalid Gayle PCMCIA speed %d (use 100, 150, 250, or 720)\r\n",
+                   speed_ns);
+            return 5;
+        }
+        saved_cfg = *GAYLE_CONFIG;
+        *GAYLE_CONFIG = (saved_cfg & 0xF3) | want;
+        changed = 1;
+    }
+
+    printf("CIS dump (direct read from PCMCIA attribute memory at 0x%08lX):\r\n",
+           (ULONG)PCMCIA_ATTR);
+    printf("Gayle PCMCIA timing: %s%s\r\n",
+           GayleSpeedLabel(*GAYLE_CONFIG),
+           changed ? " (override)" : " (current)");
+    printf("\r\n");
+
+    while (pos < 512 && count < 32) {
+        code = CisByte(pos);
+
+        if (code == CISTPL_END) {
+            printf("0x%03X: 0x%02X %s\r\n", pos, code, TupleName(code));
+            goto done;
+        }
+        if (code == CISTPL_NULL) {
+            pos += 1;  /* NULL has no link byte */
+            continue;
+        }
+
+        link = CisByte(pos + 1);
+        printf("0x%03X: 0x%02X %s (length=%d)\r\n",
+               pos, (int)code, TupleName(code), (int)link);
+
+        switch (code) {
+            case CISTPL_DEVICE:
+            case CISTPL_DEVICE_OC:
+                DecodeDevice(pos + 2, link);
+                break;
+            case CISTPL_FUNCID:
+                DecodeFuncID(pos + 2, link);
+                break;
+            case CISTPL_FUNCE:
+                DecodeFuncE(pos + 2, link);
+                break;
+            case CISTPL_VERS_1:
+            case CISTPL_VERS_2:
+                DecodeVers1(pos + 2, link);
+                break;
+            case CISTPL_MANFID:
+                DecodeManfID(pos + 2, link);
+                break;
+            default:
+                HexDumpTuple(pos + 2, link);
+                break;
+        }
+
+        pos += 2 + link;
+        count++;
+    }
+
+    printf("\r\n(end of dump - %s)\r\n",
+           count >= 32 ? "tuple limit reached" : "buffer limit reached");
+
+done:
+    if (changed) {
+        *GAYLE_CONFIG = saved_cfg;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int working_read_mode;
@@ -811,10 +1154,31 @@ int main(int argc, char **argv)
     if (argc < 2) {
         printf("pcmciacheck " STR(VERSION) " - PCMCIA/CF Hardware Test Tool\r\n");
         printf("Usage: pcmciacheck [-w] <logfile>\r\n");
+        printf("       pcmciacheck -cis [speed]\r\n");
         printf("\r\n");
         printf("Tests different data access modes and creates diagnostic log.\r\n");
-        printf("  -w  Enable write testing (WARNING: may overwrite data on sectors 1-4)\r\n");
+        printf("  -w           Enable write testing (WARNING: may overwrite data on sectors 1-4)\r\n");
+        printf("  -cis [speed] Dump PCMCIA CIS tuples from attribute memory and exit.\r\n");
+        printf("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\r\n");
+        printf("               memory timing for the scan (default: current setting).\r\n");
         return 5;
+    }
+
+    /* -cis: standalone CIS dump, no logfile, no transfer-mode tests */
+    if (strcmp(argv[1], "-cis") == 0) {
+        int speed = 0;
+        if (argc > 2) {
+            if (strcmp(argv[2], "100") == 0) speed = 100;
+            else if (strcmp(argv[2], "150") == 0) speed = 150;
+            else if (strcmp(argv[2], "250") == 0) speed = 250;
+            else if (strcmp(argv[2], "720") == 0) speed = 720;
+            else {
+                printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250, or 720)\r\n",
+                       argv[2]);
+                return 5;
+            }
+        }
+        return DumpCIS(speed);
     }
 
     /* Parse command line arguments */
@@ -829,6 +1193,7 @@ int main(int argc, char **argv)
     if (logfile == NULL) {
         printf("Error: No logfile specified\r\n");
         printf("Usage: pcmciacheck [-w] <logfile>\r\n");
+        printf("       pcmciacheck -cis [speed]\r\n");
         return 5;
     }
 

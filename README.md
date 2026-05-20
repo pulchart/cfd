@@ -687,7 +687,16 @@ Report issues at: https://github.com/pulchart/cfd/issues
 3. Mount CF0:
 4. Insert the card
 5. Check serial output for `[CFD]` messages
-6. Report the serial log along with your hardware details
+6. Report the serial log along with your hardware details (the
+   accelerator can matter, e.g., ACA1234 behaves differently from
+   ACA1240 / ACA1260 on the same card)
+7. Also attach the output of `pcmciacheck -cis` (see
+   `docs/pcmciacheck.md`), which is helpful for PCMCIA card
+   identification and CIS-related issues. Run it several times in
+   succession without removing the card and confirm whether the
+   dumps are identical. Differing dumps on repeated runs indicate
+   unstable CIS attribute-memory reads, which is itself a diagnostic
+   signal worth reporting.
 
 ## History
 
