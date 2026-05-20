@@ -23,6 +23,11 @@ compactflash.device:
   avoided it (the filesystem then held the device open), and so did WHDLoad's
   `NoFlushMem` option. The driver now keeps itself in use.
 
+* PCMCIA CD/DVD adapters no longer confuse the driver. Some ATAPI cards
+  (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in
+  their identification data. The CF driver now spots them and steps aside
+  so the system can hand them to their proper driver.
+
 pcmciacheck:
 
 * New `pcmciacheck -cis` option prints a readable summary of the

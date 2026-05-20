@@ -27,6 +27,8 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 * **Fixed a crash in the ROM-resident driver when running WHDLoad.** (Issue #56) Programs that take over the machine flush idle libraries and devices to free memory before they run. The idle ROM-resident compactflash.device looked unused, got flushed, and that corrupted the program's memory setup, causing a guru (`0x0100000F`, bad `FreeMem`). Mounting a CF card first avoided it (the filesystem then held the device open), and so did WHDLoad's `NoFlushMem` option. The driver now keeps itself in use.
 
+* **PCMCIA CD/DVD adapters no longer confuse the driver.** Some ATAPI cards (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in their identification data. The CF driver now spots them and steps aside so the system can hand them to their proper driver.
+
 #### Tools
 
 * **`pcmciacheck -cis`**: new option that prints a readable summary of the identification data carried by the inserted PCMCIA card (manufacturer, card type, version, etc.). Handy when you want to understand why an unusual card is or isn't accepted by the driver, or when reporting a problem card.
@@ -556,14 +558,15 @@ flowchart TD
     Start([CIS gate]) --> HasDev{CISTPL_DEVICE present?}
     HasDev -- yes --> DevType{type in 0x0D, 0x05?}
     DevType -- no --> Reject([REJECT])
-    DevType -- yes --> FuncExt{CISTPL_FUNCEXT<br/>declares non-IDE disk?}
+    DevType -- yes --> FuncExt{CISTPL_FUNCEXT<br/>Disk Interface<br/>= IDE?}
     HasDev -- no --> HasFunc{CISTPL_FUNCID present?}
     HasFunc -- no --> Reject
     HasFunc -- yes --> FuncId{FUNCID == 0x04?}
     FuncId -- no --> Reject
     FuncId -- yes --> FuncExt
-    FuncExt -- "yes (e.g. ATAPI)" --> Reject
-    FuncExt -- no / absent / sparse --> Accept([ACCEPT])
+    FuncExt -- yes --> Accept([ACCEPT])
+    FuncExt -- "no (non-IDE)" --> Reject
+    FuncExt -- absent / malformed --> Reject
 ```
 
 `CISTPL_DEVICE` type values shown in `[CFD] ..DEVICE: type=0x..`:
@@ -588,19 +591,44 @@ CompactFlash cards normally report `0x0D` or `0x05`.
 | FUNCID | Meaning | CIS gate |
 |--------|---------|----------|
 | missing/unreadable | (no positive ATA evidence) | reject |
-| 0x04 | Fixed Disk | accept (subject to FUNCEXT veto below) |
+| 0x04 | Fixed Disk | accept (subject to FUNCEXT confirmation below) |
 | anything else | (e.g. WiFi/LAN, serial, ...) | reject |
 
-`CISTPL_FUNCEXT` (function extension, code `0x22`) is an optional follow-up tuple consulted only after `CISTPL_DEVICE` / `CISTPL_FUNCID` have tentatively accepted the card. When the extension explicitly declares a non-IDE disk interface (e.g. ATAPI), the tentative accept is vetoed:
+`CISTPL_FUNCEXT` (function extension, code `0x22`) is consulted after `CISTPL_DEVICE` / `CISTPL_FUNCID` have tentatively accepted the card. Only a well-formed Disk Interface extension declaring IDE keeps the accept; everything else - including missing or malformed FUNCEXT - rejects the card:
 
 | FUNCEXT | Meaning | CIS gate |
 |---------|---------|----------|
-| absent / sparse / unparseable | (no evidence either way) | no change (accept stands) |
-| TPLFE_TYPE != 1 | not a Disk Interface extension | no change (accept stands) |
-| TPLFE_TYPE = 1, Interface = 1 (IDE) | ATA disk confirmed | no change (accept stands) |
-| TPLFE_TYPE = 1, Interface != 1 | non-ATA disk (e.g. ATAPI) | **reject** (veto) |
+| absent | tuple not in CIS | **reject** |
+| short tuple (link < 2) | malformed | **reject** |
+| TPLFE_TYPE != 1 | not a Disk Interface extension | **reject** |
+| TPLFE_TYPE = 1, Interface != 1 | Disk Interface, non-IDE (e.g. ATAPI) | **reject** |
+| TPLFE_TYPE = 1, Interface = 1 (IDE) | ATA disk confirmed | **accept** |
 
 Rejected cards are released back to the system (`ReleaseCard`), so another PCMCIA driver can claim them. The driver does not attempt an ATA IDENTIFY on rejected cards, which prevents `compactflash.device` from interfering with non-storage PCMCIA cards.
+
+### CIS gate serial debug
+
+Debug builds (`Flags = 8`) log every gate decision so it is clear which branch fired and on what values. Sample lines per probe:
+
+```
+[CFD] CIS gate
+[CFD] ..DEVICE: type=0x0D speed=250ns size=0x00004000
+[CFD] ..FUNCEXT: link=0x02, type=0x01, ifc=0x01
+[CFD] ..RESULT: accept
+```
+
+The `[CFD] ..FUNCEXT:` line appears once per probe and dumps the actual values read from the tuple. The five possible shapes - one accept and four reject reasons - are:
+
+| FUNCEXT line | Meaning | RESULT |
+|--------------|---------|--------|
+| `..FUNCEXT: absent` | no tuple in CIS | reject |
+| `..FUNCEXT: link=0x00, type=0x00, ifc=0x00` | tuple present but empty (link=0) | reject |
+| `..FUNCEXT: link=0x01, type=0xNN, ifc=0x00` | short tuple, only sub-type byte | reject |
+| `..FUNCEXT: link=0xNN, type=0xNN, ifc=0xNN` (type != 0x01) | wrong sub-type (not Disk Interface) | reject |
+| `..FUNCEXT: link=0xNN, type=0x01, ifc=0xNN` (ifc != 0x01) | Disk Interface, non-IDE | reject |
+| `..FUNCEXT: link=0xNN, type=0x01, ifc=0x01` | Disk Interface, IDE | **accept** |
+
+For cards rejected earlier in the gate (bad CISTPL_DEVICE type, non-disk FUNCID) the FUNCEXT line is not printed - the reject reason is the `..DEVICE:` or `..FUNCID:` line above.
 
 ## IO path dispatch
 

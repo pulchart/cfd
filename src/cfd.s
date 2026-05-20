@@ -874,6 +874,14 @@ dbg_cis_gate_accept:
 	dc.b	"[CFD] ..RESULT: accept",13,10,0
 dbg_cis_gate_reject:
 	dc.b	"[CFD] ..RESULT: reject -> ReleaseCard",13,10,0
+dbg_cis_funcext_absent:
+	dc.b	"[CFD] ..FUNCEXT: absent",13,10,0
+dbg_cis_funcext_link:
+	dc.b	"[CFD] ..FUNCEXT: link=0x",0
+dbg_cis_funcext_type:
+	dc.b	", type=0x",0
+dbg_cis_funcext_iface:
+	dc.b	", ifc=0x",0
 dbg_cis_config:
 	dc.b	"[CFD] ..CONFIG: addr=0x",0
 dbg_cis_config_end:
@@ -2489,13 +2497,26 @@ _t_dev_have:
 	; CIS gate decision flow:
 	;   CISTPL_DEVICE known?
 	;     yes -> type in {0x0D, 0x05} ?
-	;              yes -> ACCEPT
+	;              yes -> tentative ACCEPT, validate CISTPL_FUNCEXT
 	;              no  -> REJECT
 	;     no  -> CISTPL_FUNCID known?
 	;              no  -> REJECT
 	;              yes -> FUNCID == 0x04 ?
-	;                        yes -> ACCEPT
+	;                        yes -> tentative ACCEPT, validate CISTPL_FUNCEXT
 	;                        no  -> REJECT
+	;
+	; CISTPL_FUNCEXT validation:
+	;   present and well-formed (link >= 2) ?
+	;     no  -> REJECT
+	;     yes -> TPLFE_TYPE == 1 (Disk Interface)
+	;            AND Interface == 1 (IDE) ?
+	;              yes -> ACCEPT
+	;              no  -> REJECT
+	;
+	; Post-ACCEPT, CISTPL_CONFIG address resolution:
+	;   CISTPL_CONFIG present and parses to non-zero address ?
+	;     yes -> use parsed address
+	;     no  -> use 0x0200 (PCMCIA standard, fallback)
 	DBGMSG	dbg_cis_device
 	moveq.l	#0,d0
 	move.b	CFU_DTType(a3),d0
@@ -2550,8 +2571,71 @@ _t_devtuple_skip:
 
 _t_cis_funcid_ok:
 _t_cis_gate_accept:
-	DBGMSG	dbg_cis_gate_accept
+	;-- Require CISTPL_FUNCEXT to declare IDE ----------------------
+	; After DEVICE/FUNCID tentatively accept, demand a well-formed
+	; FUNCEXT (0x22) with TPLFE_TYPE=1 (Disk Interface) and
+	; Interface=1 (IDE).  Absent, malformed, or non-IDE rejects
+	; the card before IDENTIFY.  Restores v1.36's strict check.
+	; Debug builds dump link/type/iface so the reject reason is
+	; visible in the serial log.
+	lea	CFU_ConfigBlock(a3),a0
+	lea	CFU_CardHandle(a3),a1
+	moveq.l	#$22,d1			;CISTPL_FUNCEXT
+	moveq.l	#127,d0
+	CALLCARD CopyTuple
+	tst.w	d0
+	bne.s	_t_cis_funcext_have	;tuple present
 
+	ifd	DEBUG
+	DBGMSG	dbg_cis_funcext_absent
+	endc
+	ifd	FUNCEXT_VOTING
+	bra.w	_t_cis_reject		;voting: absent -> reject
+	else
+	bra.s	_t_cis_funcext_accept	;non-voting: log absent, accept
+	endc
+
+_t_cis_funcext_have:
+	;-- Read link, TPLFE_TYPE, Interface into d2/d3/d4 (default 0).
+	lea	CFU_ConfigBlock(a3),a0
+	addq.l	#1,a0			;-> link byte
+	moveq.l	#0,d2
+	move.b	(a0)+,d2		;d2 = link
+	moveq.l	#0,d3
+	moveq.l	#0,d4
+	tst.b	d2
+	beq.s	_t_cis_funcext_dump	;link=0: no data bytes
+	move.b	(a0)+,d3		;d3 = TPLFE_TYPE
+	cmp.b	#2,d2
+	bcs.s	_t_cis_funcext_dump	;link=1: no Interface byte
+	move.b	(a0),d4			;d4 = Interface
+
+_t_cis_funcext_dump:
+	ifd	DEBUG
+	DBGMSG	dbg_cis_funcext_link
+	move.l	d2,d0
+	bsr	_DebugHexByte
+	DBGMSG	dbg_cis_funcext_type
+	move.l	d3,d0
+	bsr	_DebugHexByte
+	DBGMSG	dbg_cis_funcext_iface
+	move.l	d4,d0
+	bsr	_DebugHexByte
+	bsr	_DebugNewline
+	endc
+
+	ifd	FUNCEXT_VOTING
+	;-- Voting: enforce link >= 2, type == 1, iface == 1 (IDE).
+	cmp.b	#2,d2
+	bcs.w	_t_cis_reject
+	cmp.b	#1,d3
+	bne.w	_t_cis_reject
+	cmp.b	#1,d4
+	bne.w	_t_cis_reject
+	endc
+
+_t_cis_funcext_accept:
+	DBGMSG	dbg_cis_gate_accept
 	bra.s	_t_cis_gate_end
 
 _t_cis_reject:
