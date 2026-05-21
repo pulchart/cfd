@@ -21,13 +21,15 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### 20260530-dev
+### 20260604-dev
 
 #### Driver
 
 * **Fixed a crash in the ROM-resident driver when running WHDLoad.** (Issue #56) Programs that take over the machine flush idle libraries and devices to free memory before they run. The idle ROM-resident compactflash.device looked unused, got flushed, and that corrupted the program's memory setup, causing a guru (`0x0100000F`, bad `FreeMem`). Mounting a CF card first avoided it (the filesystem then held the device open), and so did WHDLoad's `NoFlushMem` option. The driver now keeps itself in use.
 
-* **PCMCIA CD/DVD adapters no longer confuse the driver.** Some ATAPI cards (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in their identification data. The CF driver now spots them and steps aside so the system can hand them to their proper driver.
+* **Non-IDE PCMCIA cards (e.g. ATAPI CD/DVD adapters) are now released earlier in the identify process.** (Issue #47) Rejecting after IDENTIFY is too late: the IDENTIFY attempt could leave the card in a state where dedicated drivers (such as `telmexatapi.device`) could no longer claim it. The CIS gate reintroduced checks for a well-formed Disk Interface FUNCEXT declaring IDE before IDENTIFY runs, with up to 10 retries to tolerate unstable CIS reads. Please report if you see any CF card detection regression.
+
+* **ATAPI handler compiled out by default.** Build with `ATAPI=1` to keep it. See [ATAPI status](#atapi-status) for details.
 
 #### Tools
 
@@ -40,7 +42,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 <!-- COMPONENTS:BEGIN -->
 #### Components in this release
 
-- compactflash.device 1.44-dev (30.05.2026)
+- compactflash.device 1.44-dev (04.06.2026)
 - ptable.library 1.0 (16.05.2026)
 - CFInfo 1.37 (11.01.2026)
 - pcmciaspeed 1.36 (02.01.2026)
@@ -457,8 +459,7 @@ Card identification (hot-plug):
 (or: [CFD] ..CONFIG: default (0x200))
 [CFD] RW test
 [CFD] ..done, transfer mode: WORD
-[CFD] Getting IDE ID
-[CFD] ..done
+[CFD] Getting IDE ID ... done (ATA)
   Model: TS4GCF133...............................
   Serial: G68120052383AC0700C7
   FW: 20110407
@@ -555,19 +556,28 @@ Decision flow:
 
 ```mermaid
 flowchart TD
-    Start([CIS gate]) --> HasDev{CISTPL_DEVICE present?}
+    Start([Card reset, voltage]) --> HasDev{CISTPL_DEVICE present?}
     HasDev -- yes --> DevType{type in 0x0D, 0x05?}
     DevType -- no --> Reject([REJECT])
-    DevType -- yes --> FuncExt{CISTPL_FUNCEXT<br/>Disk Interface<br/>= IDE?}
+    DevType -- yes --> FuncExt{CISTPL_FUNCEXT<br/>Disk Interface = IDE?<br/>10x retry}
     HasDev -- no --> HasFunc{CISTPL_FUNCID present?}
     HasFunc -- no --> Reject
     HasFunc -- yes --> FuncId{FUNCID == 0x04?}
     FuncId -- no --> Reject
     FuncId -- yes --> FuncExt
-    FuncExt -- yes --> Accept([ACCEPT])
+    FuncExt -- yes --> CfgAddr[CISTPL_CONFIG addr<br/>10x retry, fallback 0x200]
     FuncExt -- "no (non-IDE)" --> Reject
     FuncExt -- absent / malformed --> Reject
+    CfgAddr --> Identify[IDENTIFY DEVICE]
+    Identify --> IdResult{result}
+    IdResult -- ATA --> Accept([ACCEPT])
+    IdResult -- ATAPI --> AtapiBranch{ATAPI build flag?}
+    IdResult -- timeout --> Reject
+    AtapiBranch -- ATAPI=1 --> Iatapi([_t_iatapi handler])
+    AtapiBranch -- ATAPI=0 default --> Reject
 ```
+
+The CIS gate is the primary disk-vs-not-disk filter; an ATAPI signature returned by `IDENTIFY DEVICE` after CIS accept is handled by the ATAPI build flag (default 0 releases the card so a dedicated ATAPI driver can claim it; `ATAPI=1` routes ATAPI cards through `_t_iatapi`). See [ATAPI status](#atapi-status) for details.
 
 `CISTPL_DEVICE` type values shown in `[CFD] ..DEVICE: type=0x..`:
 
@@ -604,7 +614,7 @@ CompactFlash cards normally report `0x0D` or `0x05`.
 | TPLFE_TYPE = 1, Interface != 1 | Disk Interface, non-IDE (e.g. ATAPI) | **reject** |
 | TPLFE_TYPE = 1, Interface = 1 (IDE) | ATA disk confirmed | **accept** |
 
-Rejected cards are released back to the system (`ReleaseCard`), so another PCMCIA driver can claim them. The driver does not attempt an ATA IDENTIFY on rejected cards, which prevents `compactflash.device` from interfering with non-storage PCMCIA cards.
+Rejected cards are released back to the system (`ReleaseCard`) so another PCMCIA driver can claim them. The driver touches no IDE or CCR registers before the gate accepts.
 
 ### CIS gate serial debug
 
@@ -629,6 +639,40 @@ The `[CFD] ..FUNCEXT:` line appears once per probe and dumps the actual values r
 | `..FUNCEXT: link=0xNN, type=0x01, ifc=0x01` | Disk Interface, IDE | **accept** |
 
 For cards rejected earlier in the gate (bad CISTPL_DEVICE type, non-disk FUNCID) the FUNCEXT line is not printed - the reject reason is the `..DEVICE:` or `..FUNCID:` line above.
+
+## ATAPI status
+
+`compactflash.device` does not support ATAPI devices (CD-ROM, DVD, Zip, etc.) in the default build. The gate that decides what cfd handles works in two stages:
+
+1. **CIS gate** (before any I/O): `CISTPL_DEVICE` / `CISTPL_FUNCID` / `CISTPL_FUNCEXT` are read and validated. Cards without a well-formed Disk Interface FUNCEXT declaring IDE are rejected here, before any Card Configuration Register access. Each CIS read is retried up to 10 times to tolerate hardware whose attribute-memory reads are unstable (e.g. A1200 + ACA1234). Only after the gate accepts does the driver parse `CISTPL_CONFIG` (10x retry, fallback `$200`) to locate the CCR. See [CIS gate decision](#cis-gate-decision) above.
+2. **Post-IDENTIFY classification**: if a card passes the CIS gate and `IDENTIFY DEVICE` returns the ATAPI signature (`d0=2`, or word-0 bit 15 set), the card is released so a dedicated ATAPI driver such as `telmexatapi.device` (from Aminet `IDEfix97`) can claim it.
+
+Serial debug builds log an ATA accept as:
+
+```text
+[CFD] Setting voltage
+[CFD] Voltage: 5V
+[CFD] CIS gate
+[CFD] ..DEVICE: type=0x0D speed=720ns size=0x00000000
+[CFD] ..FUNCEXT: link=0x02, type=0x01, ifc=0x01
+[CFD] ..RESULT: accept
+[CFD] ..CONFIG: addr=0x00000200
+[CFD] RW test
+[CFD] ..done, transfer mode: WORD
+[CFD] Getting IDE ID ... done (ATA)
+```
+
+A card without IDE FUNCEXT (e.g. Telmex ATAPI) rejects after the 10-retry exhausts. `..CONFIG:` does not appear because the parser only runs on accepted cards:
+
+```text
+[CFD] Voltage: 5V
+[CFD] CIS gate
+[CFD] ..DEVICE: type=0x0D ...
+[CFD] ..FUNCEXT: absent
+[CFD] ..RESULT: reject -> ReleaseCard
+```
+
+An ATAPI implementation has lived in `compactflash.device` since the early 2000s (see the v1.15 entry in the [History](#history) table), but it has no real-world user and is untested. The code is preserved behind the `make ATAPI=1` build flag for future refactoring. Since v1.44 the release default is ATAPI free. The handler (`_t_iatapi`, `_Packet`, `_rb_scsi`, `_wb_scsi`, `_sc_atapi`, `ATAPIPoll`, `ATAPISize`, `_MediaStatus`) is compiled in by `make ATAPI=1`, which routes ATAPI cards through `_t_iatapi` instead of releasing them. If an ATAPI device turns up that needs `compactflash.device` to handle it directly, the path can be brought back after proper testing and CIS gate refactoring.
 
 ## IO path dispatch
 
@@ -770,7 +814,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| - | 20260530 | Fixes guru with WHDLoad |
+| v1.44 | 04/06/2026 | Fixes guru with WHDLoad; Reintroduce CIS gate FUNCEXT to detect unsupported ATAPI; ATAPI handler compiled out by default |
 | v1.43, v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |

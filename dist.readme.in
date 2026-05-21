@@ -23,10 +23,17 @@ compactflash.device:
   avoided it (the filesystem then held the device open), and so did WHDLoad's
   `NoFlushMem` option. The driver now keeps itself in use.
 
-* PCMCIA CD/DVD adapters no longer confuse the driver. Some ATAPI cards
-  (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in
-  their identification data. The CF driver now spots them and steps aside
-  so the system can hand them to their proper driver.
+* Non-IDE PCMCIA cards (e.g. ATAPI CD/DVD adapters) (issue #47) are now
+  released earlier in the identify process. Rejecting after IDENTIFY
+  is too late: the IDENTIFY attempt could leave the card in a state
+  where dedicated drivers (such as telmexatapi.device) could no
+  longer claim it. The CIS gate reintroduced checks for a well-formed
+  Disk Interface FUNCEXT declaring IDE before IDENTIFY runs, with up to
+  10 retries to tolerate unstable CIS reads.
+  Please report if you see any CF card detection regression.
+
+* ATAPI handler is compiled out by default (no real-world user
+  found, untested; build with ATAPI=1 to keep it).
 
 pcmciacheck:
 
@@ -151,14 +158,13 @@ line is a version banner that identifies the driver version and CPU tier
   [CFD] Voltage: 5V
   [CFD] CIS gate
   [CFD] ..DEVICE: type=0x0D speed=720ns size=0x00000000
-  [CFD] ..FUNCID: 0x04
+  [CFD] ..FUNCEXT: link=0x02, type=0x01, ifc=0x01
   [CFD] ..RESULT: accept
   [CFD] ..CONFIG: addr=0x00000200
   (or: [CFD] ..CONFIG: default (0x200))
   [CFD] RW test
   [CFD] ..done, transfer mode: WORD
-  [CFD] Getting IDE ID
-  [CFD] ..done
+  [CFD] Getting IDE ID ... done (ATA)
     Model: TS4GCF133...............................
     Serial: G68120052383AC0700C7
     FW: 20110407

@@ -21,8 +21,8 @@
 ;===========================================================================
 ;
 ; This driver implements a block device for CompactFlash cards connected
-; via PCMCIA slot on Amiga 600/1200. It supports both ATA (CF native) and
-; ATAPI protocols, as well as SD cards via SD-to-CF adapters.
+; via PCMCIA slot on Amiga 600/1200. It supports both ATA (CF native) as well
+; as SD cards via SD-to-CF adapters.
 ;
 ; REGISTER CONVENTIONS (internal functions):
 ;   a3 = CFU pointer (CompactFlashUnit) - preserved across most calls
@@ -776,6 +776,16 @@ dbg_id:
 	dc.b	"[CFD] Identifying card...",13,10,0
 dbg_id_ok:
 	dc.b	"[CFD] Card identified OK",13,10,0
+dbg_id_done_pre:
+	dc.b	" ... done (",0
+dbg_id_done_post:
+	dc.b	")",13,10,0
+dbg_id_ata:
+	dc.b	"ATA",0
+dbg_id_atapi:
+	dc.b	"ATAPI",0
+dbg_id_timeout:
+	dc.b	"timeout",0
 
 dbg_reset:
 	dc.b	"[CFD] Reset",13,10,0
@@ -829,11 +839,13 @@ dbg_ideerr:
 	dc.b	"[CFD] IDE err=",0
 
 dbg_id_get:
-	dc.b	"[CFD] Getting IDE ID",13,10,0
+	dc.b	"[CFD] Getting IDE ID",0
 dbg_id_garbage:
-	dc.b	"[CFD] ..verify: repeated pattern: ",0
+	dc.b	" ... FAILED (repeated pattern ",0
+dbg_id_garbage_end:
+	dc.b	")",13,10,0
 dbg_id_mismatch:
-	dc.b	"[CFD] ..verify: data mismatch",13,10,0
+	dc.b	" ... FAILED (data mismatch)",13,10,0
 dbg_id_model:
 	dc.b	"  Model: ",0
 dbg_id_serial:
@@ -1648,8 +1660,10 @@ _ScsiCmd:
 	beq.s	_sc_end
 
 	move.l	d1,a2			;&SCSICmd
+	ifd	ATAPI
 	tst.w	CFU_PLength(a3)
 	bgt.s	_sc_atapi
+	endc
 
 	cmp.w	#6,SCSI_CmdLength(a2)
 	bcs.s	_sc_end
@@ -1704,10 +1718,12 @@ _sc_end:
 	clr.l	IO_Actual(a2)		;is this really needed...
 	rts
 
+	ifd	ATAPI
 _sc_atapi:
 	move.l	a2,a0
 	bsr	_Packet
 	bra.s	_sc_end
+	endc
 
 _sc_tab:
 	dc.w	10<<8+READ10, _Read10-_sc_tab
@@ -2360,7 +2376,9 @@ _t_check:
 	move.l	d0,CFU_Request(a3)	;got request
 	bne.s	_t_do
 
+	ifd	ATAPI
 	bsr	ATAPIPoll		;check for removable media
+	endc
 
 	bclr	#1,CFU_EventFlags(a3)
 	bne.s	_t_identify		;card inserted
@@ -2382,6 +2400,73 @@ _t_do:
 	bra.s	_t_check
 
 ;- - examine and register new card  - - - - - - - - - - - -
+
+;===========================================================
+; Card-insert accept/reject flow.
+;
+; === the CIS gate (DEVICE / FUNCID / FUNCEXT) decides
+;     accept/reject using CIS attribute-memory reads ONLY
+;     before the gate accepts. ===
+;
+;            +------------------+
+;            | Reset, Voltage   |
+;            +------------------+
+;                    |
+;                    v
+;            +------------------+
+;            | DEVICE type ?    |---- other non-zero type
+;            | (10x retry on    |     ------------------> REJECT
+;            |  NULL/absent)    |
+;            +------------------+
+;             |              |
+;     0x0D /  |              | NULL/absent
+;     0x05    |              v
+;     skips   |   +------------------+
+;     FUNCID  |   | FUNCID == 0x04 ? |---- no
+;             |   +------------------+     ------------> REJECT
+;             |              | yes
+;             v              v
+;            +------------------+
+;            | FUNCEXT IDE ?    |---- absent / malformed / non-IDE
+;            | (10x retry)      |     ------------> REJECT
+;            +------------------+              (..RESULT: reject
+;                    | yes                       -> ReleaseCard,
+;                    v                            no IDE register
+;             ..RESULT: accept                    touch)
+;
+;     ===== below this line: IDE / CCR registers modified =====
+;
+;                    |
+;                    v
+;            +------------------+
+;            | CIS CONFIG addr  |   (10x retry,
+;            | + HBA setup      |    fallback 0x200;
+;            |                  |    writes CCR: Socket+Copy,
+;            |                  |    IRQ mode, transfer speed)
+;            +------------------+
+;                    |
+;                    v
+;            +------------------+
+;            | RW test          |
+;            +------------------+
+;                    |
+;                    v
+;            +------------------+
+;            | IDENTIFY DEVICE  |
+;            +------------------+
+;                    |
+;                    v
+;             d0 = 1 ATA -----> ACCEPT  (NotifyClients)
+;             d0 = 0 timeout -> _t_identify_failed (ReleaseCard)
+;             d0 = 2 ATAPI ---> _t_iatapi          (+atapi build)
+;                            -> _t_identify_failed (-atapi build,
+;                                                   handler not in)
+;
+; The ATAPI build flag (default 0) compiles in or out the
+; ATAPI handler at _t_iatapi.  -atapi releases ATAPI cards
+; classified by IDENTIFY so a dedicated ATAPI driver can
+; claim them; +atapi routes ATAPI cards through the handler.
+;===========================================================
 
 _t_identify:
 	DBGMSG	dbg_version
@@ -2491,32 +2576,7 @@ _t_dev_have:
 	;  0x7 = DRAM
 	;  0xD = FUNCSPEC (function-specific memory)
 	;  0xE = EXTEND (extended device type follows)
-    ;
-	; Note: CFcards show 0xD and 0x5
-	;
-	; CIS gate decision flow:
-	;   CISTPL_DEVICE known?
-	;     yes -> type in {0x0D, 0x05} ?
-	;              yes -> tentative ACCEPT, validate CISTPL_FUNCEXT
-	;              no  -> REJECT
-	;     no  -> CISTPL_FUNCID known?
-	;              no  -> REJECT
-	;              yes -> FUNCID == 0x04 ?
-	;                        yes -> tentative ACCEPT, validate CISTPL_FUNCEXT
-	;                        no  -> REJECT
-	;
-	; CISTPL_FUNCEXT validation:
-	;   present and well-formed (link >= 2) ?
-	;     no  -> REJECT
-	;     yes -> TPLFE_TYPE == 1 (Disk Interface)
-	;            AND Interface == 1 (IDE) ?
-	;              yes -> ACCEPT
-	;              no  -> REJECT
-	;
-	; Post-ACCEPT, CISTPL_CONFIG address resolution:
-	;   CISTPL_CONFIG present and parses to non-zero address ?
-	;     yes -> use parsed address
-	;     no  -> use 0x0200 (PCMCIA standard, fallback)
+	; Note: CFcards show 0xD and 0x5.
 	DBGMSG	dbg_cis_device
 	moveq.l	#0,d0
 	move.b	CFU_DTType(a3),d0
@@ -2575,27 +2635,19 @@ _t_cis_gate_accept:
 	; After DEVICE/FUNCID tentatively accept, demand a well-formed
 	; FUNCEXT (0x22) with TPLFE_TYPE=1 (Disk Interface) and
 	; Interface=1 (IDE).  Absent, malformed, or non-IDE rejects
-	; the card before IDENTIFY.  Restores v1.36's strict check.
-	; Debug builds dump link/type/iface so the reject reason is
-	; visible in the serial log.
+	; the card before IDENTIFY.  Retry the read up to 10 times to
+	; tolerate CIS attribute-memory read instability on hardware
+	; like A1200 + ACA1234 (mirrors the CISTPL_CONFIG retry).
+	moveq.l	#10,d6			;FUNCEXT retry counter
+_t_cis_funcext_retry:
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_CardHandle(a3),a1
 	moveq.l	#$22,d1			;CISTPL_FUNCEXT
 	moveq.l	#127,d0
 	CALLCARD CopyTuple
 	tst.w	d0
-	bne.s	_t_cis_funcext_have	;tuple present
+	beq.w	_t_cis_funcext_again	;absent -> retry
 
-	ifd	DEBUG
-	DBGMSG	dbg_cis_funcext_absent
-	endc
-	ifd	FUNCEXT_VOTING
-	bra.w	_t_cis_reject		;voting: absent -> reject
-	else
-	bra.s	_t_cis_funcext_accept	;non-voting: log absent, accept
-	endc
-
-_t_cis_funcext_have:
 	;-- Read link, TPLFE_TYPE, Interface into d2/d3/d4 (default 0).
 	lea	CFU_ConfigBlock(a3),a0
 	addq.l	#1,a0			;-> link byte
@@ -2627,26 +2679,45 @@ _t_cis_funcext_dump:
 	ifd	FUNCEXT_VOTING
 	;-- Voting: enforce link >= 2, type == 1, iface == 1 (IDE).
 	cmp.b	#2,d2
-	bcs.w	_t_cis_reject
+	bcs.w	_t_cis_funcext_again
 	cmp.b	#1,d3
-	bne.w	_t_cis_reject
+	bne.w	_t_cis_funcext_again
 	cmp.b	#1,d4
-	bne.w	_t_cis_reject
+	bne.w	_t_cis_funcext_again
 	endc
 
 _t_cis_funcext_accept:
-	DBGMSG	dbg_cis_gate_accept
-	bra.s	_t_cis_gate_end
+	bra.w	_t_cis_gate_end
+
+_t_cis_funcext_again:
+	subq.w	#1,d6
+	beq.s	_t_cis_funcext_giveup
+	tst.b	A_Pb			;E-clock tick (~1us) between retries
+	nop
+	bra.w	_t_cis_funcext_retry
+
+_t_cis_funcext_giveup:
+	ifd	DEBUG
+	DBGMSG	dbg_cis_funcext_absent
+	endc
+	ifd	FUNCEXT_VOTING
+	bra.w	_t_cis_reject
+	else
+	bra.s	_t_cis_funcext_accept
+	endc
 
 _t_cis_reject:
 	DBGMSG	dbg_cis_gate_reject
 	bra.w	_t_ibreak
 
 _t_cis_gate_end:
+	DBGMSG	dbg_cis_gate_accept
+
 	; Try to locate CISTPL_CONFIG tuple for config register address.
 	; On cold boot the CIS attribute memory may parse OK structurally
 	; but every byte still reads as zero, yielding addr=0.  Retry the
-	; read up to 10 times (~400ms) before falling back to 0x200.
+	; read up to 10 times before falling back to 0x200.
+	; Sets CFU_ConfigAddr and leaves a2 pointing at the CCR base.
 	moveq.l	#10,d3
 _t_cfg_retry:
 	moveq.l	#CISTPL_CONFIG,d1
@@ -2686,7 +2757,7 @@ _t_cfg_check_addr:
 _t_cfg_again:
 	subq.w	#1,d3
 	beq.s	_t_config_fallback	;retries exhausted -> fallback
-	bsr	Wait40
+	bsr	Wait1
 	bra.s	_t_cfg_retry
 _t_gotconfig:
 	ifd	DEBUG
@@ -2714,10 +2785,6 @@ _t_faddr:
 	move.l	CFU_AttrPtr(a3),a2
 	add.l	d2,a2
 	move.l	a2,CFU_ConfigAddr(a3)
-
-	;ifd	DEBUG
-	;bsr	_DebugCISCftable
-	;endc
 
 	btst	#2,CFU_OpenFlags+1(a3)
 	beq.s	_t_i4
@@ -2761,14 +2828,14 @@ _t_iswap:
 	btst	#0,CFU_ActiveHacks(a3)
 	bne.w	_t_ibreak
 	bra.w	_t_inodisk		;ATA removable media???
+
 _t_itest:
 	DBGMSG	dbg_rwtest
 	bsr	RWTest			;find a working transfer mode
 	ifd	DEBUG
 	bsr	_DebugTransferMode	;d0 = RWTest result, show which transfer mode
 	endc
-	DBGMSG	dbg_id_get
-	bsr	_GetIDEID		;read ATA configuration block
+	bsr	_GetIDEID		;read ATA config block; logs "Getting IDE ID ... done (type)"
 	move.l	d0,d2
 	tst.l	d2
 	beq.w	_t_identify_failed	;IDENTIFY failed -> release card (avoid blocking others)
@@ -2777,9 +2844,21 @@ _t_itest:
 	; sufficient for ATA CompactFlash and avoids unreliable
 	; CopyTuple behavior on some adapters.
 
-	; Validate IDENTIFY data - ensure it's an ATA device (not ATAPI)
+	; Validate IDENTIFY data:
+	;   d0 = 1 -> ATA, continue with CompactFlash signature check
+	;   d0 = 2 -> ATAPI, route to the _t_iatapi handler in +atapi
+	;             builds; release the card otherwise (should already
+	;             have been caught by the pre-IDENTIFY task-file
+	;             signature gate, this is the residual safety net).
+	;   d0 = other -> reject (unknown response shape)
+	cmp.l	#2,d0
+	ifd	ATAPI
+	beq.w	_t_iatapi
+	else
+	beq.w	_t_identify_failed	;ATAPI -> release (handler not compiled in)
+	endc
 	cmp.l	#1,d0
-	bne.w	_t_inodisk		;not ATA device (ATAPI or error)
+	bne.w	_t_inodisk		;unknown response shape, reject
 
 	; Optional: Verify CompactFlash signature in IDENTIFY word 0
 	; Bits 15:12 = 0x848x indicates CompactFlash card
@@ -2791,7 +2870,11 @@ _t_itest:
 	; Not CompactFlash signature, but check if it's still ATA device
 	; Bit 15 = 0 means ATA device (1 = ATAPI)
 	btst	#15,CFU_ConfigBlock(a3)
-	bne.w	_t_inodisk		;ATAPI device, reject
+	ifd	ATAPI
+	bne.w	_t_iatapi		;ATAPI variant -> ATAPI handler
+	else
+	bne.w	_t_identify_failed	;ATAPI variant -> release the card
+	endc
 
 _t_icf_ok:
 	ifd	DEBUG
@@ -2825,15 +2908,21 @@ _t_i7:
 	beq.s	_t_inodisk
 _t_i8:
 	subq.w	#1,d2
+	ifd	ATAPI
 	bne.s	_t_iatapi
+	else
+	bne.w	_t_identify_failed	;ATAPI / unknown -> release the card
+	endc
 
 	DBGMSG	dbg_multimode
 	bsr	_InitMultipleMode
 	bsr	_OptimizePIOSpeed	;set faster PIO if flag set
 	bra.s	_t_iok
+	ifd	ATAPI
 _t_iatapi:
 	bsr	ATAPIPoll		;start monitoring media removals
 	bra.s	_t_iok
+	endc
 _t_inodisk:
 	clr.l	CFU_DriveSize(a3)
 _t_iok:
@@ -3680,16 +3769,23 @@ _ri_fail:
 	rts
 
 ;--- read drive configuration ------------------------------
-; Identify the connected CF/ATA/ATAPI device
+; Identify the connected ATA/ATAPI device.
 ;
 ; Input:
 ;   a3 = CFU pointer
 ;
 ; Output:
 ;   d0 = device type:
-;        0 = no device / error
-;        1 = ATA device (CompactFlash)
-;        2 = ATAPI device (CD-ROM, etc.)
+;        0 = no device / error / IDENTIFY timeout
+;        1 = ATA device (CompactFlash or fixed disk)
+;        2 = ATAPI device (CD-ROM, DVD, etc.)
+;
+; Caller contract:
+;   In the default -atapi build the pre-IDENTIFY task-file
+;   signature check in _t_itest rejects ATAPI cards before this
+;   routine runs, so d0=2 here is the residual safety-net case.
+;   _t_itest redirects d0=2 to _t_identify_failed (ReleaseCard)
+;   in -atapi builds; only +atapi builds route to _t_iatapi.
 ;
 ; Side effects:
 ;   - Fills CFU_ConfigBlock with 512-byte IDENTIFY data
@@ -3706,14 +3802,17 @@ _ri_fail:
 ;   a2 = buffer pointer
 ;
 ; Flow:
-;   1. Send IDENTIFY DEVICE command ($EC)
+;   1. Send IDENTIFY DEVICE ($EC)
 ;   2. Wait for DRQ, retry up to 32 times for slow adapters
-;   3. If DRQ not set after retries, try IDENTIFY PACKET DEVICE ($A1)
+;   3. If DRQ never sets, fall back to IDENTIFY PACKET DEVICE
+;      ($A1) as a final attempt to elicit any response from the
+;      card.  See _gid_check_retry for the rationale.
 ;   4. Read 512-byte identify data
 ;   5. Parse device type and set unit parameters
 ;
 _GetIDEID:
 	movem.l	d2-d6/a2,-(sp)
+	DBGMSG	dbg_id_get		;"[CFD] Getting IDE ID"
 
 	;--- SD-to-CF adapter retry logic ---
 	; Some SD-to-CF adapters are slow to respond to IDENTIFY command.
@@ -3811,7 +3910,7 @@ _gid_found:
 	CALLEXEC WaitIO
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
 	move.l	d5,d2
-	beq.w	_gid_end
+	beq.w	_gid_timeout
 
 	; Step 1: Check for stuck FIFO
 	lea	CFU_ConfigBlock(a3),a0
@@ -3848,13 +3947,12 @@ _gid_stuck:
 	DBGMSG	dbg_id_garbage
 	move.w	(sp)+,d0
 	bsr	_DebugHexWord
-	bsr	_DebugNewline
+	DBGMSG	dbg_id_garbage_end
 	endc
 	moveq.l	#0,d2
 	bra.w	_gid_end
 
 _gid_verified:
-	DBGMSG	dbg_done
 	lea	CFU_ConfigBlock(a3),a0
 	move.w	#512/2,d2
 _gid_swap:
@@ -3872,7 +3970,10 @@ _gid_valid:
 	swap	d0
 	move.l	d0,CFU_DriveSize(a3)
 	moveq.l	#1,d2			;ATA OK
-	bra.s	_gid_end
+	DBGMSG	dbg_id_done_pre
+	DBGMSG	dbg_id_ata
+	DBGMSG	dbg_id_done_post
+	bra.w	_gid_end
 _gid_atapi:
 	moveq.l	#12,d1
 	moveq.l	#3,d0
@@ -3883,17 +3984,26 @@ _gid_atapi:
 _gid_a1:
 	move.w	d1,CFU_PLength(a3)	;set ATAPI command length
 	moveq.l	#2,d2			;ATAPI OK
-	bra.s	_gid_end
+	DBGMSG	dbg_id_done_pre
+	DBGMSG	dbg_id_atapi
+	DBGMSG	dbg_id_done_post
+	bra.w	_gid_end
 
-;--- Retry for slow SD-to-CF adapters ---
-; When DRQ not set after IDENTIFY DEVICE, retry with delay.
-; If retries exhausted, try ATAPI IDENTIFY PACKET DEVICE.
+;--- Retry for slow adapters ---
+; When DRQ does not set after IDENTIFY DEVICE, retry up to 32
+; times with a Wait40 delay between attempts. This catches
+; SD-to-CF adapters that need extra settle time after card
+; insertion.
 _gid_check_retry:
 	subq.l	#1,d6
-	beq.w	_gid_break		;ATA exhausted, try ATAPI
+	beq.w	_gid_break		;retries exhausted, final $A1 attempt
 	bsr	Wait40			;delay before retry
 	bra.w	_gid_retry
 
+_gid_timeout:
+	DBGMSG	dbg_id_done_pre
+	DBGMSG	dbg_id_timeout
+	DBGMSG	dbg_id_done_post
 _gid_end:
 	bsr	_IDEStop
 	bsr	_BindIOHandlers		;probe settled, rebind handlers
@@ -3936,8 +4046,10 @@ _ReadBlocks:
 	move.l	d1,d5
 	beq.w	_rb_ready		;nothing to do
 
+	ifd	ATAPI
 	tst.w	CFU_PLength(a3)
 	bgt.w	_rb_scsi
+	endc
 
 	bsr	_IDEStart
 _rb_swath:
@@ -4070,6 +4182,7 @@ _rb_c1:
 	or.b	#$80,CFU_EventFlags(a3)
 	bra.w	_rb_0
 
+	ifd	ATAPI
 _rb_scsi:
 	moveq.l	#0,d4
 	not.w	d4
@@ -4112,6 +4225,7 @@ _rb_s1:
 _rb_serror:
 	move.b	#TDERR_NOTSPECIFIED,CFU_IOErr(a3)
 	bra.w	_rb_ready
+	endc
 
 ;--- PIO IN Transfer ---------------------------------------
 ; Read data from CF card using Programmed I/O
@@ -4577,8 +4691,10 @@ _WriteBlocks:
 	move.l	d1,d5
 	beq.w	_wb_ready		;nothing to do
 
+	ifd	ATAPI
 	tst.w	CFU_PLength(a3)
 	bgt.w	_wb_scsi
+	endc
 
 	bsr	_IDEStart
 	tst.l	CFU_DriveSize(a3)
@@ -4762,6 +4878,7 @@ _wb_break:
 	move.l	CFU_Buffer(a3),a2
 	bra.w	_wb_try
 
+	ifd	ATAPI
 _wb_scsi:
 	move.l	a2,d1
 	add.l	#1,d1
@@ -4808,6 +4925,7 @@ _wb_s1:
 _wb_serror:
 	move.b	#TDERR_NOTSPECIFIED,CFU_IOErr(a3)
 	bra.w	_wb_ready
+	endc
 
 ;--- set fast transfer mode --------------------------------
 ;d0 -> Blocks/Interrupt
@@ -5215,6 +5333,7 @@ _su_wait:
 	move.b	CFU_IDEStatus(a3),d0
 	bra.w	_IDEStop
 
+	ifd	ATAPI
 ;--- query Disk Status -------------------------------------
 ; d0 -> -1 (error), 0 (no disk), 1 (inserted), 2 (new Disk)
 
@@ -5551,6 +5670,7 @@ ap_time:
 	CALLEXEC SendIO
 ap_end:
 	rts
+	endc
 
 
 ;--- ROM AUTOBOOT STUB -------------------------------------
@@ -5675,7 +5795,6 @@ s_bootstub:
 	jsr	Permit(a6)
 	tst.l	d7
 	beq.w	_bs_done
-
 ;-- Hold the device open (OpenCnt=1) so a whole-machine takeover like
 ;   WHDLoad, which flushes anything unused, leaves it alone. First init only.
 	move.l	d7,a0
@@ -5729,9 +5848,11 @@ _bs_have_card:
 
 _bs_libOk:
 	move.l	d0,a3			;a3 = ptable.library base
+
 ;-- Keep ptable.library in use so a memory-flush takeover (WHDLoad) won't
 ;   expunge it once we close it below.
 	addq.w	#1,LIB_OpenCnt(a3)
+
 	ifd	DEBUG
 	lea	dbg_bs_scan(pc),a0
 	bsr	_bootDebug
