@@ -23,9 +23,9 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ### 20260522-dev
 
-#### Driver
+#### Tools
 
-* **PCMCIA CD/DVD adapters no longer confuse the driver.** Some ATAPI cards (e.g. PCMCIA CD/DVD adapters) advertise themselves as plain disks in their identification data. The CF driver now spots them and steps aside so the system can hand them to their proper driver. Regular CF cards are unaffected.
+* **`pcmciacheck -cis`**: new option that prints a readable summary of the identification data carried by the inserted PCMCIA card (manufacturer, card type, version, etc.). Handy when you want to understand why an unusual card is or isn't accepted by the driver, or when reporting a problem card.
 
 #### Packaging
 
