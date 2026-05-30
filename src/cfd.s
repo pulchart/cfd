@@ -5592,6 +5592,11 @@ s_bootstub:
 	tst.l	d7
 	beq.w	_bs_done
 
+;-- Hold the device open (OpenCnt=1) so a whole-machine takeover like
+;   WHDLoad, which flushes anything unused, leaves it alone. First init only.
+	move.l	d7,a0
+	addq.w	#1,LIB_OpenCnt(a0)
+
 _bs_devPresent:
 ;-- 2nd-pass guard
 	move.l	d7,a0
@@ -5640,6 +5645,9 @@ _bs_have_card:
 
 _bs_libOk:
 	move.l	d0,a3			;a3 = ptable.library base
+;-- Keep ptable.library in use so a memory-flush takeover (WHDLoad) won't
+;   expunge it once we close it below.
+	addq.w	#1,LIB_OpenCnt(a3)
 	ifd	DEBUG
 	lea	dbg_bs_scan(pc),a0
 	bsr	_bootDebug

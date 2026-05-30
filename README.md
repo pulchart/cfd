@@ -21,7 +21,11 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### 20260522-dev
+### 20260530-dev
+
+#### Driver
+
+* **Fixed a crash in the ROM-resident driver when running WHDLoad.** (Issue #56) Programs that take over the machine flush idle libraries and devices to free memory before they run. The idle ROM-resident compactflash.device looked unused, got flushed, and that corrupted the program's memory setup, causing a guru (`0x0100000F`, bad `FreeMem`). Mounting a CF card first avoided it (the filesystem then held the device open), and so did WHDLoad's `NoFlushMem` option. The driver now keeps itself in use.
 
 #### Tools
 
@@ -34,7 +38,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 <!-- COMPONENTS:BEGIN -->
 #### Components in this release
 
-- compactflash.device 1.43 (19.05.2026)
+- compactflash.device 1.44-dev (30.05.2026)
 - ptable.library 1.0 (16.05.2026)
 - CFInfo 1.37 (11.01.2026)
 - pcmciaspeed 1.36 (02.01.2026)
@@ -738,6 +742,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
+| - | 20260530 | Fixes guru with WHDLoad |
 | v1.43, v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
