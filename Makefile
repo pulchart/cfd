@@ -6,7 +6,7 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev, -rc1, ...). Empty suffix for a final release.
-RELEASE_DATE = 20260604
+RELEASE_DATE = 20260606
 VERSION_SUFFIX = -dev
 
 # compactflash.device version
@@ -19,9 +19,9 @@ CFD_DATE = 04.06.2026
 # - additive LVOs bump REVISION
 # - breaking changes bump MAJOR
 PLIB_MAJOR = 1
-PLIB_MINOR = 0
-PLIB_VERSION_SUFFIX =
-PLIB_DATE = 16.05.2026
+PLIB_MINOR = 1
+PLIB_VERSION_SUFFIX = -dev
+PLIB_DATE = 06.06.2026
 
 # Tool-specific versions (MAJOR/MINOR + optional in-progress suffix,
 # same shape as CFD_* and PLIB_* above)

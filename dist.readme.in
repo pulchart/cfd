@@ -35,6 +35,14 @@ compactflash.device:
 * ATAPI handler is compiled out by default (no real-world user
   found, untested; build with ATAPI=1 to keep it).
 
+ptable.library:
+
+* Duplicate RDB drive names are made unique at cold boot (Issue #57).
+  When two cards carry RDBs that reuse the same partition name (for
+  example both define DH0), the duplicates appeared together in the
+  early-startup boot menu. A clashing name now gets a numeric suffix
+  (DH0.1, DH0.2, ...).
+
 pcmciacheck:
 
 * New `pcmciacheck -cis` option prints a readable summary of the

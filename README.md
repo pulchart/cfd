@@ -21,7 +21,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### 20260604-dev
+### 20260606-dev
 
 #### Driver
 
@@ -30,6 +30,10 @@ This driver is maintained and improved in my free time. If you'd like to support
 * **Non-IDE PCMCIA cards (e.g. ATAPI CD/DVD adapters) are now released earlier in the identify process.** (Issue #47) Rejecting after IDENTIFY is too late: the IDENTIFY attempt could leave the card in a state where dedicated drivers (such as `telmexatapi.device`) could no longer claim it. The CIS gate reintroduced checks for a well-formed Disk Interface FUNCEXT declaring IDE before IDENTIFY runs, with up to 10 retries to tolerate unstable CIS reads. Please report if you see any CF card detection regression.
 
 * **ATAPI handler compiled out by default.** Build with `ATAPI=1` to keep it. See [ATAPI status](#atapi-status) for details.
+
+#### Partition Table library
+
+* **Duplicate RDB drive names are made unique at cold boot.** (Issue #57) When two cards carry RDBs that reuse the same partition name (for example both define `DH0`), the duplicates appeared together in the early-startup boot menu. A clashing name now gets a numeric suffix (`DH0.1`, `DH0.2`, ...).
 
 #### Tools
 
@@ -43,7 +47,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 #### Components in this release
 
 - compactflash.device 1.44-dev (04.06.2026)
-- ptable.library 1.0 (16.05.2026)
+- ptable.library 1.1-dev (06.06.2026)
 - CFInfo 1.37 (11.01.2026)
 - pcmciaspeed 1.36 (02.01.2026)
 - pcmciacheck 1.39 (22.05.2026)
@@ -814,7 +818,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.44 | 04/06/2026 | Fixes guru with WHDLoad; Reintroduce CIS gate FUNCEXT to detect unsupported ATAPI; ATAPI handler compiled out by default |
+| v1.44 | 05/06/2026 | Fixes guru with WHDLoad; Reintroduce CIS gate FUNCEXT to detect unsupported ATAPI; ATAPI handler compiled out by default; Handle duplicate RDB partition names. |
 | v1.43, v1.42 | 05/2026 | Autoboot and automount from RDB-partitioned CF cards at cold start; stricter CIS gate (no more FUNCID-missing compat fallback) |
 | v1.41 | 04/2026 | IO path cleanup, dual 68020+/68000 builds |
 | v1.40 | 04/2026 | CIS gate whitelist known CF device types, avoids false compat fallback |
