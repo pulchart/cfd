@@ -687,7 +687,9 @@ _bootAddOnePartition:
 	ifd	DEBUG
 	lea	dbg_boot_part_skip(pc),a0
 	bsr	_bootDebug
-	bsr	_bootDebugDriveName
+	move.l	BC_BlockBuf(a4),a0
+	lea	pb_DriveName(a0),a0	;raw RDB name (no DN blob yet)
+	bsr	_bootDebugBStr
 	endc
 	bra.w	_bap_end
 _bap_mountable:
@@ -739,6 +741,12 @@ _bap_dn_cp:
 	lsr.l	#2,d0			;BPTR
 	move.l	d0,40(a5)		;dn_Name
 
+;-- Uniquify the drive name against eb_MountList:
+;   append .1/.2/... when the name already exists, so two cards
+;   reusing RDB names don't clash in the early-startup menu).
+;   a4=&BootCtx, a5=DN blob.
+	bsr	_bootDedupName
+
 ;-- FileSysStartupMsg at DN_FSSM_OFF (fields written directly
 ;   from BootCtx + DN; no scratch packet involved).
 	lea	DN_FSSM_OFF(a5),a1
@@ -787,7 +795,8 @@ _bap_fse_miss:
 	ifd	DEBUG
 	lea	dbg_boot_part_boot(pc),a0
 	bsr	_bootDebug
-	bsr	_bootDebugDriveName
+	lea	DN_BSTR_OFF(a5),a0	;name as registered (post-dedup)
+	bsr	_bootDebugBStr
 	endc
 	move.l	pb_Environment+DE_BOOTPRI*4(a2),d0
 	moveq.l	#0,d1			;flags=0: no ADNF_STARTPROC
@@ -803,7 +812,8 @@ _bap_dosnode:
 	ifd	DEBUG
 	lea	dbg_boot_part_dos(pc),a0
 	bsr	_bootDebug
-	bsr	_bootDebugDriveName
+	lea	DN_BSTR_OFF(a5),a0	;name as registered (post-dedup)
+	bsr	_bootDebugBStr
 	endc
 	move.l	pb_Environment+DE_BOOTPRI*4(a2),d0
 	moveq.l	#0,d1
@@ -877,6 +887,172 @@ _bmb_done:
 _bmb_fail:
 	movem.l	(sp)+,d1-d3/a0-a2
 	moveq.l	#0,d0
+	rts
+
+;===========================================================
+; _bootDedupName: ensure the candidate drive name (BSTR at
+; DN_BSTR_OFF in the DN blob) is unique on expansion.library's
+; eb_MountList. Mirrors commonly used rule by .device(s):
+; if the name already exists, append ".n" (.1, .2, ...) and, if
+; a name ending ".n" is also present, bump to ".n+1" and rescan
+; from the top.
+;
+; Input : a4 = &BootCtx, a5 = DN blob (name BSTR at DN_BSTR_OFF)
+; Output: BSTR at DN_BSTR_OFF mutated in place if a clash was hit
+; Preserves a4/a5/a6/d7 (the caller relies on a5/d7).
+;===========================================================
+_bootDedupName:
+	movem.l	d0-d6/a0-a3,-(sp)
+	move.l	BC_ExpBase(a4),a3	;a3 = ExpansionBase
+	move.l	a3,d0
+	beq.s	_bdn_ret		;no exp.lib -> nothing to check
+
+	lea	DN_BSTR_OFF(a5),a0
+	moveq.l	#0,d5
+	move.b	(a0),d5			;d5 = original base char count
+	moveq.l	#0,d4			;d4 = suffix counter (0 = bare name)
+
+_bdn_retry:
+;-- walk eb_MountList (LH at offset 74); entries are BootNodes.
+	lea	74(a3),a0		;a0 = &eb_MountList
+	move.l	(a0),a1			;a1 = first node (lh_Head)
+_bdn_walk:
+	move.l	(a1),d0			;ln_Succ
+	beq.s	_bdn_unique		;tail sentinel -> name is unique
+	move.l	16(a1),a2		;bn_DeviceNode
+	move.l	a2,d0
+	beq.s	_bdn_next		;NULL device node
+	move.l	40(a2),d0		;dn_Name (BPTR)
+	beq.s	_bdn_next		;NULL name
+	lsl.l	#2,d0
+	move.l	d0,a2			;a2 = existing name BSTR
+	lea	DN_BSTR_OFF(a5),a0	;a0 = candidate BSTR
+	bsr	_bootBStrEqualCI	;Z = equal
+	beq.s	_bdn_dup
+_bdn_next:
+	move.l	(a1),a1			;a1 = ln_Succ
+	bra.s	_bdn_walk
+
+_bdn_dup:
+	cmp.l	#9999,d4		;defensive cap on suffix value
+	bhs.s	_bdn_unique
+	addq.l	#1,d4
+	bsr	_bootApplySuffix
+	bra.s	_bdn_retry
+
+_bdn_unique:
+_bdn_ret:
+	movem.l	(sp)+,d0-d6/a0-a3
+	rts
+
+;===========================================================
+; _bootApplySuffix: rewrite the name BSTR in place as
+; "<base>.<n>". The base chars stay at DN_BSTR_OFF+1; the dot
+; and digits are written strictly to their right, so the base
+; prefix we re-read on each bump is never corrupted. If the
+; result would exceed the 31-char the base is truncated (the
+; suffix is kept, since it guarantees uniqueness).
+;
+; Input : a5 = DN blob, d4 = suffix value (>=1), d5 = base len
+; Preserves all registers.
+;===========================================================
+_bootApplySuffix:
+	movem.l	d0-d3/a0-a2,-(sp)
+	lea	-8(sp),sp		;8-byte digit scratch
+	move.l	sp,a2			;a2 = scratch base
+	move.l	a2,a0			;a0 = scratch write ptr
+	moveq.l	#0,d1			;digit count
+	move.l	d4,d0			;value to convert
+_bas_div:
+	divu.w	#10,d0			;d0 = [rem:quot]
+	move.w	d0,d2			;d2.w = quotient
+	clr.w	d0
+	swap	d0			;d0.w = remainder
+	add.b	#'0',d0
+	move.b	d0,(a0)+		;store digit (least significant first)
+	addq.l	#1,d1
+	moveq.l	#0,d0
+	move.w	d2,d0			;d0 = quotient (zero-extended)
+	tst.w	d0
+	bne.s	_bas_div
+
+;-- suffixLen = d1 + 1 (the dot); clamp kept base so total <= 31
+	move.l	d1,d3
+	addq.l	#1,d3			;d3 = suffix length
+	move.l	d5,d2			;d2 = kept base length
+	move.l	d2,d0
+	add.l	d3,d0
+	cmp.l	#31,d0
+	bls.s	_bas_fits
+	moveq.l	#31,d2
+	sub.l	d3,d2			;keptBase = 31 - suffixLen
+_bas_fits:
+;-- length byte
+	lea	DN_BSTR_OFF(a5),a1
+	move.l	d2,d0
+	add.l	d3,d0			;total length
+	move.b	d0,(a1)
+;-- '.' after the kept base
+	lea	1(a1),a1
+	add.l	d2,a1
+	move.b	#'.',(a1)+
+;-- digits, most significant first (scratch holds them reversed)
+	move.l	a2,a0
+	add.l	d1,a0			;a0 -> one past last stored digit
+_bas_wr:
+	move.b	-(a0),(a1)+
+	cmp.l	a2,a0
+	bhi.s	_bas_wr
+
+	lea	8(sp),sp		;free scratch
+	movem.l	(sp)+,d0-d3/a0-a2
+	rts
+
+;===========================================================
+; _bootBStrEqualCI: case-insensitive compare of two BSTRs
+;
+; Input : a0 = BSTR A, a2 = BSTR B
+; Output: d0 = 0 and Z set if equal; d0 = 1 and Z clear if not
+; Preserves a0/a1/a2 and d1-d3.
+;===========================================================
+_bootBStrEqualCI:
+	movem.l	d1-d3/a0/a2,-(sp)
+	moveq.l	#0,d1
+	move.b	(a0)+,d1		;len A
+	moveq.l	#0,d2
+	move.b	(a2)+,d2		;len B
+	cmp.b	d1,d2
+	bne.s	_bse_ne
+	tst.b	d1
+	beq.s	_bse_eq			;both empty
+_bse_loop:
+	move.b	(a0)+,d2
+	move.b	(a2)+,d3
+	cmp.b	#'a',d2
+	blo.s	_bse_d2ok
+	cmp.b	#'z',d2
+	bhi.s	_bse_d2ok
+	sub.b	#$20,d2			;to upper
+_bse_d2ok:
+	cmp.b	#'a',d3
+	blo.s	_bse_d3ok
+	cmp.b	#'z',d3
+	bhi.s	_bse_d3ok
+	sub.b	#$20,d3
+_bse_d3ok:
+	cmp.b	d2,d3
+	bne.s	_bse_ne
+	subq.b	#1,d1
+	bne.s	_bse_loop
+_bse_eq:
+	movem.l	(sp)+,d1-d3/a0/a2
+	moveq.l	#0,d0			;0 = equal
+	tst.l	d0			;set Z
+	rts
+_bse_ne:
+	movem.l	(sp)+,d1-d3/a0/a2
+	moveq.l	#1,d0			;nonzero = not equal
+	tst.l	d0			;clear Z
 	rts
 
 ;===========================================================
@@ -990,29 +1166,32 @@ _bootDebugVersionNL:
 	movem.l	(sp)+,d0-d2/a0/a6
 	rts
 
-_bootDebugDriveName:
-	movem.l	d0-d3/a0-a1/a6,-(sp)
+;-- Print a BSTR (length byte + chars) followed by CR/LF.
+;   a0 = BSTR pointer. Length is clamped to 31 so a garbage
+;   length byte in a raw RDB block can't run away.
+;   Callers: pb_DriveName (skip path, pre-blob) and the deduped
+;   name in the DN blob (DN_BSTR_OFF, +boot/+dos paths).
+_bootDebugBStr:
+	movem.l	d0/d3/a0/a6,-(sp)
 	move.l	(_AbsExecBase).w,a6
-	move.l	BC_BlockBuf(a4),a0
-	lea	pb_DriveName(a0),a0
 	moveq.l	#0,d3
 	move.b	(a0)+,d3
 	cmp.w	#31,d3
-	bls.s	_bddn_ok
+	bls.s	_bdbs_ok
 	moveq.l	#31,d3
-_bddn_ok:
+_bdbs_ok:
 	subq.l	#1,d3
-	bmi.s	_bddn_nl
-_bddn_lp:
+	bmi.s	_bdbs_nl
+_bdbs_lp:
 	moveq.l	#0,d0
 	move.b	(a0)+,d0
 	jsr	RawPutChar(a6)
-	dbra	d3,_bddn_lp
-_bddn_nl:
+	dbra	d3,_bdbs_lp
+_bdbs_nl:
 	moveq.l	#13,d0
 	jsr	RawPutChar(a6)
 	moveq.l	#10,d0
 	jsr	RawPutChar(a6)
-	movem.l	(sp)+,d0-d3/a0-a1/a6
+	movem.l	(sp)+,d0/d3/a0/a6
 	rts
 	endc	;DEBUG
