@@ -199,7 +199,17 @@ planning and updates here: Planning for 2026
 @node 20260607_dev "20260607-dev"
 @{i}20260607-dev@{ui}
 
-@{b}Driver@{ub}
+@{b}Components in this release@{ub}
+
+  * @{fg shine}compactflash.device 1.44-dev (04.06.2026)@{fg text} @{i}(new)@{ui}
+  * @{fg shine}ptable.library 1.1-dev (07.06.2026)@{fg text} @{i}(new)@{ui}
+  * @{fg shine}CFInfo 1.37 (11.01.2026)@{fg text}
+  * @{fg shine}pcmciaspeed 1.36 (02.01.2026)@{fg text}
+  * @{fg shine}pcmciacheck 1.39 (22.05.2026)@{fg text} @{i}(new)@{ui}
+
+@{b}Changes@{ub}
+
+@{b}CompactFlash Driver@{ub}
 
   * @{b}Fixed a crash in the ROM-resident driver when running WHDLoad.@{ub} (Issue #56)
     Programs that take over the machine flush idle libraries and devices to free
@@ -249,18 +259,7 @@ planning and updates here: Planning for 2026
   * @{b}Archive version is now a date (YYYYMMDD).@{ub} The release bundle ships several
     independently-versioned pieces ( @{fg shine}compactflash.device@{fg text} , @{fg shine}ptable.library@{fg text} , @{fg shine}CFInfo@{fg text}
     , @{fg shine}pcmciaspeed@{fg text} , @{fg shine}pcmciacheck@{fg text} ), each on its own cadence, so a single @{fg shine}v1.x@{fg text}
-    number for the whole archive never matched what was actually inside. The
-    archive ( @{fg shine}cfd.vYYYYMMDD.lha@{fg text} ) is now named after its release date, while each
-    component keeps its own version, visible via @{fg shine}version <name>@{fg text} . No installation
-    steps change.
-
-@{b}Components in this release@{ub}
-
-  * compactflash.device 1.44-dev (04.06.2026)
-  * ptable.library 1.1-dev (07.06.2026)
-  * CFInfo 1.37 (11.01.2026)
-  * pcmciaspeed 1.36 (02.01.2026)
-  * pcmciacheck 1.39 (22.05.2026)
+    number for the whole archive never matched what was actually inside.
 
 ----------------------------------------
 @{"<< Prev" link What_s_New_in}  @{"Contents" link Main}  @{"Next >>" link v1_43__19_05_2026_}
