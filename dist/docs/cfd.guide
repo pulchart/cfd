@@ -13,7 +13,7 @@
     @{"CompactFlash device in PCMCIA driver for AmigaOS." link CompactFlash_device_in_PCMCIA_driver_for_AmigaOS_}
     @{"compactflash.device driver" link compactflash_device_driver}
     @{"What's New in" link What_s_New_in}
-        @{"20260606-dev" link 20260606_dev}
+        @{"20260607-dev" link 20260607_dev}
         @{"v1.43 (19.05.2026)" link v1_43__19_05_2026_}
         @{"v1.42 (16.05.2026)" link v1_42__16_05_2026_}
         @{"v1.41 (18.04.2026)" link v1_41__18_04_2026_}
@@ -63,7 +63,7 @@
 @node Index "Index"
 @{b}Index@{ub}
 
-  @{"20260606-dev" link 20260606_dev}
+  @{"20260607-dev" link 20260607_dev}
 @{b}A@{ub}
   @{"After (v1.41-dev)" link After__v1_41_dev_}
   @{"ATAPI status" link ATAPI_status}
@@ -179,7 +179,7 @@ planning and updates here: Planning for 2026
 @node What_s_New_in "What's New in"
 @{b}What's New in@{ub}
 @{i}Subsections:@{ui}
-  @{"  20260606-dev  " link 20260606_dev}
+  @{"  20260607-dev  " link 20260607_dev}
   @{"  v1.43 (19.05.2026)  " link v1_43__19_05_2026_}
   @{"  v1.42 (16.05.2026)  " link v1_42__16_05_2026_}
   @{"  v1.41 (18.04.2026)  " link v1_41__18_04_2026_}
@@ -192,12 +192,12 @@ planning and updates here: Planning for 2026
   @{"  v1.34 (22.10.2025)  " link v1_34__22_10_2025_}
 
 ----------------------------------------
-@{"<< Prev" link compactflash_device_driver}  @{"Contents" link Main}  @{"Next >>" link 20260606_dev}
+@{"<< Prev" link compactflash_device_driver}  @{"Contents" link Main}  @{"Next >>" link 20260607_dev}
 
 @endnode
 
-@node 20260606_dev "20260606-dev"
-@{i}20260606-dev@{ui}
+@node 20260607_dev "20260607-dev"
+@{i}20260607-dev@{ui}
 
 @{b}Driver@{ub}
 
@@ -227,6 +227,16 @@ planning and updates here: Planning for 2026
     @{fg shine}DH0@{fg text} ), the duplicates appeared together in the early-startup boot menu. A
     clashing name now gets a numeric suffix ( @{fg shine}DH0.1@{fg text} , @{fg shine}DH0.2@{fg text} , ...).
 
+  * Loads filesystem handlers stored in a compacted format ( @{fg shine}RELOC32SHORT@{fg text}
+    relocations).
+
+  * A partition with a damaged RDB entry is skipped instead of mounted. If a
+    card's RDB describes a partition with incomplete settings (a @{fg shine}DosEnvec@{fg text} shorter
+    than the @{fg shine}DOSTYPE@{fg text} field).
+
+  * Filesystem handlers loaded from a card's RDB now appear in @{fg shine}FileSystem.resource@{fg text}
+    under their own name instead of @{fg shine}ptable.library@{fg text} .
+
 @{b}Tools@{ub}
 
   * @{b}@{fg shine}pcmciacheck -cis@{fg text}@{ub} : new option that prints a readable summary of the
@@ -247,7 +257,7 @@ planning and updates here: Planning for 2026
 @{b}Components in this release@{ub}
 
   * compactflash.device 1.44-dev (04.06.2026)
-  * ptable.library 1.1-dev (06.06.2026)
+  * ptable.library 1.1-dev (07.06.2026)
   * CFInfo 1.37 (11.01.2026)
   * pcmciaspeed 1.36 (02.01.2026)
   * pcmciacheck 1.39 (22.05.2026)
@@ -274,7 +284,7 @@ planning and updates here: Planning for 2026
   ```
 
 ----------------------------------------
-@{"<< Prev" link 20260606_dev}  @{"Contents" link Main}  @{"Next >>" link v1_42__16_05_2026_}
+@{"<< Prev" link 20260607_dev}  @{"Contents" link Main}  @{"Next >>" link v1_42__16_05_2026_}
 
 @endnode
 

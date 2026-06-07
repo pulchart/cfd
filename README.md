@@ -21,7 +21,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### 20260606-dev
+### 20260607-dev
 
 #### Driver
 
@@ -35,6 +35,12 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 * **Duplicate RDB drive names are made unique at cold boot.** (Issue #57) When two cards carry RDBs that reuse the same partition name (for example both define `DH0`), the duplicates appeared together in the early-startup boot menu. A clashing name now gets a numeric suffix (`DH0.1`, `DH0.2`, ...).
 
+* Loads filesystem handlers stored in a compacted format (`RELOC32SHORT` relocations).
+
+* A partition with a damaged RDB entry is skipped instead of mounted. If a card's RDB describes a partition with incomplete settings (a `DosEnvec` shorter than the `DOSTYPE` field).
+
+* Filesystem handlers loaded from a card's RDB now appear in `FileSystem.resource` under their own name instead of `ptable.library`.
+
 #### Tools
 
 * **`pcmciacheck -cis`**: new option that prints a readable summary of the identification data carried by the inserted PCMCIA card (manufacturer, card type, version, etc.). Handy when you want to understand why an unusual card is or isn't accepted by the driver, or when reporting a problem card.
@@ -47,7 +53,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 #### Components in this release
 
 - compactflash.device 1.44-dev (04.06.2026)
-- ptable.library 1.1-dev (06.06.2026)
+- ptable.library 1.1-dev (07.06.2026)
 - CFInfo 1.37 (11.01.2026)
 - pcmciaspeed 1.36 (02.01.2026)
 - pcmciacheck 1.39 (22.05.2026)

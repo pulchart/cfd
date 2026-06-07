@@ -151,8 +151,9 @@ _bao_fse_build:
 	move.l	d0,a0
 
 	move.b	#NT_UNKNOWN,LN_Type(a0)
-	lea	s_libname(pc),a1
-	move.l	a1,LN_Name(a0)
+	move.l	d7,d0			;d7 = relocated SegList BPTR
+	bsr	_bootFSName
+	move.l	d0,LN_Name(a0)		;handler identity, or 0 -> unnamed
 	move.l	d2,fse_DosType(a0)
 
 	move.l	fhb_Version(a3),fse_Version(a0)
@@ -204,6 +205,96 @@ _bao_free_fshd:
 	jsr	FreeMem(a6)
 _bao_end:
 	movem.l	(sp)+,d2-d7/a2-a3
+	rts
+
+;===========================================================
+; _bootFSName: derive a display name for a loaded FS handler by
+; scanning its SegList.  Pass A: first self-validating ROMTAG
+; ($4AFC with RT_MATCHTAG == its own address) -> RT_IDSTRING, else
+; RT_NAME.  Pass B (if no ROMTAG): first "$VER:" cookie.  Else 0.
+; Input:  d0 = SegList (BPTR)
+; Output: d0 = APTR to a NUL-terminated name, or 0 (unnamed).
+; Returned pointers alias into the SegList, which outlives the FSE.
+; Preserves all other registers.
+;===========================================================
+_bootFSName:
+	movem.l	d1-d4/a0-a1,-(sp)
+	move.l	d0,d4			;d4 = SegList BPTR (kept for pass B)
+;-- Pass A: ROMTAG RT_IDSTRING / RT_NAME
+	move.l	d4,d1
+_bfn_rt_seg:
+	tst.l	d1
+	beq.w	_bfn_ver
+	move.l	d1,d0
+	lsl.l	#2,d0
+	move.l	d0,a0			;a0 = seg (next-BPTR field)
+	move.l	-4(a0),d2
+	subq.l	#8,d2			;d2 = data length
+	move.l	(a0),d1			;d1 = next seg BPTR
+	addq.l	#4,a0			;a0 = data start (absolute addr)
+	move.l	d2,d3
+	sub.l	#$16,d3			;need a full romtag (0x16 bytes)
+	bmi.s	_bfn_rt_seg
+_bfn_rt_scan:
+	cmpi.w	#$4AFC,(a0)
+	bne.s	_bfn_rt_adv
+	move.l	2(a0),d0		;RT_MATCHTAG
+	cmp.l	a0,d0			;self-pointer? -> genuine romtag
+	bne.s	_bfn_rt_adv
+	move.l	$12(a0),d0		;RT_IDSTRING
+	bne.s	_bfn_ret
+	move.l	$0E(a0),d0		;RT_NAME
+	bne.s	_bfn_ret
+_bfn_rt_adv:
+	addq.l	#2,a0
+	subq.l	#2,d3
+	bpl.s	_bfn_rt_scan
+	bra.s	_bfn_rt_seg
+;-- Pass B: "$VER:" cookie
+_bfn_ver:
+	move.l	d4,d1
+_bfn_v_seg:
+	tst.l	d1
+	beq.s	_bfn_none
+	move.l	d1,d0
+	lsl.l	#2,d0
+	move.l	d0,a0
+	move.l	-4(a0),d2
+	subq.l	#8,d2
+	move.l	(a0),d1
+	addq.l	#4,a0
+	move.l	d2,d3
+	subq.l	#5,d3
+	bmi.s	_bfn_v_seg
+_bfn_v_scan:
+	cmpi.b	#'$',(a0)
+	bne.s	_bfn_v_adv
+	cmpi.b	#'V',1(a0)
+	bne.s	_bfn_v_adv
+	cmpi.b	#'E',2(a0)
+	bne.s	_bfn_v_adv
+	cmpi.b	#'R',3(a0)
+	bne.s	_bfn_v_adv
+	cmpi.b	#':',4(a0)
+	bne.s	_bfn_v_adv
+	lea	5(a0),a0		;skip "$VER:"
+_bfn_v_sp:
+	cmpi.b	#' ',(a0)		;skip following space(s)
+	bne.s	_bfn_vhit
+	addq.l	#1,a0
+	bra.s	_bfn_v_sp
+_bfn_vhit:
+	move.l	a0,d0
+	bra.s	_bfn_ret
+_bfn_v_adv:
+	addq.l	#1,a0
+	subq.l	#1,d3
+	bpl.s	_bfn_v_scan
+	bra.s	_bfn_v_seg
+_bfn_none:
+	moveq.l	#0,d0
+_bfn_ret:
+	movem.l	(sp)+,d1-d4/a0-a1
 	rts
 
 ;===========================================================
