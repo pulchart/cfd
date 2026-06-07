@@ -13,15 +13,17 @@
 ;   HUNK_DATA    ($3EA): copy n longwords into current hunk.
 ;   HUNK_BSS     ($3EB): skip (memory MEMF_CLEAR already).
 ;   HUNK_RELOC32 ($3EC): apply 32-bit absolute relocations.
+;   HUNK_RELOC32SHORT ($3FC): as RELOC32 but word-encoded.
 ;   HUNK_SYMBOL  ($3F0): skip symbol records until 0.
 ;   HUNK_DEBUG   ($3F1): skip n longwords.
 ;   HUNK_NAME    ($3E8): skip n longwords.
 ;   HUNK_UNIT    ($3E7): skip n longwords.
 ;   HUNK_END     ($3F2): advance to next hunk.
 ;
-; Any other id triggers full teardown (free per-hunk allocs,
-; free scratch table, return 0). Caller leaves
-; FileSystem.resource untouched in that case.
+; Any other id logs "[RDB] hunk: bad id $xxxxxxxx" (DEBUG builds)
+; then triggers full teardown (free per-hunk allocs, free scratch
+; table, return 0). Caller leaves FileSystem.resource untouched in
+; that case.
 ;
 ; Input : a2 = pointer to concatenated HUNK image (caller's
 ;              concat buffer, payload starts at a2[0]).
@@ -152,6 +154,8 @@ _brh_body_loop:
 	beq.w	_brh_bss
 	cmpi.l	#HUNK_RELOC32,d0
 	beq.w	_brh_reloc
+	cmpi.l	#HUNK_RELOC32SHORT,d0
+	beq.w	_brh_reloc_short
 	cmpi.l	#HUNK_SYMBOL,d0
 	beq.w	_brh_symbol
 	cmpi.l	#HUNK_DEBUG,d0
@@ -162,7 +166,7 @@ _brh_body_loop:
 	beq.w	_brh_skip_n
 	cmpi.l	#HUNK_END,d0
 	beq.w	_brh_hunk_end
-	bra.w	_brh_teardown
+	bra.w	_brh_unknown
 
 _brh_copy:
 	cmpa.l	a3,a2
@@ -249,6 +253,69 @@ _brh_reloc_inner:
 	subq.l	#1,d6
 	bne.s	_brh_reloc_inner
 	bra.w	_brh_reloc_outer
+
+;-- HUNK_RELOC32SHORT: identical fix-up to _brh_reloc but count,
+;   target-hunk and offset are UWORDs; the block is longword-padded
+;   after the terminating zero count.
+_brh_reloc_short:
+	move.l	d5,d0
+	lsl.l	#2,d0
+	move.l	(a5,d0.l),a0
+	addq.l	#8,a0			;a0 = dst-hunk data base
+_brh_rs_outer:
+	cmpa.l	a3,a2
+	bhs.w	_brh_teardown
+	moveq.l	#0,d6
+	move.w	(a2)+,d6		;count (UWORD); 0 -> end
+	tst.l	d6
+	beq.s	_brh_rs_end
+	cmpa.l	a3,a2
+	bhs.w	_brh_teardown
+	moveq.l	#0,d7
+	move.w	(a2)+,d7		;target hunk number (UWORD)
+	sub.l	d2,d7			;d2 = first_hunk
+	bmi.w	_brh_teardown
+	cmp.l	d4,d7			;d4 = hunk count
+	bhs.w	_brh_teardown
+	move.l	d7,d0
+	lsl.l	#2,d0
+	move.l	(a5,d0.l),a1
+	addq.l	#8,a1			;a1 = target hunk data base
+_brh_rs_inner:
+	cmpa.l	a3,a2
+	bhs.w	_brh_teardown
+	moveq.l	#0,d0
+	move.w	(a2)+,d0		;offset (UWORD)
+	move.l	-8(a0),d3
+	sub.l	#12,d3
+	cmp.l	d3,d0
+	bhi.w	_brh_teardown
+	move.l	a1,d1
+	add.l	d1,(a0,d0.l)
+	subq.l	#1,d6
+	bne.s	_brh_rs_inner
+	bra.s	_brh_rs_outer
+_brh_rs_end:
+	move.l	a2,d0			;align cursor up to longword
+	addq.l	#3,d0
+	and.l	#$FFFFFFFC,d0
+	move.l	d0,a2
+	bra.w	_brh_body_loop
+
+;-- unrecognized hunk id: log it (DEBUG) and tear down so the
+;   load failure is visible rather than silent.
+_brh_unknown:
+	ifd	DEBUG
+	move.l	d0,-(sp)		;preserve id across helpers
+	lea	dbg_hunk_badid(pc),a0
+	bsr	_bootDebug
+	move.l	(sp),d0
+	bsr	_bootDebugHex8
+	lea	dbg_boot_nl(pc),a0
+	bsr	_bootDebug
+	move.l	(sp)+,d0
+	endc
+	bra.w	_brh_teardown
 
 _brh_symbol:
 _brh_sym_loop:

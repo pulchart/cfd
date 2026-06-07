@@ -117,6 +117,7 @@ HUNK_END	= $000003F2
 HUNK_HEADER	= $000003F3
 HUNK_OVERLAY	= $000003F5
 HUNK_BREAK	= $000003F6
+HUNK_RELOC32SHORT = $000003FC
 
 ;--- DeviceNode field offsets (for _bootPatchDNfromFSE) ---
 dn_Type		= 4
@@ -223,6 +224,8 @@ dbg_boot_rdsk_found:
 	dc.b	"[RDB] found RDSK",CR,LF,0
 dbg_boot_nl:
 	dc.b	CR,LF,0
+dbg_hunk_badid:
+	dc.b	"[RDB] hunk: bad id $",0
 	endc
 	even
 
@@ -701,6 +704,8 @@ _bap_mountable:
 
 ;-- Validate DosEnvec TableSize before allocating the DN blob
 	move.l	pb_Environment(a2),d2	;d2 = envSize (TableSize)
+	cmp.l	#DE_DOSTYPE,d2		;need index 16 (DOSTYPE) in range
+	blo.w	_bap_end
 	cmp.l	#20,d2
 	bhi.w	_bap_end
 

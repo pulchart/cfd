@@ -43,6 +43,17 @@ ptable.library:
   early-startup boot menu. A clashing name now gets a numeric suffix
   (DH0.1, DH0.2, ...).
 
+* ptable.library now loads filesystem handlers stored in a compacted
+  format (RELOC32SHORT relocations).
+
+* A partition with a damaged RDB entry is skipped instead of mounted.
+  If a card's RDB describes a partition with incomplete settings (a
+  DosEnvec shorter than the DOSTYPE field), it is now passed over at
+  cold boot rather than mounted with possibly wrong values.
+
+* Filesystem handlers loaded from a card's RDB now appear in
+  FileSystem.resource under their own name instead of ptable.library.
+
 pcmciacheck:
 
 * New `pcmciacheck -cis` option prints a readable summary of the
