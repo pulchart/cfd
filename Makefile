@@ -70,6 +70,10 @@ PCMCIASPEED_KIND  = tool
 PCMCIACHECK_NAME  = pcmciacheck
 PCMCIACHECK_KIND  = tool
 
+# "PREFIX|name|version|date" per component, fed to tools/components.sh
+# (the README.md block and the cfd.readme list both render from this).
+COMPONENT_ARGS = $(foreach c,$(COMPONENTS),'$(c)|$($(c)_NAME)|$($(c)_VERSION)|$($(c)_DATE)')
+
 # Flavor x CPU fan-out for assembled artifacts (device, library).
 FLAVORS = full/68020 small/68020 full/68000 small/68000
 _subdir_device  = devs
@@ -285,11 +289,7 @@ $(PLIB_VERSION_INC): $(VERSION_STAMP)
 # README.md from current Makefile vars. Add new release headers by hand.
 version-readme:
 	$(Q)sed -i '0,/^### [0-9]\{8\}[^[:space:]]*/s/^### [0-9]\{8\}[^[:space:]]*/### $(VERSION)/' README.md
-	$(Q)block=$$(printf '%s\n' \
-	    '#### Components in this release' \
-	    '' \
-	    $(foreach c,$(COMPONENTS),'- $($(c)_NAME) $($(c)_VERSION) ($($(c)_DATE))') \
-	    ); \
+	$(Q)block="#### Components in this release\n\n$$(sh tools/components.sh md $(COMPONENT_ARGS))"; \
 	awk -v block="$$block" ' \
 	    /<!-- COMPONENTS:BEGIN -->/{print; print block; in_block=1; next} \
 	    /<!-- COMPONENTS:END -->/{in_block=0} \
@@ -366,8 +366,9 @@ $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
 # Release targets
 # ============================================================
 
-# Component summary with literal `\n` for GNU sed substitution.
-COMPONENT_VERSIONS_NL = $(shell printf -- '- %s %s (%s)\\n' $(foreach c,$(COMPONENTS),$($(c)_NAME) $($(c)_VERSION) $($(c)_DATE)))
+# Component summary with literal `\n` for GNU sed substitution; plain
+# text (no markdown), changed-since-previous-tag components flagged "(new)".
+COMPONENT_VERSIONS_NL = $(shell sh tools/components.sh plain $(COMPONENT_ARGS))
 
 # Generate readme from template
 $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)

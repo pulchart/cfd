@@ -23,7 +23,19 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ### 20260607-dev
 
-#### Driver
+<!-- COMPONENTS:BEGIN -->
+#### Components in this release
+
+- `compactflash.device 1.44-dev (04.06.2026)` _(new)_
+- `ptable.library 1.1-dev (07.06.2026)` _(new)_
+- `CFInfo 1.37 (11.01.2026)`
+- `pcmciaspeed 1.36 (02.01.2026)`
+- `pcmciacheck 1.39 (22.05.2026)` _(new)_
+<!-- COMPONENTS:END -->
+
+#### Changes
+
+##### CompactFlash Driver
 
 * **Fixed a crash in the ROM-resident driver when running WHDLoad.** (Issue #56) Programs that take over the machine flush idle libraries and devices to free memory before they run. The idle ROM-resident compactflash.device looked unused, got flushed, and that corrupted the program's memory setup, causing a guru (`0x0100000F`, bad `FreeMem`). Mounting a CF card first avoided it (the filesystem then held the device open), and so did WHDLoad's `NoFlushMem` option. The driver now keeps itself in use.
 
@@ -31,7 +43,7 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 * **ATAPI handler compiled out by default.** Build with `ATAPI=1` to keep it. See [ATAPI status](#atapi-status) for details.
 
-#### Partition Table library
+##### Partition Table library
 
 * **Duplicate RDB drive names are made unique at cold boot.** (Issue #57) When two cards carry RDBs that reuse the same partition name (for example both define `DH0`), the duplicates appeared together in the early-startup boot menu. A clashing name now gets a numeric suffix (`DH0.1`, `DH0.2`, ...).
 
@@ -41,23 +53,13 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 * Filesystem handlers loaded from a card's RDB now appear in `FileSystem.resource` under their own name instead of `ptable.library`.
 
-#### Tools
+##### Tools
 
 * **`pcmciacheck -cis`**: new option that prints a readable summary of the identification data carried by the inserted PCMCIA card (manufacturer, card type, version, etc.). Handy when you want to understand why an unusual card is or isn't accepted by the driver, or when reporting a problem card.
 
-#### Packaging
+##### Packaging
 
-* **Archive version is now a date (YYYYMMDD).** The release bundle ships several independently-versioned pieces (`compactflash.device`, `ptable.library`, `CFInfo`, `pcmciaspeed`, `pcmciacheck`), each on its own cadence, so a single `v1.x` number for the whole archive never matched what was actually inside. The archive (`cfd.vYYYYMMDD.lha`) is now named after its release date, while each component keeps its own version, visible via `version <name>`. No installation steps change.
-
-<!-- COMPONENTS:BEGIN -->
-#### Components in this release
-
-- compactflash.device 1.44-dev (04.06.2026)
-- ptable.library 1.1-dev (07.06.2026)
-- CFInfo 1.37 (11.01.2026)
-- pcmciaspeed 1.36 (02.01.2026)
-- pcmciacheck 1.39 (22.05.2026)
-<!-- COMPONENTS:END -->
+* **Archive version is now a date (YYYYMMDD).** The release bundle ships several independently-versioned pieces (`compactflash.device`, `ptable.library`, `CFInfo`, `pcmciaspeed`, `pcmciacheck`), each on its own cadence, so a single `v1.x` number for the whole archive never matched what was actually inside.
 
 <details>
 <summary>Older releases</summary>

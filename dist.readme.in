@@ -10,6 +10,10 @@ Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
+COMPONENTS IN THIS RELEASE
+==========================
+@COMPONENT_VERSIONS@
+
 CHANGES IN @DATE@
 =====================
 
@@ -68,13 +72,7 @@ packaging:
   several independently-versioned pieces (compactflash.device,
   ptable.library, CFInfo, pcmciaspeed, pcmciacheck), each on its own
   cadence, so a single v1.x number for the whole archive never matched
-  what was actually inside. The archive (cfd.vYYYYMMDD.lha) is now named
-  after its release date, while each component keeps its own version,
-  visible via `version <name>`. No installation steps change.
-
-COMPONENTS IN THIS RELEASE
-==========================
-@COMPONENT_VERSIONS@
+  what was actually inside.
 
 FEATURES
 ========
