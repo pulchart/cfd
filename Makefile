@@ -6,13 +6,13 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev, -rc1, ...). Empty suffix for a final release.
-RELEASE_DATE = 20260607
-VERSION_SUFFIX = -dev
+RELEASE_DATE = 20260609
+VERSION_SUFFIX =
 
 # compactflash.device version
 CFD_MAJOR = 1
 CFD_MINOR = 44
-CFD_VERSION_SUFFIX = -dev
+CFD_VERSION_SUFFIX =
 CFD_DATE = 04.06.2026
 
 # ptable.library version; bumped only on library-ABI changes:
@@ -20,7 +20,7 @@ CFD_DATE = 04.06.2026
 # - breaking changes bump MAJOR
 PLIB_MAJOR = 1
 PLIB_MINOR = 1
-PLIB_VERSION_SUFFIX = -dev
+PLIB_VERSION_SUFFIX =
 PLIB_DATE = 07.06.2026
 
 # Tool-specific versions (MAJOR/MINOR + optional in-progress suffix,

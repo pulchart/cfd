@@ -21,13 +21,13 @@ This driver is maintained and improved in my free time. If you'd like to support
 
 ## What's New in
 
-### 20260607-dev
+### 20260609
 
 <!-- COMPONENTS:BEGIN -->
 #### Components in this release
 
-- `compactflash.device 1.44-dev (04.06.2026)` _(new)_
-- `ptable.library 1.1-dev (07.06.2026)` _(new)_
+- `compactflash.device 1.44 (04.06.2026)` _(new)_
+- `ptable.library 1.1 (07.06.2026)` _(new)_
 - `CFInfo 1.37 (11.01.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 1.39 (22.05.2026)` _(new)_
