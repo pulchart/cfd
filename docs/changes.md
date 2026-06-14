@@ -12,7 +12,7 @@ _Components in this release_:
 
 ##### Packaging
 
-Documentation-only update (no binaries changed): Release notes and original CFD history now live in this dedicated document.
+Documentation-only update (no binaries changed). Release notes and original CFD history now live in this dedicated document.
 
 ## 20260609
 

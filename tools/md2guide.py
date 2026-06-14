@@ -35,9 +35,10 @@ License: LGPL v2.1
 import re
 import sys
 import os
+import subprocess
 from datetime import datetime
 
-SCRIPT_VERSION = '1.5 (20.05.2026)'
+SCRIPT_VERSION = '1.6 (14.06.2026)'
 
 # Constants for text formatting
 DEFAULT_WRAP_WIDTH = 72
@@ -83,6 +84,9 @@ BULLET_LIST_PATTERN = re.compile(r'^(\s*)([-*+])\s+(.+)$')
 NUMBERED_LIST_PATTERN = re.compile(r'^(\s*)(\d+)\.\s+(.+)$')
 HORIZONTAL_RULE_PATTERN = re.compile(r'^-{3,}$|^\*{3,}$|^_{3,}$')
 NODE_CLEAN_PATTERN = re.compile(r'[^a-zA-Z0-9_]')
+
+MERMAID_ASCII_COMMAND = ['mermaid-ascii', '--ascii', '-p', '0']
+MERMAID_ASCII_TIMEOUT = 10
 
 
 # ==============================================================================
@@ -230,6 +234,34 @@ def convert_inline(line, in_code_block=False):
     line = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', lambda m: convert_markdown_link(m.group(1), m.group(2)), line)
     
     return line
+
+
+def render_mermaid_ascii(diagram):
+    """Render Mermaid text to ASCII using mermaid-ascii from PATH."""
+    result = subprocess.run(
+        MERMAID_ASCII_COMMAND,
+        input=diagram,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=MERMAID_ASCII_TIMEOUT,
+        check=False,
+    )
+
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.rstrip('\n')
+
+    error = result.stderr.strip().splitlines()
+    detail = error[0] if error else 'no output'
+    raise RuntimeError(f"Mermaid ASCII rendering failed: {detail}")
+
+
+def append_verbatim_block(current_content, block_lines):
+    """Append a highlighted verbatim block to the current AmigaGuide content."""
+    current_content.append(AG_FG_HIGHLIGHT)
+    for block_line in block_lines:
+        current_content.append('  ' + escape_amigaguide(block_line))
+    current_content.append(AG_FG_TEXT)
 
 
 # ==============================================================================
@@ -873,21 +905,30 @@ def md2guide(md_content, title=None, version="1.0", date=None, ver_title=None):
     in_table = False
     table_lines = []
     code_lang = None
+    code_lines = []
     
     for line in lines:
         # Code block handling - ``` starts/ends code blocks
         if line.startswith('```'):
             if not in_code_block:
                 in_code_block = True
-                code_lang = line[3:].strip()  # Extract language (for future use)
-                current_content.append('@{fg highlight}')  # Start highlighted section
+                code_info = line[3:].strip().split(None, 1)
+                code_lang = code_info[0].lower() if code_info else ''
+                code_lines = []
             else:
                 in_code_block = False
-                current_content.append('@{fg text}')  # Return to normal color
+                if code_lang == 'mermaid':
+                    diagram = '\n'.join(code_lines) + '\n'
+                    rendered = render_mermaid_ascii(diagram)
+                    append_verbatim_block(current_content, rendered.splitlines())
+                else:
+                    append_verbatim_block(current_content, code_lines)
+                code_lang = None
+                code_lines = []
             continue
         
         if in_code_block:
-            current_content.append('  ' + escape_amigaguide(line))
+            code_lines.append(line)
             continue
         
         # Table handling

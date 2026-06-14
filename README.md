@@ -356,27 +356,30 @@ When a card is inserted, the driver inspects the card's CIS (Card Information St
 
 Decision flow:
 
+**Stage 1 - CIS gate, using CIS attribute-memory only (no IDE/CCR access yet):**
+
 ```mermaid
 flowchart TD
-    Start([Card reset, voltage]) --> HasDev{CISTPL_DEVICE present?}
-    HasDev -- yes --> DevType{type in 0x0D, 0x05?}
-    DevType -- no --> Reject([REJECT])
-    DevType -- yes --> FuncExt{CISTPL_FUNCEXT<br/>Disk Interface = IDE?<br/>10x retry}
-    HasDev -- no --> HasFunc{CISTPL_FUNCID present?}
-    HasFunc -- no --> Reject
-    HasFunc -- yes --> FuncId{FUNCID == 0x04?}
-    FuncId -- no --> Reject
-    FuncId -- yes --> FuncExt
-    FuncExt -- yes --> CfgAddr[CISTPL_CONFIG addr<br/>10x retry, fallback 0x200]
-    FuncExt -- "no (non-IDE)" --> Reject
-    FuncExt -- absent / malformed --> Reject
-    CfgAddr --> Identify[IDENTIFY DEVICE]
-    Identify --> IdResult{result}
-    IdResult -- ATA --> Accept([ACCEPT])
-    IdResult -- ATAPI --> AtapiBranch{ATAPI build flag?}
-    IdResult -- timeout --> Reject
-    AtapiBranch -- ATAPI=1 --> Iatapi([_t_iatapi handler])
-    AtapiBranch -- ATAPI=0 default --> Reject
+    Start["Card reset<br/>voltage"] --> Ident["CISTPL_DEVICE type 0x0D/0x05?<br/>(else CISTPL_FUNCID 0x04)"]
+    Ident -->|no| Reject["REJECT<br/>ReleaseCard"]
+    Ident --> FuncExt["CISTPL_FUNCEXT<br/>Disk Interface = IDE?<br/>10x retry"]
+    FuncExt -->|no| Reject
+    FuncExt --> CfgAddr["CISTPL_CONFIG addr<br/>10x retry<br/>fallback 0x200"]
+    CfgAddr -->|out of range| Reject
+    CfgAddr --> Identify["IDENTIFY DEVICE"]
+```
+
+**Stage 2 - classification, after IDE / CCR registers are modified:**
+
+```mermaid
+flowchart TD
+    Identify["IDENTIFY DEVICE"] --> AtaResult["ATA result?"]
+    AtaResult -->|yes| Accept["ACCEPT"]
+    AtaResult -->|no| AtapiResult["ATAPI result?"]
+    AtapiResult -->|no| RejectTimeout["REJECT<br/>timeout"]
+    AtapiResult -->|yes| AtapiBranch["ATAPI build flag?"]
+    AtapiBranch -->|yes| Iatapi["_t_iatapi handler"]
+    AtapiBranch -->|no| RejectAtapi["REJECT"]
 ```
 
 The CIS gate is the primary disk-vs-not-disk filter; an ATAPI signature returned by `IDENTIFY DEVICE` after CIS accept is handled by the ATAPI build flag (default 0 releases the card so a dedicated ATAPI driver can claim it; `ATAPI=1` routes ATAPI cards through `_t_iatapi`). See [ATAPI status](#atapi-status) for details.
@@ -483,34 +486,37 @@ Before v1.41 every block transfer paid a mode check and a small dispatch-table l
 ### Before (through v1.40)
 
 ```mermaid
-flowchart LR
+flowchart TD
     Req["IO request"] --> WB["_WriteBlocks / _ReadBlocks"]
     WB --> Chunk["per-chunk loop"]
     Chunk --> Block["_rb_block / _wb_block"]
-    Block --> Mode["read CFU_ReceiveMode / CFU_SendMode<br/>(every block)"]
-    Mode -->|"mode 0"| Inline["inlined word-only loop<br/>(duplicated by ifnd COPYBURST)"]
-    Mode -->|"mode > 0"| Tbl["pi_tab / po_tab lookup + jmp<br/>(every block)"]
+    Block --> Mode["read CFU_ReceiveMode<br/>or CFU_SendMode<br/>every block"]
+    Mode -->|mode 0| Inline["inlined word-only loop<br/>(duplicated by ifnd COPYBURST)"]
+    Mode -->|mode 1-4| Tbl["pi_tab / po_tab lookup<br/>jmp every block"]
     Tbl --> Workers["pi_mode1 / pi_mode2 / pi_mode3 / pi_mode4"]
 ```
 
 ### After (v1.41-dev)
 
-```mermaid
-flowchart LR
-    subgraph cold [Once, at mode change]
-        Evt["RWTest / _gid_end<br/>_wb_switch / _wb_bump"] --> Bind["_BindIOHandlers"]
-        Bind --> Slot1["CFU_ReadBlockFn = pi_modeN"]
-        Bind --> Slot2["CFU_WriteBlockFn = po_modeN"]
-    end
+**Once at mode change:**
 
-    subgraph hot [Per IO request, hot path]
-        Req["IO request"] --> WB["_WriteBlocks / _ReadBlocks"]
-        WB --> Cache["load CFU_*BlockFn into a5<br/>(once, outside chunk loop)"]
-        Cache --> Chunk["per-chunk loop"]
-        Chunk --> Block["_rb_block / _wb_block"]
-        Block --> Direct["jsr (a5)"]
-        Direct --> Worker["selected worker<br/>(pi_modeN / po_modeN)"]
-    end
+```mermaid
+flowchart TD
+    Evt["RWTest / _gid_end<br/>_wb_switch / _wb_bump"] --> Bind["_BindIOHandlers"]
+    Bind --> Slot1["CFU_ReadBlockFn = pi_modeN"]
+    Bind --> Slot2["CFU_WriteBlockFn = po_modeN"]
+```
+
+**Per IO request:**
+
+```mermaid
+flowchart TD
+    Req["IO request"] --> WB["_WriteBlocks / _ReadBlocks"]
+    WB --> Cache["load CFU_*BlockFn into a5<br/>once outside chunk loop"]
+    Cache --> Chunk["per-chunk loop"]
+    Chunk --> Block["_rb_block / _wb_block"]
+    Block --> Direct["jsr (a5)"]
+    Direct --> Worker["selected worker<br/>pi_modeN / po_modeN"]
 ```
 
 ### What that removes from the hot path
