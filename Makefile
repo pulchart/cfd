@@ -416,8 +416,6 @@ $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET
 	done; \
 	sed -e "s|@VERSION@|$(VERSION)|g" \
 	    -e "s|@DATE@|$(DATE)|g" \
-	    -e "s|@CFD_VERSION@|$(CFD_VERSION)|g" \
-	    -e "s|@PLIB_VERSION@|$(PLIB_VERSION)|g" \
 	    -e "s|@COMPONENT_VERSIONS@|$(COMPONENT_VERSIONS_NL)|" \
 	    -e "s|@TOOL_CHECKSUMS@|$$tool_checksums|" \
 	    $(README_TEMPLATE) > $@
