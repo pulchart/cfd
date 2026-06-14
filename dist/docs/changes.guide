@@ -61,7 +61,7 @@
 @{b}Packaging@{ub}
 
 Documentation-only update (no binaries changed). Release notes and
-original CFD history now live in this dedicated document.
+original CFD history are included in @{"  docs/changes.guide  " link "changes.guide/Main"} document.
 
 ----------------------------------------
 @{"<< Prev" link Main}  @{"Contents" link Main}  @{"Next >>" link 20260609}
