@@ -6,7 +6,7 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev, -rc1, ...). Empty suffix for a final release.
-RELEASE_DATE = 20260609
+RELEASE_DATE = 20260614
 VERSION_SUFFIX =
 
 # compactflash.device version
@@ -285,16 +285,16 @@ $(PLIB_VERSION_INC): $(VERSION_STAMP)
 	$(Q)echo "	endc" >> $@
 	$(Q)echo "	endm" >> $@
 
-# Rewrite the topmost "What's New" header and the COMPONENTS block in
-# README.md from current Makefile vars. Add new release headers by hand.
+# Rewrite the topmost release-notes header and the COMPONENTS block in
+# docs/changes.md from current Makefile vars. Add new release headers by hand.
 version-readme:
-	$(Q)sed -i '0,/^### [0-9]\{8\}[^[:space:]]*/s/^### [0-9]\{8\}[^[:space:]]*/### $(VERSION)/' README.md
-	$(Q)block="#### Components in this release\n\n$$(sh tools/components.sh md $(COMPONENT_ARGS))"; \
+	$(Q)sed -i '0,/^## [0-9]\{8\}[^[:space:]]*/s/^## [0-9]\{8\}[^[:space:]]*/## $(VERSION)/' docs/changes.md
+	$(Q)block="_Components in this release_:\n\n$$(sh tools/components.sh md $(COMPONENT_ARGS))"; \
 	awk -v block="$$block" ' \
 	    /<!-- COMPONENTS:BEGIN -->/{print; print block; in_block=1; next} \
 	    /<!-- COMPONENTS:END -->/{in_block=0} \
-	    !in_block' README.md > README.md.tmp && mv README.md.tmp README.md
-	$(Q)echo "  README  topmost header + components updated to $(VERSION) ($(DATE))"
+	    !in_block' docs/changes.md > docs/changes.md.tmp && mv docs/changes.md.tmp docs/changes.md
+	$(Q)echo "  CHANGES topmost header + components updated to $(VERSION) ($(DATE))"
 
 # Driver: dist/<flavor>/<cpu>/devs/compactflash.device
 #
@@ -334,12 +334,40 @@ library-small-000: check-vasm $(LIB_SMALL_000)
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
 
 # Generate AmigaGuide documentation from Markdown
-guide guides:
-	$(Q)echo "  GUIDE   dist/docs/*.guide"
-	$(Q)tools/md2guide.py docs/CFInfo.md dist/docs/CFInfo.guide --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
-	$(Q)tools/md2guide.py docs/pcmciaspeed.md dist/docs/pcmciaspeed.guide --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
-	$(Q)tools/md2guide.py docs/pcmciacheck.md dist/docs/pcmciacheck.guide --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
-	$(Q)tools/md2guide.py README.md dist/docs/cfd.guide --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
+GUIDE_OUTPUT_DIR = dist/docs
+GUIDE_CFD        = $(GUIDE_OUTPUT_DIR)/cfd.guide
+GUIDE_CHANGES    = $(GUIDE_OUTPUT_DIR)/changes.guide
+GUIDE_CFINFO     = $(GUIDE_OUTPUT_DIR)/CFInfo.guide
+GUIDE_SPEED      = $(GUIDE_OUTPUT_DIR)/pcmciaspeed.guide
+GUIDE_CHECK      = $(GUIDE_OUTPUT_DIR)/pcmciacheck.guide
+MD2GUIDE = tools/md2guide.py
+
+guide guides: $(GUIDE_CFD) $(GUIDE_CHANGES) $(GUIDE_CFINFO) $(GUIDE_SPEED) $(GUIDE_CHECK)
+
+$(GUIDE_CFD): README.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) README.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
+
+$(GUIDE_CHANGES): docs/changes.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) docs/changes.md $@ --version $(VERSION) --date $(DATE) --title "compactflash.device release notes" --ver-title "compactflash.device release notes guide"
+
+$(GUIDE_CFINFO): docs/CFInfo.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) docs/CFInfo.md $@ --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
+
+$(GUIDE_SPEED): docs/pcmciaspeed.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) docs/pcmciaspeed.md $@ --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
+
+$(GUIDE_CHECK): docs/pcmciacheck.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) docs/pcmciacheck.md $@ --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
 
 # CFInfo utility (requires vbcc)
 $(TARGET_CFINFO): $(SOURCE_CFINFO)
@@ -529,7 +557,7 @@ help:
 	@echo "      for autoboot to fire."
 	@echo ""
 	@echo "Release targets:"
-	@echo "  version-readme - Update version suffix in README.md (in-place)"
+	@echo "  version-readme - Update current release notes in docs/changes.md"
 	@echo "  readme         - Generate $(README_NAME) from template"
 	@echo "  release        - Create Aminet LHA archive + readme"
 	@echo ""
