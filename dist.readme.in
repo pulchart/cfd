@@ -5,7 +5,7 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v1.43.lha
+Replaces:     driver/media/cfd.v20260609.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -17,62 +17,8 @@ COMPONENTS IN THIS RELEASE
 CHANGES IN @DATE@
 =====================
 
-compactflash.device:
-
-* Fixed a crash in the ROM-resident driver when running WHDLoad (Issue #56)
-  Programs that take over the machine flush idle libraries and devices to
-  free memory before they run. The idle ROM-resident compactflash.device
-  looked unused, got flushed, and that corrupted the program's memory setup,
-  causing a guru (`0x0100000F`, bad `FreeMem`). Mounting a CF card first
-  avoided it (the filesystem then held the device open), and so did WHDLoad's
-  `NoFlushMem` option. The driver now keeps itself in use.
-
-* Non-IDE PCMCIA cards (e.g. ATAPI CD/DVD adapters) (issue #47) are now
-  released earlier in the identify process. Rejecting after IDENTIFY
-  is too late: the IDENTIFY attempt could leave the card in a state
-  where dedicated drivers (such as telmexatapi.device) could no
-  longer claim it. The CIS gate reintroduced checks for a well-formed
-  Disk Interface FUNCEXT declaring IDE before IDENTIFY runs, with up to
-  10 retries to tolerate unstable CIS reads.
-  Please report if you see any CF card detection regression.
-
-* ATAPI handler is compiled out by default (no real-world user
-  found, untested; build with ATAPI=1 to keep it).
-
-ptable.library:
-
-* Duplicate RDB drive names are made unique at cold boot (Issue #57).
-  When two cards carry RDBs that reuse the same partition name (for
-  example both define DH0), the duplicates appeared together in the
-  early-startup boot menu. A clashing name now gets a numeric suffix
-  (DH0.1, DH0.2, ...).
-
-* ptable.library now loads filesystem handlers stored in a compacted
-  format (RELOC32SHORT relocations).
-
-* A partition with a damaged RDB entry is skipped instead of mounted.
-  If a card's RDB describes a partition with incomplete settings (a
-  DosEnvec shorter than the DOSTYPE field), it is now passed over at
-  cold boot rather than mounted with possibly wrong values.
-
-* Filesystem handlers loaded from a card's RDB now appear in
-  FileSystem.resource under their own name instead of ptable.library.
-
-pcmciacheck:
-
-* New `pcmciacheck -cis` option prints a readable summary of the
-  identification data carried by the inserted PCMCIA card (manufacturer,
-  card type, version, etc.). Handy when you want to understand why an
-  unusual card is or isn't accepted by the driver, or when reporting a
-  problem card.
-
-packaging:
-
-* Archive version is now a date (YYYYMMDD). The release bundle ships
-  several independently-versioned pieces (compactflash.device,
-  ptable.library, CFInfo, pcmciaspeed, pcmciacheck), each on its own
-  cadence, so a single v1.x number for the whole archive never matched
-  what was actually inside.
+Documentation-only update (no binaries changed): Release notes and
+original CFD history are included in docs/changes.guide.
 
 FEATURES
 ========
@@ -308,7 +254,8 @@ you can do so on Ko-fi: https://ko-fi.com/jaroslavpulchart
 
 HISTORY
 =======
-see https://github.com/pulchart/cfd/blob/master/README.md for complete history
+See docs/changes.guide for release notes and original CFD history.
+Online version: https://github.com/pulchart/cfd/blob/master/docs/changes.md
 
 CHECKSUMS
 =========
@@ -340,6 +287,7 @@ cfd/Storage/DOSDrivers/CF0      - Mountlist entry (with flags documentation)
 cfd/Storage/DOSDrivers/CF0.info - Mountlist Workbench icon
 
 cfd/docs/cfd.guide         - Main documentation
+cfd/docs/changes.guide     - Release notes and original CFD history
 cfd/docs/CFInfo.guide      - CFInfo utility documentation
 cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation
 cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation
