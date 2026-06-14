@@ -8,7 +8,7 @@ Architecture: m68k-amigaos
 Replaces:     driver/media/cfd.v20260609.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
-compactflash.device V@CFD_VERSION@ - PCMCIA CompactFlash driver for Amiga 600/1200. Fork of driver/media/CFD133.lha.
+PCMCIA CompactFlash driver and supporting tools for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
 COMPONENTS IN THIS RELEASE
 ==========================
