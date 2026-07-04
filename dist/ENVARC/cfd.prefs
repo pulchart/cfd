@@ -1,0 +1,4 @@
+; compactflash.device config. copy to ENVARC:cfd.prefs (see automount.guide).
+AUTOMOUNT 1
+FLAGS 0
+CONTROL_FAT -d-D+q

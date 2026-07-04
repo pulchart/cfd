@@ -7,8 +7,6 @@
  * Based on original pcmciacheck 1.17 (29.08.2002) by Torsten Jager
  * Recreated in C for compactflash.device project
  *
- * Build: make pcmciacheck (requires vbcc + NDK)
- * Usage: pcmciacheck <logfile>
  */
 
 
@@ -231,7 +229,7 @@ void WriteChunkHeader(const char *id, ULONG size)
 
 /*
  * Read 256 bytes using WORD access (mode 0)
- * Matches assembly: 16 iterations × 8 word reads = 128 words = 256 bytes
+ * Matches assembly: 16 iterations x 8 word reads = 128 words = 256 bytes
  */
 void ReadMode0(UBYTE *dest)
 {
@@ -246,7 +244,7 @@ void ReadMode0(UBYTE *dest)
 
 /*
  * Read 256 bytes using BYTE access from data register (mode 1)
- * Matches assembly: 16 iterations × 16 byte reads = 256 bytes
+ * Matches assembly: 16 iterations x 16 byte reads = 256 bytes
  */
 void ReadMode1(UBYTE *dest)
 {
@@ -261,7 +259,7 @@ void ReadMode1(UBYTE *dest)
 /*
  * Read 256 bytes using alternating BYTE access (mode 2)
  * Reads low byte from offset 8, high byte from offset 8+0x10001
- * Matches assembly: 16 iterations × 16 byte reads = 256 bytes
+ * Matches assembly: 16 iterations x 16 byte reads = 256 bytes
  */
 void ReadMode2(UBYTE *dest)
 {
@@ -277,7 +275,7 @@ void ReadMode2(UBYTE *dest)
 
 /*
  * Read 256 bytes using BYTE access from offset 8 (mode 3)
- * Matches assembly: 16 iterations × 16 byte reads = 256 bytes
+ * Matches assembly: 16 iterations x 16 byte reads = 256 bytes
  */
 void ReadMode3(UBYTE *dest)
 {
@@ -882,7 +880,7 @@ static const char *DeviceSpeedName(UBYTE n)
 }
 
 /* CISTPL_DEVICE size byte: bits 7..3 = (address_units - 1), bits
- * 2..0 = unit-size code.  Returns size in bytes (matches the value
+ * 2..0 = unit-size code. Returns size in bytes (matches the value
  * the OS DeviceTuple call stores in CFU_DTSize).
  */
 static ULONG DecodeDeviceSize(UBYTE sz)
@@ -904,7 +902,7 @@ static ULONG DecodeDeviceSize(UBYTE sz)
 /*
  * Read one CIS byte at logical offset n.
  * PCMCIA cards in 8-bit attribute access put CIS bytes at every other
- * byte address; the odd bytes are aliased / undefined.  Walk by 2.
+ * byte address; the odd bytes are aliased / undefined. Walk by 2.
  */
 static UBYTE CisByte(int offset)
 {
@@ -1043,19 +1041,19 @@ static void HexDumpTuple(int data_off, UBYTE link)
 
 /*
  * Walk the PCMCIA attribute-memory CIS and print each tuple in
- * human-readable form.  Direct memory read at 0x00A00000, no
+ * human-readable form. Direct memory read at 0x00A00000, no
  * card.resource interaction, no OwnCard, no arbitration with
- * compactflash.device or other handlers.  Safe to run on cards that
+ * compactflash.device or other handlers. Safe to run on cards that
  * make the regular driver path hang.
  *
  * speed_ns: 0 leaves Gayle PCMCIA timing untouched; 100/150/250/720
  * temporarily overrides $DAB000 bits 2-3 for the duration of the scan
- * (restored on return).  Useful for diagnosing cards whose CIS reads
+ * (restored on return). Useful for diagnosing cards whose CIS reads
  * are unstable at the default speed - rerun -cis with each value and
  * compare results.
  *
  * Tuple stride: each CIS byte is at attribute_base + n*2 (PCMCIA 8-bit
- * attribute access aliases odd bytes).  Walk terminates on CISTPL_END
+ * attribute access aliases odd bytes). Walk terminates on CISTPL_END
  * or after 32 tuples / 512 logical bytes - whichever comes first.
  */
 int DumpCIS(int speed_ns)
