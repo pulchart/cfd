@@ -1,6 +1,27 @@
-## 20260614
+## 20260730-dev
 
 <!-- COMPONENTS:BEGIN -->
+_Components in this release_:
+
+- `compactflash.device 2.0-dev (30.07.2026)` _(new)_
+- `compactflash.automount 2.0-dev (30.07.2026)` _(new)_
+- `ptable.library 2.0-dev (30.07.2026)` _(new)_
+- `CFInfo 1.37 (11.01.2026)`
+- `pcmciaspeed 1.36 (02.01.2026)`
+- `pcmciacheck 1.39 (22.05.2026)`
+- `lsptres 1.0-dev (30.07.2026)` _(new)_
+<!-- COMPONENTS:END -->
+
+##### CompactFlash Driver
+
+- **Automount.** Hotplugged cards mount automatically at DOS time, on by default; disable with `AUTOMOUNT 0` in the new `ENV:cfd.prefs` config file. Removing a card fully unmounts all supported filesystems by default (`UNMOUNT <names>` restricts it, `UNMOUNT NONE` keeps the handlers). Boot and automount bringup is split into a separate `compactflash.automount` module. See [automount.md](automount.md).
+
+##### Partition Table library
+
+- **Unified partition scanning.** One scanner parses RDB, MBR, GPT, and flat (whole-disk) partition tables and publishes every partition into a shared `partition.resource`, now used by both `compactflash.device` and `fat95` instead of each carrying its own. The new `lsptres` tool lists the resource. See [ptable.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/ptable.md) and [lsptres.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/lsptres.md).
+
+## 20260614
+
 _Components in this release_:
 
 - `compactflash.device 1.44 (04.06.2026)`
@@ -8,7 +29,6 @@ _Components in this release_:
 - `CFInfo 1.37 (11.01.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 1.39 (22.05.2026)`
-<!-- COMPONENTS:END -->
 
 ##### Packaging
 

@@ -9,7 +9,7 @@
 ;
 ; This tool is distributed in the hope that it will be useful,
 ; but WITHOUT ANY WARRANTY; without even the implied warranty of
-; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 ; Lesser General Public License for more details.
 ;
 ; You should have received a copy of the GNU Lesser General Public
@@ -62,7 +62,8 @@
 ; --- Includes ---
 	include	"cfd_version.i"
 	include	"cfd_debug.i"
-	include	"lib/ptable_pub.i"
+	include	"ptable_pub.i"		;from the ptable submodule (-I extern/ptable/src)
+	include	"cfd_pub.i"		;CFD/CFU offsets shared with compactflash.automount
 
 ;--- from exec.library -------------------------------------
 
@@ -133,6 +134,12 @@ OpenResource	= -498
 TypeOfMem	= -534
 OpenLibrary	= -552
 CopyMem		= -624
+
+;-- dos.library (worker reads the config var)
+DosGetVar	= -906
+Delay		= -198			;dos.library
+GVF_GLOBAL_ONLY	= $100
+GVF_BINARY_VAR	= $400
 CacheClearE	= -642
 CacheControl	= -648
 RawPutChar	= -516
@@ -560,16 +567,21 @@ CFD_ExecBase	= 36			;exec.library base pointer
 CFD_DosBase	= 40			;dos.library base pointer
 CFD_CardBase	= 44			;card.resource base pointer
 CFD_SegList	= 48			;segment list for expunge
-CFD_Unit	= 52			;pointer to CFU (single unit)
-; CFD extension for autoboot cooperation with ptable.library.  Always
+;CFD_Unit	= 52			-> cfd_pub.i (shared with compactflash.automount)
+; CFD extension for autoboot cooperation with ptable.library. Always
 ; present so the build is autoboot-capable in ROM without any
-; compile-time toggle.  When ptable.library is not loaded the slot
+; compile-time toggle. When ptable.library is not loaded the slot
 ; stays zero (CFD allocation is MEMF_CLEAR).
 ;
 ;   offset  size  field
 ;     56     1    CFD_BootDone   one-shot re-entry guard set by the
 ;                                RTF_COLDSTART stub at end of scan
-CFD_BootDone	= 56
+;     57     1    CFD_DosReady   set by the RTF_AFTERDOS hook when
+;                                System-Startup reports DOS functional
+;                                (step 13, see NDK system-startup.doc);
+;                                the MountAgent defers all work until set
+;CFD_BootDone	= 56			-> cfd_pub.i (shared with compactflash.automount)
+;CFD_DosReady	= 57			-> cfd_pub.i (shared with compactflash.automount)
 CFD_Sizeof	= 60
 
 ;---------------------------------------------------------------------------
@@ -722,7 +734,16 @@ CFU_WriteBlockFn = 972			;bound write-block handler (longword)
 ; Written alongside CFU_IOPtr at probe time.
 CFU_DataPort	= 976			;PCMCIA I/O base + 8 (longword)
 
-CFU_Sizeof	= 980
+;--- DOS-time automount agent (per unit) ---
+; A small Exec task spawned at unit startup. The unit task signals it
+; on card insert/remove (after NotifyClients); the agent reconciles the
+; partition.resource via ptable.library v2 (Scan/Mount/Unmount) outside
+; the Forbid window that NotifyClients runs under.
+;CFU_MountAgent	= 980			-> cfd_pub.i (shared with compactflash.automount)
+;CFU_MountSig	= 984			-> cfd_pub.i (shared with compactflash.automount)
+CFU_MountDone	= 988			;worker-done signal mask (agent's bit)
+
+CFU_Sizeof	= 992
 
 
 ;CFU_Flags
@@ -739,8 +760,8 @@ Start:
 s_resident:
 	dc.w	RTC_MATCHWORD
 	dc.l	s_resident
-	dc.l	s_resident_boot		;EndSkip: continue ROM scan into the
-					;cold-start stub Resident below.
+	dc.l	s_codeend		;EndSkip: end of this module (boot/automount
+					;bringup lives in compactflash.automount)
 	dc.b	RTF_AUTOINIT
 	dc.b	FILE_VERSION
 	dc.b	NT_DEVICE
@@ -2303,6 +2324,8 @@ _t_1:
 	move.l	CFU_KillTask(a3),a1
 	CALLSAME Signal
 
+	bsr	_SpawnMountAgent	;DOS-time automount worker (best-effort)
+
 ;- - card already inserted? - - - - - - - - - - - - - - - -
 ;   Poll CCDET for up to 1s on cold boot: GAYLE VCC and the
 ;   PCMCIA card-detect line may not be electrically stable
@@ -2463,7 +2486,7 @@ _t_do:
 ;                                                   handler not in)
 ;
 ; The ATAPI build flag (default 0) compiles in or out the
-; ATAPI handler at _t_iatapi.  -atapi releases ATAPI cards
+; ATAPI handler at _t_iatapi. -atapi releases ATAPI cards
 ; classified by IDENTIFY so a dedicated ATAPI driver can
 ; claim them; +atapi routes ATAPI cards through the handler.
 ;===========================================================
@@ -2540,9 +2563,9 @@ _t_i2:
 	; CIS gate report
 	DBGMSG	dbg_cis_scan
 
-	; Read CISTPL_DEVICE.  On cold boot the card sometimes hasn't
+	; Read CISTPL_DEVICE. On cold boot the card sometimes hasn't
 	; finished populating its attribute memory yet and returns an
-	; all-zero "NULL/hole" tuple (type=0x00).  Retry up to 10 times
+	; all-zero "NULL/hole" tuple (type=0x00). Retry up to 10 times
 	; (~400ms) before giving up and falling through to FUNCID.
 	moveq.l	#10,d2
 _t_dev_retry:
@@ -2634,8 +2657,8 @@ _t_cis_gate_accept:
 	;-- Require CISTPL_FUNCEXT to declare IDE ----------------------
 	; After DEVICE/FUNCID tentatively accept, demand a well-formed
 	; FUNCEXT (0x22) with TPLFE_TYPE=1 (Disk Interface) and
-	; Interface=1 (IDE).  Absent, malformed, or non-IDE rejects
-	; the card before IDENTIFY.  Retry the read up to 10 times to
+	; Interface=1 (IDE). Absent, malformed, or non-IDE rejects
+	; the card before IDENTIFY. Retry the read up to 10 times to
 	; tolerate CIS attribute-memory read instability on hardware
 	; like A1200 + ACA1234 (mirrors the CISTPL_CONFIG retry).
 	moveq.l	#10,d6			;FUNCEXT retry counter
@@ -2715,7 +2738,7 @@ _t_cis_gate_end:
 
 	; Try to locate CISTPL_CONFIG tuple for config register address.
 	; On cold boot the CIS attribute memory may parse OK structurally
-	; but every byte still reads as zero, yielding addr=0.  Retry the
+	; but every byte still reads as zero, yielding addr=0. Retry the
 	; read up to 10 times before falling back to 0x200.
 	; Sets CFU_ConfigAddr and leaves a2 pointing at the CCR base.
 	moveq.l	#10,d3
@@ -2929,6 +2952,7 @@ _t_iok:
 	DBGMSG	dbg_id_ok
 	DBGMSG	dbg_notify
 	bsr	NotifyClients
+	bsr	_MountAgentSignal	;wake automount agent (insert/no-disk)
 	bra.w	_t_check
 
 _t_identify_failed:
@@ -2982,6 +3006,7 @@ _t_disown:
 	clr.l	(a0)+
 	dbf	d0,.clr_loop
 	bsr	NotifyClients
+	bsr	_MountAgentSignal	;wake automount agent (teardown)
 	moveq.l	#0,d0
 	lea	CFU_CardHandle(a3),a1
 	CALLCARD ReleaseCard
@@ -3021,6 +3046,864 @@ _t_fs2:
 _t_end:
 	sub.l	a1,a1
 	JMPEXEC RemTask
+
+;===========================================================
+; DOS-time automount agent
+;
+; Spawned per unit by _SpawnMountAgent at unit startup. Waits on
+; CFU_MountSig; on each wake (the unit task signals it after
+; NotifyClients on insert/remove) it reconciles partition.resource
+; via ptable.library v2:
+;     card present -> ScanPartitions + MountPartitions
+;     card absent  -> UnmountPartitions
+; Both LVOs are idempotent, so a coalesced or stale wake is harmless.
+;
+; The agent is a bare Exec Task. The worker process reads ENV:ptable.prefs
+; (AUTOMOUNT / FLAGS / UNMOUNT) and applies it.
+;===========================================================
+
+;-- _MountAgentSignal: wake the agent if it is up. a3=&Unit, a4=&Dev.
+_MountAgentSignal:
+	movem.l	d0/d1/a1/a6,-(sp)
+	move.l	CFU_MountSig(a3),d0
+	beq.s	_masig_done
+	move.l	CFU_MountAgent(a3),d1
+	beq.s	_masig_done
+	move.l	d1,a1
+	CALLEXEC Signal
+_masig_done:
+	movem.l	(sp)+,d0/d1/a1/a6
+	rts
+
+;-- _SpawnMountAgent: create the agent task (best-effort). a3=&Unit,
+;   a4=&Dev. Mirrors NewUnit's task allocation (MemList + stack/Task +
+;   AddTask), minus the startup handshake. On failure CFU_MountAgent
+;   stays 0 and the device simply has no automount.
+MA_STACK	= 4096
+
+; Settle (dos ticks, 50/s) the mount worker waits after scanning before it
+; mounts, so a device-dostype handler that just opened us (and triggered this
+; pass) can claim its partition via RegisterPartition first - the worker then
+; reuses it instead of double-mounting.
+MOUNT_SETTLE_TICKS = 50
+
+_SpawnMountAgent:
+	movem.l	d2-d3/a2,-(sp)
+	moveq.l	#MA_STACK>>8,d3
+	lsl.l	#8,d3			;d3 = agent stack size
+	moveq.l	#24,d0
+	move.l	#MEMF_PUBLIC+MEMF_CLEAR,d1
+	CALLEXEC AllocMem
+	move.l	d0,d2			;&MemList
+	beq.w	_sma_out
+	move.l	d0,a1
+	move.w	#1,14(a1)		;ml_NumEntries = 1
+	moveq.l	#TC_Sizeof,d0
+	add.l	d3,d0
+	move.l	d0,20(a1)		;me_Length = Task + stack
+	move.l	#MEMF_PUBLIC+MEMF_CLEAR,d1
+	CALLEXEC AllocMem
+	move.l	d2,a1
+	move.l	d0,16(a1)		;me_Addr = stack base
+	beq.w	_sma_freeml
+	move.l	d0,a2			;&stack
+	add.l	d3,a2			;&Task (top of stack)
+	lea	MAgentName(pc),a0
+	move.l	a0,LN_Name(a2)
+	move.b	#NT_TASK,LN_Type(a2)
+	move.l	a2,TC_SPUpper(a2)
+	move.l	d0,TC_SPLower(a2)
+	move.l	a2,TC_SPReg(a2)		;initial SP = top of stack
+	lea	TC_MemEntry(a2),a0
+	INITLIST a0
+	lea	TC_MemEntry(a2),a0
+	move.l	d2,a1
+	CALLEXEC AddHead		;MemList -> task (RemTask frees it)
+	move.l	a3,TC_UserData(a2)	;&Unit
+	move.l	a2,CFU_MountAgent(a3)
+	move.l	a3,-(sp)		;preserve &Unit across AddTask
+	move.l	a2,a1
+	lea	_MountAgentEntry(pc),a2
+	sub.l	a3,a3			;finalPC = 0
+	CALLEXEC AddTask
+	move.l	(sp)+,a3
+	DBGMSG	dbg_ma_spawn
+	bra.s	_sma_out
+_sma_freeml:
+	moveq.l	#24,d0
+	move.l	d2,a1
+	CALLEXEC FreeMem
+_sma_out:
+	movem.l	(sp)+,d2-d3/a2
+	rts
+
+;-- dos.library pieces for the worker-process launch. AddDosNode with
+;   ADNF_STARTPROC, LockDosList/RemDosEntry and ACTION_DIE are process-
+;   only DOS calls; running them from the bare agent task made dos read
+;   Process fields past the end of the Task struct (first hardware test:
+;   garbage-pointer storm + guru 8000 0003). The agent therefore only
+;   catches events; the DOS work runs in a short-lived worker process.
+;   CreateNewProc is documented callable from a task (dos autodoc) when
+;   nothing needs inheriting; every inheritable tag is given explicitly.
+DOS_CreateNewProc = -498
+
+NP_Dummy	= $80000000+1000
+NP_Seglist	= NP_Dummy+1
+NP_FreeSeglist	= NP_Dummy+2
+NP_Input	= NP_Dummy+4
+NP_Output	= NP_Dummy+5
+NP_CloseInput	= NP_Dummy+6
+NP_CloseOutput	= NP_Dummy+7
+NP_CurrentDir	= NP_Dummy+10
+NP_StackSize	= NP_Dummy+11
+NP_Name		= NP_Dummy+12
+NP_Priority	= NP_Dummy+13
+NP_WindowPtr	= NP_Dummy+15
+NP_CopyVars	= NP_Dummy+17
+
+MW_TAGBYTES	= 26*4			;13 TagItem pairs incl TAG_DONE
+
+;-- _MountAgentEntry: the agent task body.
+;   a3=&Unit, a4=&Dev, d5=wake mask, d4=done mask, d7=dos base.
+;   Pure event catcher: waits for the unit task's Signal, makes sure
+;   dos.library is up, then runs one CF.MountWork process and waits for
+;   its done-Signal (serialises workers; coalesced events just rerun).
+_MountAgentEntry:
+	move.l	(_AbsExecBase).w,a6
+	sub.l	a1,a1
+	jsr	FindTask(a6)
+	move.l	d0,a0
+	move.l	TC_UserData(a0),a3	;&Unit
+	move.l	CFU_Device(a3),a4	;&Dev (for CALLEXEC)
+	moveq.l	#0,d4
+	moveq.l	#0,d5
+	moveq.l	#0,d7
+;-- allocate the wake + worker-done signals in this task
+	moveq.l	#-1,d0
+	CALLEXEC AllocSignal
+	cmp.b	#-1,d0
+	beq.w	_ma_die
+	bset	d0,d5			;d5 = wake mask
+	moveq.l	#-1,d0
+	CALLEXEC AllocSignal
+	cmp.b	#-1,d0
+	beq.w	_ma_die
+	bset	d0,d4			;d4 = done mask
+	move.l	d4,CFU_MountDone(a3)
+	move.l	d5,CFU_MountSig(a3)	;publish last: signals valid now
+
+;-- Disk-loaded driver: CFD_BootDone == 0 means RTF_COLDSTART /
+;   RTF_AFTERDOS never ran, so mark DOS ready here (DOS is up at
+;   disk-load time). ROM builds (== 1) keep the AFTERDOS gate.
+	tst.b	CFD_BootDone(a4)
+	bne.s	_ma_loop
+	move.b	#1,CFD_DosReady(a4)
+;-- file-based load: no AFTERDOS hook to kick us, and the unit task's
+;   startup card-detect signalled before our wake signal existed (lost).
+;   Self-signal so the first loop reconciles a card already in the slot.
+	bsr	_MountAgentSignal
+
+_ma_loop:
+	move.l	d5,d0
+	CALLEXEC Wait
+	ifd	DEBUG
+	move.l	CFU_DriveSize(a3),d0
+	bne.s	_ma_wk_in
+	DBGMSG	dbg_ma_wake_out
+	bra.s	_ma_wk_done
+_ma_wk_in:
+	DBGMSG	dbg_ma_wake_in
+_ma_wk_done:
+	endc
+;-- Defer everything until System-Startup reports DOS functional (the
+;   RTF_AFTERDOS hook sets CFD_DosReady and re-signals us, so deferred
+;   events are reprocessed). The agent must never call dos.library
+;   while System-Startup is still building it: the first hardware test
+;   raced it (CreateNewProc into a half-built DOS, wild jump to PC=8).
+	tst.b	CFD_DosReady(a4)
+	beq.w	_ma_loop
+	bsr	_ma_dos_open		;d7 = DOSBase (opened once, kept)
+	DBGMSG	dbg_ma_dos
+	tst.l	d7
+	beq.w	_ma_loop		;cannot happen post-AFTERDOS; be safe
+;-- launch the worker process (tag list built on the stack; the seglist
+;   BPTR must be computed at runtime, so no static table)
+	moveq.l	#0,d1
+	move.l	d1,-(sp)		;TAG_DONE data (unread)
+	move.l	d1,-(sp)		;TAG_DONE
+	move.l	d1,-(sp)		;NP_CopyVars = FALSE
+	move.l	#NP_CopyVars,-(sp)
+	moveq.l	#-1,d0
+	move.l	d0,-(sp)		;NP_WindowPtr = -1 (no requesters)
+	move.l	#NP_WindowPtr,-(sp)
+	move.l	d1,-(sp)		;NP_CurrentDir = 0
+	move.l	#NP_CurrentDir,-(sp)
+	move.l	d1,-(sp)		;NP_CloseOutput = FALSE
+	move.l	#NP_CloseOutput,-(sp)
+	move.l	d1,-(sp)		;NP_CloseInput = FALSE
+	move.l	#NP_CloseInput,-(sp)
+	move.l	d1,-(sp)		;NP_Output = 0
+	move.l	#NP_Output,-(sp)
+	move.l	d1,-(sp)		;NP_Input = 0
+	move.l	#NP_Input,-(sp)
+	move.l	#8192,-(sp)		;NP_StackSize
+	move.l	#NP_StackSize,-(sp)
+	move.l	d1,-(sp)		;NP_Priority = 0
+	move.l	#NP_Priority,-(sp)
+	pea	MWorkName(pc)		;NP_Name
+	move.l	#NP_Name,-(sp)
+	move.l	d1,-(sp)		;NP_FreeSeglist = FALSE (ROM seglist!)
+	move.l	#NP_FreeSeglist,-(sp)
+	lea	_ma_fakeseg(pc),a0
+	move.l	a0,d0
+	lsr.l	#2,d0
+	move.l	d0,-(sp)		;NP_Seglist = BPTR(fake ROM seglist)
+	move.l	#NP_Seglist,-(sp)
+	move.l	sp,d1			;d1 = tag list
+	move.l	d7,a6
+	jsr	DOS_CreateNewProc(a6)
+	lea	MW_TAGBYTES(sp),sp
+	tst.l	d0
+	bne.s	_ma_worker_ok
+	DBGMSG	dbg_ma_run_fail
+	bra.w	_ma_loop		;no memory: retry on next event
+_ma_worker_ok:
+;-- wait for the worker to finish (one at a time)
+	move.l	d4,d0
+	CALLEXEC Wait
+	bra.w	_ma_loop
+
+;-- _ma_dos_open: d7 = DOSBase, opened once and kept. Only called
+;   after CFD_DosReady, so a single OpenLibrary suffices (no polling).
+_ma_dos_open:
+	movem.l	d0/a1,-(sp)
+	tst.l	d7
+	bne.s	_mado_done		;already open
+	moveq.l	#36,d0
+	lea	MAgentDosName(pc),a1
+	CALLEXEC OpenLibrary
+	move.l	d0,d7
+_mado_done:
+	movem.l	(sp)+,d0/a1
+	rts
+
+;-- _ma_die: setup failed; clear identity and remove self.
+_ma_die:
+	clr.l	CFU_MountSig(a3)
+	clr.l	CFU_MountDone(a3)
+	clr.l	CFU_MountAgent(a3)
+	tst.l	d5
+	beq.s	_ma_die_2
+	move.l	d5,d0
+	LOG2
+	CALLEXEC FreeSignal
+_ma_die_2:
+	tst.l	d4
+	beq.s	_ma_die_rt
+	move.l	d4,d0
+	LOG2
+	CALLEXEC FreeSignal
+_ma_die_rt:
+	sub.l	a1,a1
+	JMPEXEC	RemTask
+
+;-- Fake seglist for NP_Seglist: BPTR -> the next-BPTR longword; DOS
+;   starts execution 4 bytes after it. Lives in ROM, never freed
+;   (NP_FreeSeglist = FALSE).
+	cnop	0,4
+	dc.l	16			;fake segment length (never freed)
+_ma_fakeseg:
+	dc.l	0			;next segment = none
+	jmp	_MountWorkEntry(pc)
+
+;-- _MountWorkEntry: the worker, a real DOS process. Looks up the
+;   device by name (single unit), reconciles partition.resource against
+;   the live card state via ptable.library v2, signals the agent, exits.
+_MountWorkEntry:
+	movem.l	d2-d7/a2-a6,-(sp)
+	lea	-CFG_SIZEOF(sp),sp	;config frame
+	move.l	sp,a5			;a5 = config frame base
+	move.l	(_AbsExecBase).w,a6
+	jsr	Forbid(a6)
+	lea	SB_DeviceList(a6),a0
+	lea	s_name(pc),a1		;"compactflash.device"
+	jsr	FindName(a6)
+	move.l	d0,d2
+	jsr	Permit(a6)
+	tst.l	d2
+	beq.w	_mw_out			;device gone: nothing to do
+	move.l	d2,a4			;&Dev (for CALLEXEC / DBGMSG)
+	move.l	CFD_Unit(a4),d0
+	beq.w	_mw_out
+	move.l	d0,a3			;&Unit
+;-- open ptable.library v2; without it there is nothing to reconcile
+	moveq.l	#2,d0
+	lea	RdbLibName(pc),a1	;"ptable.library"
+	CALLEXEC OpenLibrary
+	move.l	d0,d6
+	ifd	DEBUG
+	bne.s	_mw_haveLib
+	DBGMSG	dbg_mw_pt_fail
+	bra.w	_mw_done
+_mw_haveLib:
+	DBGMSG	dbg_mw_pt
+	else
+	beq.w	_mw_done
+	endc
+	bsr	_mwReadConfig		;ENV:cfd.prefs -> a5 frame
+	ifd	DEBUG
+	move.w	CFG_MountCfg+mc_Flags+2(a5),d0	;global FLAGS -> gate so worker trace shows
+	or.w	d0,CFU_OpenFlags(a3)
+	DBGMSG	dbg_mw_cfg_b
+	move.l	CFG_DbgRead(a5),d0
+	DBGDEC
+	DBGMSG	dbg_mw_cfg_am
+	moveq.l	#0,d0
+	move.b	CFG_AutoMount(a5),d0
+	DBGDEC
+	DBGMSG	dbg_mw_cfg_fl
+	move.l	CFG_MountCfg+mc_Flags(a5),d0
+	DBGDEC
+	DBGNL
+	endc
+	tst.l	CFU_DriveSize(a3)
+	beq.w	_mw_unmount
+;-- card present: always scan/publish so the partitions show in lsptres
+;   (partition.resource only, no DOS nodes); mount only if automount is on.
+	DBGMSG	dbg_mw_scan_b
+	move.l	d6,a6
+	lea	s_name(pc),a1
+	moveq.l	#0,d0			;unit 0 (the only unit)
+	jsr	_LVOScanPartitions(a6)
+	DBGMSG	dbg_mw_scan_a
+	DBGDEC
+	DBGNL
+	tst.b	CFG_AutoMount(a5)
+	beq.w	_mw_close		;automount off: published for lsptres, not mounted
+;-- settle: let an in-flight handler mount (a device-dostype DOSDriver that just
+;   opened us) register its partition before we mount, so MountPartitions reuses
+;   it (PEB_MOUNTED) instead of starting a second handler on the same partition.
+	moveq.l	#0,d0			;any version
+	lea	MAgentDosName(pc),a1
+	CALLEXEC OpenLibrary
+	tst.l	d0
+	beq.s	_mw_settled
+	move.l	d0,d2			;d2 = DOSBase (preserved across Delay)
+	move.l	d0,a6
+	move.l	#MOUNT_SETTLE_TICKS,d1
+	jsr	Delay(a6)
+	move.l	d2,a1
+	CALLEXEC CloseLibrary
+_mw_settled:
+	DBGMSG	dbg_mw_mnt_b
+	move.l	d6,a6
+	lea	s_name(pc),a1
+	moveq.l	#0,d0
+	lea	CFG_MountCfg(a5),a0	;MountCfg -> per-partition Flags/Control
+	jsr	_LVOMountPartitions(a6)
+	DBGMSG	dbg_mw_mnt_a
+	DBGDEC
+	DBGNL
+	bra.s	_mw_close
+_mw_unmount:
+;-- card removed: empty UNMOUNT list -> MarkAbsent (keep node + handler);
+;   non-empty -> UnmountPartitions(prefixList) (unmount the listed filesystems).
+	DBGMSG	dbg_mw_umnt_b
+	move.l	d6,a6
+	lea	s_name(pc),a1
+	moveq.l	#0,d0
+	lea	CFG_Prefixes(a5),a0
+	tst.l	(a0)			;empty prefix list?
+	bne.s	_mw_detach
+	jsr	_LVOMarkAbsent(a6)
+	bra.s	_mw_detach_dbg
+_mw_detach:
+	jsr	_LVOUnmountPartitions(a6)
+_mw_detach_dbg:
+	DBGMSG	dbg_mw_umnt_a
+	DBGDEC
+	DBGNL
+_mw_close:
+	move.l	d6,a1
+	CALLEXEC CloseLibrary
+_mw_done:
+;-- wake the agent (it serialises on this)
+	move.l	CFU_MountDone(a3),d0
+	beq.s	_mw_out
+	move.l	CFU_MountAgent(a3),d1
+	beq.s	_mw_out
+	move.l	d1,a1
+	CALLEXEC Signal
+_mw_out:
+	lea	CFG_SIZEOF(sp),sp	;release config frame
+	movem.l	(sp)+,d2-d7/a2-a6
+	moveq.l	#0,d0
+	rts
+
+;===========================================================
+; _mwReadConfig: read ENV:cfd.prefs into the config frame via GetVar (global,
+; binary so multi-line is read whole) and build a MountCfg. Line-oriented,
+; exact whole-word keys: AUTOMOUNT / FLAGS / CONTROL / UNMOUNT (global) plus
+; FLAGS_<fs> / CONTROL_<fs> per-dostype overrides. A missing var or key keeps
+; the default (flags 0, no control). AUTOMOUNT defaults on everywhere (ROM and
+; file-based alike); opt out with AUTOMOUNT 0 in cfd.prefs. UNMOUNT defaults to
+; all supported filesystems; an UNMOUNT key with no recognized names (e.g.
+; UNMOUNT NONE) keeps handlers on removal instead.
+; In : a5 = config frame. Preserves a3/a4/a5/d6/d7.
+;===========================================================
+CFG_BUFSZ	= 256
+CFG_OVMAX	= 6			;max override rows
+CFG_NCTL	= 8			;control-pool slots (global + per-FS)
+CFG_CTLSZ	= 32			;bytes per control slot
+
+CFG_Buf		= 0			;config text buffer (0..255)
+CFG_Prefixes	= 256			;UNMOUNT dostype list, 0-terminated (8 longs)
+CFG_AutoMount	= 288			;byte (1 = automount on)
+CFG_CtlNext	= 289			;byte (control slots used)
+CFG_OvNext	= 290			;byte (override rows used)
+CFG_DbgRead	= 292			;long GetVar result (-1 = var not defined)
+CFG_MountCfg	= 296			;MountCfg (mc_Flags/mc_Control/mc_Overrides)
+CFG_Overrides	= 308			;(CFG_OVMAX+1) override rows * ovr_Sizeof
+CFG_Controls	= 420			;CFG_NCTL control C-string slots * CFG_CTLSZ
+CFG_SIZEOF	= 676
+
+_mwReadConfig:
+	movem.l	d0-d7/a0-a4/a6,-(sp)
+	move.b	#1,CFG_AutoMount(a5)	;automount on by default everywhere; opt
+					;out via AUTOMOUNT 0 in ENV:cfd.prefs
+	move.l	#-1,CFG_DbgRead(a5)
+	clr.b	CFG_CtlNext(a5)
+	clr.b	CFG_OvNext(a5)
+	clr.l	CFG_MountCfg+mc_Flags(a5)
+	clr.l	CFG_MountCfg+mc_Control(a5)
+	clr.l	CFG_MountCfg+mc_Overrides(a5)
+;-- default UNMOUNT list: every um_table prefix (unmount all supported
+;   filesystems on removal). An explicit UNMOUNT key rebuilds the list; a key
+;   with no recognized names leaves it empty (keep handlers). 6 prefixes +
+;   terminator fit the 8-long CFG_Prefixes field.
+	lea	CFG_Prefixes(a5),a0
+	lea	um_table(pc),a1
+_cfg_umdef:
+	move.l	(a1)+,d0		;name ptr (0 = end of table)
+	beq.s	_cfg_umdef_done
+	move.l	(a1)+,(a0)+		;append the row's dostype prefix
+	bra.s	_cfg_umdef
+_cfg_umdef_done:
+	clr.l	(a0)			;terminate prefix list
+	lea	CFG_Overrides(a5),a0
+	clr.l	ovr_Prefix(a0)		;empty override table (terminator)
+	move.l	(_AbsExecBase).w,a6
+	moveq.l	#36,d0
+	lea	MAgentDosName(pc),a1	;"dos.library"
+	jsr	OpenLibrary(a6)
+	tst.l	d0
+	beq.w	_cfg_done		;no dos.library -> defaults
+	move.l	d0,a2			;a2 = DOSBase
+;-- read the global env var whole (binary so newlines are kept)
+	move.l	a2,a6
+	lea	s_cfgname(pc),a0
+	move.l	a0,d1			;name = "cfd.prefs" (bare, no ENV:)
+	lea	CFG_Buf(a5),a0
+	move.l	a0,d2			;buffer
+	move.l	#CFG_BUFSZ-1,d3		;buffer size
+	move.l	#GVF_GLOBAL_ONLY!GVF_BINARY_VAR,d4
+	jsr	DosGetVar(a6)
+	move.l	d0,d3			;d3 = length, or -1 if not defined
+	move.l	d3,CFG_DbgRead(a5)
+	move.l	a2,a1
+	move.l	(_AbsExecBase).w,a6
+	jsr	CloseLibrary(a6)
+	tst.l	d3
+	ble.w	_cfg_done		;not defined / empty -> defaults
+	cmp.l	#CFG_BUFSZ-1,d3
+	bcs.s	_cfg_term
+	move.l	#CFG_BUFSZ-1,d3
+_cfg_term:
+	lea	CFG_Buf(a5),a0
+	clr.b	0(a0,d3.l)		;NUL-terminate
+;-- AUTOMOUNT
+	lea	CFG_Buf(a5),a0
+	lea	kw_automount(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_flags
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	cmp.b	#'0',(a0)
+	bne.s	_cfg_am_on		;explicit non-0 value -> on (overrides default)
+	clr.b	CFG_AutoMount(a5)	;AUTOMOUNT 0 -> off
+	bra.s	_cfg_flags
+_cfg_am_on:
+	move.b	#1,CFG_AutoMount(a5)	;AUTOMOUNT 1 -> on
+_cfg_flags:
+;-- global FLAGS
+	lea	CFG_Buf(a5),a0
+	lea	kw_flags(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_control
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	bsr	_cfgDec
+	move.l	d0,CFG_MountCfg+mc_Flags(a5)
+_cfg_control:
+;-- global CONTROL
+	lea	CFG_Buf(a5),a0
+	lea	kw_control(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_ovkw
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	bsr	_cfgCtl
+	move.l	d0,CFG_MountCfg+mc_Control(a5)
+_cfg_ovkw:
+;-- per-FS overrides: {keyword, dostype-prefix, isControl} rows
+	lea	ovkw_table(pc),a4
+_cfg_ovloop:
+	move.l	(a4),d0			;keyword (0 = end)
+	beq.s	_cfg_unmount
+	move.l	d0,a1
+	lea	CFG_Buf(a5),a0
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_ovnext
+	move.l	d0,a0			;a0 = value start
+	bsr	_cfgSkipSp
+	move.l	4(a4),d0		;prefix
+	bsr	_cfgFindOrAddOv		;d1 = row (0 = table full)
+	tst.l	d1
+	beq.s	_cfg_ovnext
+	move.l	d1,a1			;a1 = override row
+	tst.l	8(a4)			;isControl?
+	bne.s	_cfg_ovctl
+	bsr	_cfgDec			;FLAGS_<fs>
+	move.l	d0,ovr_Flags(a1)
+	move.b	#1,ovr_HasFlags(a1)
+	bra.s	_cfg_ovnext
+_cfg_ovctl:
+	bsr	_cfgCtl			;CONTROL_<fs>
+	move.l	d0,ovr_Control(a1)
+_cfg_ovnext:
+	lea	12(a4),a4		;next ovkw row (12 bytes)
+	bra.s	_cfg_ovloop
+_cfg_unmount:
+	lea	CFG_Buf(a5),a0
+	lea	kw_unmount(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_done		;no UNMOUNT key -> keep default (unmount all)
+	lea	CFG_Prefixes(a5),a2	;output cursor
+	lea	um_table(pc),a3		;{name, dostype prefix} rows
+_cfg_um_loop:
+	move.l	(a3),d0			;name pointer (0 = end of table)
+	beq.s	_cfg_um_term
+	lea	CFG_Buf(a5),a0
+	move.l	d0,a1			;needle = FS name
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_um_next
+	move.l	4(a3),(a2)+		;name present -> append its dostype prefix
+_cfg_um_next:
+	addq.l	#8,a3			;next row
+	bra.s	_cfg_um_loop
+_cfg_um_term:
+	clr.l	(a2)			;terminate prefix list
+_cfg_done:
+	movem.l	(sp)+,d0-d7/a0-a4/a6
+	rts
+
+;-- _cfgStr: find NUL-term needle (a1) as a WHOLE WORD in NUL-term haystack (a0).
+;   Word char = [A-Za-z0-9_]; the match must be bounded by non-word chars (or the
+;   buffer ends) on both sides, so FLAGS does not match inside FLAGS_DOS and a
+;   name DOS does not match inside FLAGS_DOS.
+;   Out: d0 = ptr just past the match, or 0. Preserves d2-d3/a2-a4.
+_cfgStr:
+	movem.l	d2-d3/a2-a4,-(sp)
+	move.l	a1,a3			;needle start
+	move.l	a0,a4			;haystack start
+_cs_outer:
+	tst.b	(a0)
+	beq.s	_cs_no			;haystack end -> no match
+	cmp.l	a0,a4
+	beq.s	_cs_try			;at start -> prev boundary ok
+	move.l	a0,a2
+	subq.l	#1,a2
+	move.b	(a2),d2
+	bsr	_cfgWordCh
+	tst.b	d0
+	bne.s	_cs_adv			;prev is word char -> not a word start
+_cs_try:
+	move.l	a0,a2			;haystack cursor
+	move.l	a3,a1			;needle cursor
+_cs_inner:
+	move.b	(a1)+,d3
+	beq.s	_cs_chksfx		;needle end -> check suffix boundary
+	move.b	(a2)+,d2
+	beq.s	_cs_no			;haystack ended mid-needle
+	cmp.b	d3,d2
+	beq.s	_cs_inner
+	bra.s	_cs_adv			;mismatch
+_cs_chksfx:
+	move.b	(a2),d2			;char just past match
+	bsr	_cfgWordCh
+	tst.b	d0
+	bne.s	_cs_adv			;suffix is word char -> not whole word
+	move.l	a2,d0			;whole-word match
+	bra.s	_cs_ret
+_cs_adv:
+	addq.l	#1,a0
+	bra.s	_cs_outer
+_cs_no:
+	moveq.l	#0,d0
+_cs_ret:
+	movem.l	(sp)+,d2-d3/a2-a4
+	rts
+
+;-- _cfgWordCh: d2.b char -> d0.b = 1 if [A-Za-z0-9_] else 0.
+_cfgWordCh:
+	moveq.l	#1,d0
+	cmp.b	#'0',d2
+	bcs.s	_cwc_a
+	cmp.b	#'9',d2
+	bls.s	_cwc_ret
+_cwc_a:
+	cmp.b	#'A',d2
+	bcs.s	_cwc_b
+	cmp.b	#'Z',d2
+	bls.s	_cwc_ret
+_cwc_b:
+	cmp.b	#'a',d2
+	bcs.s	_cwc_c
+	cmp.b	#'z',d2
+	bls.s	_cwc_ret
+_cwc_c:
+	cmp.b	#'_',d2
+	beq.s	_cwc_ret
+	moveq.l	#0,d0
+_cwc_ret:
+	rts
+
+;-- _cfgSkipSp: advance a0 past spaces, tabs and '='. Clobbers d0.
+_cfgSkipSp:
+	move.b	(a0),d0
+	cmp.b	#' ',d0
+	beq.s	_csk_adv
+	cmp.b	#9,d0
+	beq.s	_csk_adv
+	cmp.b	#'=',d0
+	beq.s	_csk_adv
+	rts
+_csk_adv:
+	addq.l	#1,a0
+	bra.s	_cfgSkipSp
+
+;-- _cfgDec: parse unsigned decimal at a0 -> d0. Advances a0; preserves a1-a4.
+_cfgDec:
+	movem.l	d1-d2,-(sp)
+	moveq.l	#0,d1
+_cfgdec_l:
+	moveq.l	#0,d0
+	move.b	(a0)+,d0
+	sub.b	#'0',d0
+	bcs.s	_cfgdec_e
+	cmp.b	#9,d0
+	bhi.s	_cfgdec_e
+	move.l	d1,d2
+	lsl.l	#3,d1
+	add.l	d2,d1
+	add.l	d2,d1			;d1 = d1*10
+	add.l	d0,d1
+	bra.s	_cfgdec_l
+_cfgdec_e:
+	move.l	d1,d0
+	movem.l	(sp)+,d1-d2
+	rts
+
+;-- _cfgCtl: copy the CONTROL value at a0 (optionally "quoted") into the next
+;   control-pool slot. Out: d0 = slot addr, or 0 (empty / pool full).
+;   Preserves a1-a4/d1-d4.
+_cfgCtl:
+	movem.l	d1-d4/a1-a2,-(sp)
+	moveq.l	#0,d1
+	move.b	CFG_CtlNext(a5),d1
+	cmp.b	#CFG_NCTL,d1
+	bhs.s	_cfgctl_none
+	move.l	d1,d4
+	lsl.l	#5,d4			;*CFG_CTLSZ (32)
+	lea	CFG_Controls(a5),a1
+	add.l	d4,a1			;a1 = slot base
+	move.l	a1,a2			;a2 = dest cursor
+	moveq.l	#CFG_CTLSZ-1,d3
+	moveq.l	#0,d2			;quote flag
+	cmp.b	#'"',(a0)
+	bne.s	_cfgctl_cp
+	addq.l	#1,a0
+	moveq.l	#1,d2
+_cfgctl_cp:
+	move.b	(a0)+,d1
+	beq.s	_cfgctl_end
+	tst.b	d2
+	bne.s	_cfgctl_q
+	cmp.b	#' ',d1			;ws-delimited: stop at space/ctrl
+	bls.s	_cfgctl_end
+	cmp.b	#',',d1
+	beq.s	_cfgctl_end
+	bra.s	_cfgctl_put
+_cfgctl_q:
+	cmp.b	#'"',d1			;closing quote
+	beq.s	_cfgctl_end
+_cfgctl_put:
+	tst.l	d3
+	beq.s	_cfgctl_end
+	move.b	d1,(a2)+
+	subq.l	#1,d3
+	bra.s	_cfgctl_cp
+_cfgctl_end:
+	clr.b	(a2)			;NUL-terminate slot
+	tst.b	(a1)
+	beq.s	_cfgctl_none		;empty -> no slot consumed
+	addq.b	#1,CFG_CtlNext(a5)
+	move.l	a1,d0
+	movem.l	(sp)+,d1-d4/a1-a2
+	rts
+_cfgctl_none:
+	moveq.l	#0,d0
+	movem.l	(sp)+,d1-d4/a1-a2
+	rts
+
+;-- _cfgFindOrAddOv: find the override row for prefix d0, else append one.
+;   Out: d1 = row addr, or 0 if table full. Preserves a0/d0/a2-a4.
+_cfgFindOrAddOv:
+	movem.l	d2/a1-a2,-(sp)
+	lea	CFG_Overrides(a5),a1
+_cfoa_scan:
+	move.l	ovr_Prefix(a1),d2
+	beq.s	_cfoa_add
+	cmp.l	d2,d0
+	beq.s	_cfoa_hit
+	lea	ovr_Sizeof(a1),a1
+	bra.s	_cfoa_scan
+_cfoa_add:
+	moveq.l	#0,d2
+	move.b	CFG_OvNext(a5),d2
+	cmp.b	#CFG_OVMAX,d2
+	bhs.s	_cfoa_full
+	addq.b	#1,CFG_OvNext(a5)
+	move.l	d0,ovr_Prefix(a1)
+	clr.l	ovr_Flags(a1)
+	clr.b	ovr_HasFlags(a1)
+	clr.l	ovr_Control(a1)
+	lea	ovr_Sizeof(a1),a2
+	clr.l	ovr_Prefix(a2)		;new terminator
+	lea	CFG_Overrides(a5),a2
+	move.l	a2,CFG_MountCfg+mc_Overrides(a5)
+_cfoa_hit:
+	move.l	a1,d1
+	movem.l	(sp)+,d2/a1-a2
+	rts
+_cfoa_full:
+	moveq.l	#0,d1
+	movem.l	(sp)+,d2/a1-a2
+	rts
+
+s_cfgname:	dc.b	"cfd.prefs",0
+kw_automount:	dc.b	"AUTOMOUNT",0
+kw_flags:	dc.b	"FLAGS",0
+kw_control:	dc.b	"CONTROL",0
+kw_unmount:	dc.b	"UNMOUNT",0
+kw_flags_dos:	dc.b	"FLAGS_DOS",0
+kw_flags_ffs:	dc.b	"FLAGS_FFS",0
+kw_flags_sfs:	dc.b	"FLAGS_SFS",0
+kw_flags_pfs:	dc.b	"FLAGS_PFS",0
+kw_flags_fat:	dc.b	"FLAGS_FAT",0
+kw_ctl_dos:	dc.b	"CONTROL_DOS",0
+kw_ctl_ffs:	dc.b	"CONTROL_FFS",0
+kw_ctl_sfs:	dc.b	"CONTROL_SFS",0
+kw_ctl_pfs:	dc.b	"CONTROL_PFS",0
+kw_ctl_fat:	dc.b	"CONTROL_FAT",0
+nm_pfs:		dc.b	"PFS",0
+nm_dos:		dc.b	"DOS",0
+nm_ffs:		dc.b	"FFS",0
+nm_sfs:		dc.b	"SFS",0
+nm_fat:		dc.b	"FAT",0
+	even
+
+;-- UNMOUNT name -> dostype-prefix table. Each row: name C-string, prefix
+;   (pe_DosType high 3 bytes). A name may have several rows; add a filesystem
+;   by adding a row. 0 terminates.
+um_table:
+	dc.l	nm_pfs,$50465300	;PFS -> 'PFS'
+	dc.l	nm_pfs,$50445300	;PFS -> 'PDS' (pfs3 alternate)
+	dc.l	nm_dos,$444F5300	;DOS -> 'DOS'
+	dc.l	nm_ffs,$444F5300	;FFS -> 'DOS'
+	dc.l	nm_sfs,$53465300	;SFS -> 'SFS'
+	dc.l	nm_fat,$46415400	;FAT -> 'FAT'
+	dc.l	0
+
+;-- per-FS override keyword table. Each row: keyword, dostype prefix,
+;   isControl (0 = FLAGS_<fs>, 1 = CONTROL_<fs>). PFS has two rows (PFS + PDS).
+;   0 terminates.
+ovkw_table:
+	dc.l	kw_flags_dos,$444F5300,0
+	dc.l	kw_flags_ffs,$444F5300,0
+	dc.l	kw_flags_sfs,$53465300,0
+	dc.l	kw_flags_pfs,$50465300,0
+	dc.l	kw_flags_pfs,$50445300,0
+	dc.l	kw_flags_fat,$46415400,0
+	dc.l	kw_ctl_dos,$444F5300,1
+	dc.l	kw_ctl_ffs,$444F5300,1
+	dc.l	kw_ctl_sfs,$53465300,1
+	dc.l	kw_ctl_pfs,$50465300,1
+	dc.l	kw_ctl_pfs,$50445300,1
+	dc.l	kw_ctl_fat,$46415400,1
+	dc.l	0
+
+MAgentName:
+	dc.b	"CF.MountAgent",0
+MWorkName:
+	dc.b	"CF.MountWork",0
+MAgentDosName:
+	dc.b	"dos.library",0
+RdbLibName:
+	dc.b	"ptable.library",0
+	even
+
+	ifd	DEBUG
+dbg_ma_spawn:
+	dc.b	"[MA] automount agent ready (unit 0)",13,10,0
+dbg_ma_wake_in:
+	dc.b	"[MA] unit 0: card present, automounting",13,10,0
+dbg_ma_wake_out:
+	dc.b	"[MA] unit 0: card removed",13,10,0
+dbg_ma_dos:
+	dc.b	"[MA] unit 0: DOS ready, starting worker",13,10,0
+dbg_ma_run_fail:
+	dc.b	"[MA] unit 0: ERROR could not start mount worker",13,10,0
+dbg_mw_pt:
+	dc.b	"[MW] using ptable.library",13,10,0
+dbg_mw_pt_fail:
+	dc.b	"[MW] ERROR ptable.library unavailable",13,10,0
+dbg_mw_scan_b:
+	dc.b	"[MW] scanning compactflash.device:0 for partitions",13,10,0
+dbg_mw_scan_a:
+	dc.b	"[MW] scan done, partitions known: ",0
+dbg_mw_mnt_b:
+	dc.b	"[MW] mounting new partitions",13,10,0
+dbg_mw_mnt_a:
+	dc.b	"[MW] mounted volumes: ",0
+dbg_mw_umnt_b:
+	dc.b	"[MW] card removed",13,10,0
+dbg_mw_umnt_a:
+	dc.b	"[MW] entries detached: ",0
+dbg_mw_cfg_b:
+	dc.b	"[MW] config: read=",0
+dbg_mw_cfg_am:
+	dc.b	" auto=",0
+dbg_mw_cfg_fl:
+	dc.b	" flags=",0
+	even
+	endc
 
 ;--- a Hack: cfd first -------------------------------------
 
@@ -3198,7 +4081,7 @@ _wc_end:
 ; IS_Code is called with a6=SysBase, a1=IS_Data.
 ;
 ; Trust contract: callers are responsible for calling TD_REMCHANGEINT
-; before their IS_Code memory is freed.  We only reject NULL IO_Data /
+; before their IS_Code memory is freed. We only reject NULL IO_Data /
 ; NULL IS_Code defensively (cheap, catches accidental zero init) and
 ; otherwise dispatch directly to the registered server.
 NotifyClients:
@@ -3806,7 +4689,7 @@ _ri_fail:
 ;   2. Wait for DRQ, retry up to 32 times for slow adapters
 ;   3. If DRQ never sets, fall back to IDENTIFY PACKET DEVICE
 ;      ($A1) as a final attempt to elicit any response from the
-;      card.  See _gid_check_retry for the rationale.
+;      card. See _gid_check_retry for the rationale.
 ;   4. Read 512-byte identify data
 ;   5. Parse device type and set unit parameters
 ;
@@ -5671,215 +6554,6 @@ ap_time:
 ap_end:
 	rts
 	endc
-
-
-;--- ROM AUTOBOOT STUB -------------------------------------
-; RTF_COLDSTART stub, always present. Only when both
-; compactflash.device and ptable.library are ROM-resident
-; ignored by ramlib at DOS time.
-;
-; Remus appends module binaries to the Kickstart image but
-; does not add them to the KickTag list, so Exec's InitCode
-; pass skips them. Recover by calling FindResident +
-; InitResident explicitly for both the device and the
-; library before use.
-;
-; Sequence:
-;   1. Find/init compactflash.device if not yet in DeviceList.
-;   2. Exit early if CFD_BootDone already set (2nd cold-start pass).
-;   3. Find/init ptable.library; if absent (disk-only install)
-;      exit silently - device still works, autoboot unavailable.
-;   4. BootScanRDB("compactflash.device", 0).
-;   5. Set CFD_BootDone, CloseLibrary, return.
-
-	cnop	0,2
-s_resident_boot:
-	dc.w	RTC_MATCHWORD
-	dc.l	s_resident_boot
-	dc.l	s_codeend
-	dc.b	$01			;RTF_COLDSTART (no AUTOINIT)
-	dc.b	FILE_VERSION
-	dc.b	0			;NT_UNKNOWN
-	dc.b	PRI_CFD_BOOT		;see ptable_pub.i for priority rationale
-	dc.l	s_boot_name
-	dc.l	s_idstring
-	dc.l	s_bootstub
-
-s_boot_name:
-	dc.b	"compactflash.boot",0
-RdbLibName:
-	dc.b	"ptable.library",0
-	even
-
-	ifd	DEBUG
-dbg_bs_no_card:
-	dc.b	"[CFD] boot: no PCMCIA card -> skip autoboot",13,10,0
-dbg_bs_open:
-	dc.b	"[CFD] boot: open ptable.library ...",13,10,0
-dbg_bs_preload:
-	dc.b	"[CFD] boot: ptable.library already resident",13,10,0
-dbg_bs_initres:
-	dc.b	"[CFD] boot: ptable.library not preloaded, InitResident()...",13,10,0
-dbg_bs_noires:
-	dc.b	"[CFD] boot: ptable.library not in ROM list - skip autoboot",13,10,0
-dbg_bs_initfail:
-	dc.b	"[CFD] boot: ptable.library InitResident failed",13,10,0
-dbg_bs_scan:
-	dc.b	"[CFD] boot: BootScanRDB(compactflash.device,0)",13,10,0
-	even
-	endc
-
-;-- Boot-stub-local DEBUG/non-DEBUG branch helpers.
-;
-;   DBG_BNE_MSG msg, target  -- DEBUG: tst d0; on NZ print msg and
-;                               unconditionally bra target.
-;                               non-DEBUG: tst d0; bne target.
-;                               (Use on the success / "proceed" leg.)
-;   DBG_BEQ_MSG msg, target  -- dual; prints on Z and jumps.
-;                               (Use on the failure / "give up" leg.)
-;
-;   Both fold the tst.l d0 inside themselves so the 3 OpenLibrary /
-;   FindResident / re-OpenLibrary call sites stay one line each.
-	ifd	DEBUG
-DBG_BNE_MSG	macro
-	tst.l	d0
-	beq.s	.bsdbg_skip\@
-	lea	\1(pc),a0
-	bsr	_bootDebug
-	bra.w	\2
-.bsdbg_skip\@:
-	endm
-DBG_BEQ_MSG	macro
-	tst.l	d0
-	bne.s	.bsdbg_skip\@
-	lea	\1(pc),a0
-	bsr	_bootDebug
-	bra.w	\2
-.bsdbg_skip\@:
-	endm
-	else
-DBG_BNE_MSG	macro
-	tst.l	d0
-	bne.w	\2
-	endm
-DBG_BEQ_MSG	macro
-	tst.l	d0
-	beq.w	\2
-	endm
-	endc
-
-s_bootstub:
-	movem.l	d2-d7/a2-a6,-(sp)
-	move.l	a6,a5			;a5 = ExecBase
-
-;-- Probe DeviceList; InitResident if missing.
-	move.l	a5,a6
-	jsr	Forbid(a6)
-	lea	SB_DeviceList(a6),a0
-	lea	s_name(pc),a1
-	jsr	FindName(a6)
-	move.l	d0,d7
-	jsr	Permit(a6)
-
-	tst.l	d7
-	bne.s	_bs_devPresent
-	lea	s_resident(pc),a1
-	sub.l	a0,a0
-	jsr	InitResident(a6)
-;-- re-find after init so we have the live &CFD
-	jsr	Forbid(a6)
-	lea	SB_DeviceList(a6),a0
-	lea	s_name(pc),a1
-	jsr	FindName(a6)
-	move.l	d0,d7
-	jsr	Permit(a6)
-	tst.l	d7
-	beq.w	_bs_done
-;-- Hold the device open (OpenCnt=1) so a whole-machine takeover like
-;   WHDLoad, which flushes anything unused, leaves it alone. First init only.
-	move.l	d7,a0
-	addq.w	#1,LIB_OpenCnt(a0)
-
-_bs_devPresent:
-;-- 2nd-pass guard
-	move.l	d7,a0
-	tst.b	CFD_BootDone(a0)
-	bne.w	_bs_done
-
-;-- No-card pre-gate.  Read live Gayle CCDET ($DA8000 bit 6, set =
-;   card present); when the slot is empty skip OpenDevice to avoid
-;   the unit-task hardware footprint (OwnCard, AddIntServer #5,
-;   timer.device) at cold-start.
-	btst.b	#6,$00DA8000
-	bne.s	_bs_have_card
-	ifd	DEBUG
-	lea	dbg_bs_no_card(pc),a0
-	bsr	_bootDebug
-	endc
-	bra.w	_bs_mark
-_bs_have_card:
-
-;-- OpenLibrary "ptable.library", v1.
-	ifd	DEBUG
-	lea	dbg_bs_open(pc),a0
-	bsr	_bootDebug
-	endc
-	moveq.l	#1,d0
-	lea	RdbLibName(pc),a1
-	jsr	OpenLibrary(a6)
-	DBG_BNE_MSG dbg_bs_preload,_bs_libOk
-
-;-- Remus didn't auto-init ptable.library; find and init it manually.
-;   If absent (disk-only install) FindResident returns NULL -> exit.
-	ifd	DEBUG
-	lea	dbg_bs_initres(pc),a0
-	bsr	_bootDebug
-	endc
-	lea	RdbLibName(pc),a1
-	jsr	FindResident(a6)
-	DBG_BEQ_MSG dbg_bs_noires,_bs_mark
-	move.l	d0,a1			;a1 = &Resident
-	sub.l	a0,a0			;a0 = NULL (no SegList)
-	jsr	InitResident(a6)
-	moveq.l	#1,d0
-	lea	RdbLibName(pc),a1
-	jsr	OpenLibrary(a6)
-	DBG_BEQ_MSG dbg_bs_initfail,_bs_mark
-
-_bs_libOk:
-	move.l	d0,a3			;a3 = ptable.library base
-
-;-- Keep ptable.library in use so a memory-flush takeover (WHDLoad) won't
-;   expunge it once we close it below.
-	addq.w	#1,LIB_OpenCnt(a3)
-
-	ifd	DEBUG
-	lea	dbg_bs_scan(pc),a0
-	bsr	_bootDebug
-	endc
-	moveq.l	#0,d0			;unit 0
-	lea	s_name(pc),a1		;deviceName = "compactflash.device"
-	move.l	a3,a6
-	jsr	_LVOBootScanRDB(a6)
-	move.l	a3,a1
-	move.l	a5,a6
-	jsr	CloseLibrary(a6)
-
-;-- Set the one-shot guard.  d7 still holds &CFD from the
-;   _bs_devPresent / post-InitResident find above; every path that
-;   reaches here (including the DBG_BEQ_MSG -> _bs_mark jumps) has
-;   already validated d7, so no second Forbid+FindName is needed.
-_bs_mark:
-	move.l	d7,a0
-	move.b	#1,CFD_BootDone(a0)
-
-_bs_done:
-	moveq.l	#0,d0
-	movem.l	(sp)+,d2-d7/a2-a6
-	rts
-
-	include	"lib/raw_debug.i"
-
 	cnop	0,4
 
 s_codeend:

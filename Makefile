@@ -6,25 +6,22 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev, -rc1, ...). Empty suffix for a final release.
-RELEASE_DATE = 20260614
-VERSION_SUFFIX =
+RELEASE_DATE = 20260730
+VERSION_SUFFIX = -dev
 
 # compactflash.device version
-CFD_MAJOR = 1
-CFD_MINOR = 44
-CFD_VERSION_SUFFIX =
-CFD_DATE = 04.06.2026
+CFD_MAJOR = 2
+CFD_MINOR = 0
+CFD_VERSION_SUFFIX = -dev
+CFD_DATE = 30.07.2026
 
-# ptable.library version; bumped only on library-ABI changes:
-# - additive LVOs bump REVISION
-# - breaking changes bump MAJOR
-PLIB_MAJOR = 1
-PLIB_MINOR = 1
-PLIB_VERSION_SUFFIX =
-PLIB_DATE = 07.06.2026
+# compactflash.automount version (optional boot/automount module)
+AUTOMOUNT_MAJOR = 2
+AUTOMOUNT_MINOR = 0
+AUTOMOUNT_VERSION_SUFFIX = -dev
+AUTOMOUNT_DATE = 30.07.2026
 
-# Tool-specific versions (MAJOR/MINOR + optional in-progress suffix,
-# same shape as CFD_* and PLIB_* above)
+# Tool-specific versions
 CFINFO_MAJOR = 1
 CFINFO_MINOR = 37
 CFINFO_VERSION_SUFFIX =
@@ -42,14 +39,21 @@ PCMCIACHECK_DATE = 22.05.2026
 
 # Derived versions
 VERSION = $(RELEASE_DATE)$(VERSION_SUFFIX)
+
 # Human-readable date derived from RELEASE_DATE (YYYYMMDD -> DD.MM.YYYY)
 DATE = $(shell echo "$(RELEASE_DATE)" | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\3.\2.\1/')
 CFD_VERSION = $(CFD_MAJOR).$(CFD_MINOR)$(CFD_VERSION_SUFFIX)
 VERSION_INC = src/cfd_version.i
+AUTOMOUNT_VERSION = $(AUTOMOUNT_MAJOR).$(AUTOMOUNT_MINOR)$(AUTOMOUNT_VERSION_SUFFIX)
+AUTOMOUNT_VERSION_INC = src/cfd_automount_version.i
 
-# ptable.library version include (auto-generated like cfd_version.i)
-PLIB_VERSION = $(PLIB_MAJOR).$(PLIB_MINOR)$(PLIB_VERSION_SUFFIX)
-PLIB_VERSION_INC = src/lib/ptable_version.i
+# ptable.library version/date read from the submodule build stamp
+PLIB_VERSION = $(firstword $(shell cat $(PTABLE_VERSION_FILE) 2>/dev/null))
+PLIB_DATE    = $(word 2,$(shell cat $(PTABLE_VERSION_FILE) 2>/dev/null))
+
+# lsptres version/date read from the ptable build stamp.
+LSPTRES_VERSION = $(firstword $(shell cat $(PTABLE_LSPTRES_VERSION_FILE) 2>/dev/null))
+LSPTRES_DATE    = $(word 2,$(shell cat $(PTABLE_LSPTRES_VERSION_FILE) 2>/dev/null))
 
 # Tool versions (derived)
 CFINFO_VERSION      = $(CFINFO_MAJOR).$(CFINFO_MINOR)$(CFINFO_VERSION_SUFFIX)
@@ -57,10 +61,12 @@ PCMCIASPEED_VERSION = $(PCMCIASPEED_MAJOR).$(PCMCIASPEED_MINOR)$(PCMCIASPEED_VER
 PCMCIACHECK_VERSION = $(PCMCIACHECK_MAJOR).$(PCMCIACHECK_MINOR)$(PCMCIACHECK_VERSION_SUFFIX)
 
 # Component table driving TOOLS_ALL and the README/dist auto-gen blocks.
-COMPONENTS = CFD PLIB CFINFO PCMCIASPEED PCMCIACHECK
+COMPONENTS = CFD AUTOMOUNT PLIB CFINFO PCMCIASPEED PCMCIACHECK LSPTRES
 
 CFD_NAME          = compactflash.device
 CFD_KIND          = device
+AUTOMOUNT_NAME      = compactflash.automount
+AUTOMOUNT_KIND      = module
 PLIB_NAME         = ptable.library
 PLIB_KIND         = library
 CFINFO_NAME       = CFInfo
@@ -69,6 +75,8 @@ PCMCIASPEED_NAME  = pcmciaspeed
 PCMCIASPEED_KIND  = tool
 PCMCIACHECK_NAME  = pcmciacheck
 PCMCIACHECK_KIND  = tool
+LSPTRES_NAME      = lsptres
+LSPTRES_KIND      = tool
 
 # "PREFIX|name|version|date" per component, fed to tools/components.sh
 # (the README.md block and the cfd.readme list both render from this).
@@ -76,8 +84,10 @@ COMPONENT_ARGS = $(foreach c,$(COMPONENTS),'$(c)|$($(c)_NAME)|$($(c)_VERSION)|$(
 
 # Flavor x CPU fan-out for assembled artifacts (device, library).
 FLAVORS = full/68020 small/68020 full/68000 small/68000
+# compactflash.automount (KIND=module) ships in libs/ like the library.
 _subdir_device  = devs
 _subdir_library = libs
+_subdir_module  = libs
 
 # Per-component "name:target:version:date" entries; device/library fan out over $(FLAVORS).
 define _artifact_entries
@@ -137,11 +147,20 @@ VASM = $(VASM_HOME)/bin/vasmm68k_mot
 VBCC = $(VBCC_HOME)/bin/vc
 LHA = lha
 EXPECTED_VASM_VERSION = 2.0e
+MD2GUIDE = tools/md2guide.py
 
 # Flags
 # VASMFLAGS is the base set shared by all tiers; per-tier CPU flag
 # (-m68020 / -m68000) is appended in the individual build rules.
-VASMFLAGS = -Fhunkexe -nosym $(DEFINITIONS)
+# ptable.library submodule (override PTABLE= to point elsewhere, e.g. a local
+# checkout).
+PTABLE ?= extern/ptable
+PTABLE_SRC = $(PTABLE)/src
+PTABLE_VERSION_FILE = $(PTABLE)/dist/ptable.version
+PTABLE_LSPTRES_VERSION_FILE = $(PTABLE)/dist/lsptres.version
+
+# -I $(PTABLE_SRC) lets the driver resolve the submodule's ptable_pub.i.
+VASMFLAGS = -Fhunkexe -nosym $(DEFINITIONS) -I $(PTABLE_SRC)
 VBCCFLAGS = +aos68k -O2 -c99 -INDK/Include_H
 
 # CPU tier flags
@@ -164,21 +183,13 @@ OUTDIR_C = $(OUTDIR)/c
 SOURCE = $(SRCDIR)/cfd.s
 # Extra sources pulled in via "include" from cfd.s.  Listed here so
 # a change to them triggers a rebuild of the driver targets below.
-SOURCE_DEPS = $(LIBSRC)/ptable_pub.i \
+SOURCE_DEPS = $(PTABLE_SRC)/ptable_pub.i \
               $(LIBSRC)/umul32.i \
               $(LIBSRC)/log2.i \
               $(LIBSRC)/udivmod32.i \
               $(LIBSRC)/raw_debug.i
 
-# Files: ptable.library
-LIB_SOURCE = $(LIBSRC)/ptable_lib.s
-# Extra sources pulled in via "include" from ptable_lib.s.  Listed here
-# so a change to any of them triggers a rebuild of the library targets.
-LIB_SOURCE_DEPS = $(LIBSRC)/ptable_boot.s $(LIBSRC)/ptable_fs.s \
-                  $(LIBSRC)/ptable_hunk.s $(LIBSRC)/ptable_dosdiag.i \
-                  $(LIBSRC)/ptable_pub.i \
-                  $(LIBSRC)/umul32.i $(LIBSRC)/log2.i \
-                  $(LIBSRC)/raw_debug.i
+# ptable.library is built by the $(PTABLE) submodule, not assembled here.
 
 # Per-flavor / per-cpu output drawers.
 #
@@ -226,6 +237,20 @@ SOURCE_PCMCIASPEED = $(SRCDIR)/pcmciaspeed.c
 TARGET_PCMCIASPEED = $(OUTDIR_C)/pcmciaspeed
 SOURCE_PCMCIACHECK = $(SRCDIR)/pcmciacheck.c
 TARGET_PCMCIACHECK = $(OUTDIR_C)/pcmciacheck
+# lsptres binary + guide are built by the $(PTABLE) submodule and copied
+# from its dist/, so every release ships the ptable-built bytes.
+TARGET_LSPTRES = $(OUTDIR_C)/lsptres
+
+# compactflash.automount: optional boot/automount bringup module (cold-boot
+# autoboot + after-DOS device open), split out of compactflash.device.  Shipped
+# in libs/ per tier (full = boot serial, small = none); 68000-safe so the same
+# binary runs on every CPU.  Load only when autoboot/automount is wanted.
+SOURCE_AUTOMOUNT = $(SRCDIR)/cfd_automount.s
+AUTOMOUNT_TARGETS = \
+  $(OUTDIR)/full/68020/libs/compactflash.automount  \
+  $(OUTDIR)/full/68000/libs/compactflash.automount  \
+  $(OUTDIR)/small/68020/libs/compactflash.automount \
+  $(OUTDIR)/small/68000/libs/compactflash.automount
 
 # Files: Release
 RELEASE_NAME = cfd.v$(VERSION)
@@ -239,7 +264,7 @@ README_INFO = dist/cfd.readme.info
 # ============================================================
 
 # Default target - build all driver tiers, library, and tools
-all: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+all: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
 
 # Generate version include file (always check, only update if changed)
 # Uses a stamp file to track the current version string
@@ -268,26 +293,55 @@ $(VERSION_INC): $(VERSION_STAMP)
 	$(Q)echo "	endc" >> $@
 	$(Q)echo "	endm" >> $@
 
-# ptable.library version include - regenerated whenever the library
-# version macros above change (the stamp file already tracks the
-# device VERSION; library version is bound to it because both are
-# released as one archive).
-$(PLIB_VERSION_INC): $(VERSION_STAMP)
-	$(Q)echo "  VERSION ptable.library $(PLIB_VERSION)"
+# compactflash.automount version include (own component version, stamp-tracked)
+# Regenerated only when the Makefile (which holds the version/date) changes.
+$(AUTOMOUNT_VERSION_INC): Makefile
+	$(Q)echo "  VERSION compactflash.automount $(AUTOMOUNT_VERSION)"
 	$(Q)echo "; Auto-generated by Makefile" > $@
-	$(Q)echo "LIB_VERSION	= $(PLIB_MAJOR)" >> $@
-	$(Q)echo "LIB_REVISION	= $(PLIB_MINOR)" >> $@
-	$(Q)echo "LIB_VERSION_STRING	macro" >> $@
-	$(Q)echo "	ifd	__68020__" >> $@
-	$(Q)echo "	dc.b	\"ptable.library $(PLIB_VERSION) ($(PLIB_DATE)) [68020]\"" >> $@
-	$(Q)echo "	else" >> $@
-	$(Q)echo "	dc.b	\"ptable.library $(PLIB_VERSION) ($(PLIB_DATE)) [68000]\"" >> $@
-	$(Q)echo "	endc" >> $@
+	$(Q)echo "FILE_VERSION	= $(AUTOMOUNT_MAJOR)" >> $@
+	$(Q)echo "FILE_REVISION	= $(AUTOMOUNT_MINOR)" >> $@
+	$(Q)echo "VERSION_STRING	macro" >> $@
+	$(Q)echo "	dc.b	\"compactflash.automount $(AUTOMOUNT_VERSION) ($(AUTOMOUNT_DATE))\"" >> $@
 	$(Q)echo "	endm" >> $@
+
+# Build ptable.library in the submodule (produces all four tiers, lsptres,
+# the guides, and the dist/*.version stamps that PLIB_*/LSPTRES_* read).
+# Everything ptable-owned is copied from that build, never rebuilt here.
+# MD2GUIDE/NDK are passed as absolute paths: the submodule's own relative
+# defaults do not resolve from inside extern/ptable.
+# Depends on the submodule Makefile: a pin bump or version/date change
+# there must refresh the stamps, or changes.md keeps old component rows.
+$(PTABLE_VERSION_FILE): $(PTABLE)/Makefile
+	$(Q)test -f $(PTABLE_SRC)/ptable_lib.s || { \
+		echo "ERROR: ptable submodule missing at $(PTABLE)."; \
+		echo "  git submodule update --init, or build with PTABLE=<path>"; \
+		exit 1; }
+	$(Q)$(MAKE) -C $(PTABLE) all guides MD2GUIDE=$(abspath $(MD2GUIDE)) NDK=$(abspath NDK)
+
+# Move the ptable submodule to its upstream tip and rebuild everything that
+# bundles it (guides included: "all" does not cover dist/docs/lsptres.guide).
+# Uses the branch tip rather than "git submodule update": if the recorded
+# commit was orphaned by an upstream history rewrite, restoring the pin would
+# fail. Leaves the result uncommitted for review. Phony; a $(PTABLE) that is
+# not a git checkout is a soft skip.
+.PHONY: ptable-sync
+ptable-sync:
+	$(Q)if [ -e "$(PTABLE)/.git" ]; then \
+		git -C "$(PTABLE)" fetch origin; \
+		git -C "$(PTABLE)" checkout --detach origin/master; \
+		$(MAKE) all guides; \
+		echo "  ptable synced to $$(git -C "$(PTABLE)" rev-parse --short HEAD) ($$(cat $(PTABLE_VERSION_FILE)))"; \
+		echo "  review, then commit $(PTABLE) with the rebuilt dist/ artifacts"; \
+	else \
+		echo "  NOTE: $(PTABLE) is not a git checkout - nothing to sync"; \
+	fi
 
 # Rewrite the topmost release-notes header and the COMPONENTS block in
 # docs/changes.md from current Makefile vars. Add new release headers by hand.
-version-readme:
+# Depends on the submodule version stamp: PLIB_*/LSPTRES_* expand lazily
+# from $(PTABLE)/dist/*.version, so stamping before that build exists
+# writes empty "component  ()" rows into changes.md.
+version-readme: $(PTABLE_VERSION_FILE)
 	$(Q)sed -i '0,/^## [0-9]\{8\}[^[:space:]]*/s/^## [0-9]\{8\}[^[:space:]]*/## $(VERSION)/' docs/changes.md
 	$(Q)block="_Components in this release_:\n\n$$(sh tools/components.sh md $(COMPONENT_ARGS))"; \
 	awk -v block="$$block" ' \
@@ -309,14 +363,12 @@ $(DEVICE_TARGETS): $(OUTDIR)/%/devs/compactflash.device: $(SOURCE) $(SOURCE_DEPS
 	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_$(cpu)) $(DEBUG_$(flav)) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
-# ptable.library: dist/<flavor>/<cpu>/libs/ptable.library
-$(LIBRARY_TARGETS): $(OUTDIR)/%/libs/ptable.library: $(LIB_SOURCE) $(LIB_SOURCE_DEPS) $(PLIB_VERSION_INC)
-	$(eval flav := $(word 1,$(subst /, ,$*)))
-	$(eval cpu  := $(word 2,$(subst /, ,$*)))
+# ptable.library: copied from the submodule build (dist/<flavor>/<cpu>/ptable.library)
+# into our install tree at dist/<flavor>/<cpu>/libs/ptable.library.
+$(LIBRARY_TARGETS): $(OUTDIR)/%/libs/ptable.library: $(PTABLE_VERSION_FILE)
 	$(Q)mkdir -p $(@D)
-	$(Q)echo "  VASM    $@ [$(flav), $(cpu)]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_$(cpu)) $(DEBUG_$(flav)) -o $@ $<
-	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
+	$(Q)cp $(PTABLE)/dist/$*/ptable.library $@
+	$(Q)echo "  PTABLE  $@ [$*] (md5:$$(md5sum $@ | cut -c1-8))"
 
 # Per-tier convenience phonies (subsets of DEVICE_TARGETS / LIBRARY_TARGETS)
 full:      check-vasm $(TARGET_FULL)
@@ -331,23 +383,29 @@ library-full-000:  check-vasm $(LIB_FULL_000)
 library-small-000: check-vasm $(LIB_SMALL_000)
 
 # Tools only target
-tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
 
 # Generate AmigaGuide documentation from Markdown
 GUIDE_OUTPUT_DIR = dist/docs
 GUIDE_CFD        = $(GUIDE_OUTPUT_DIR)/cfd.guide
+GUIDE_AUTOMOUNT  = $(GUIDE_OUTPUT_DIR)/automount.guide
 GUIDE_CHANGES    = $(GUIDE_OUTPUT_DIR)/changes.guide
 GUIDE_CFINFO     = $(GUIDE_OUTPUT_DIR)/CFInfo.guide
 GUIDE_SPEED      = $(GUIDE_OUTPUT_DIR)/pcmciaspeed.guide
 GUIDE_CHECK      = $(GUIDE_OUTPUT_DIR)/pcmciacheck.guide
-MD2GUIDE = tools/md2guide.py
+GUIDE_LSPTRES    = $(GUIDE_OUTPUT_DIR)/lsptres.guide
 
-guide guides: $(GUIDE_CFD) $(GUIDE_CHANGES) $(GUIDE_CFINFO) $(GUIDE_SPEED) $(GUIDE_CHECK)
+guide guides: $(GUIDE_CFD) $(GUIDE_AUTOMOUNT) $(GUIDE_CHANGES) $(GUIDE_CFINFO) $(GUIDE_SPEED) $(GUIDE_CHECK) $(GUIDE_LSPTRES)
 
 $(GUIDE_CFD): README.md $(MD2GUIDE)
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
 	$(Q)$(MD2GUIDE) README.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
+
+$(GUIDE_AUTOMOUNT): docs/automount.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) docs/automount.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount guide"
 
 $(GUIDE_CHANGES): docs/changes.md $(MD2GUIDE)
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
@@ -369,26 +427,42 @@ $(GUIDE_CHECK): docs/pcmciacheck.md $(MD2GUIDE)
 	$(Q)echo "  GUIDE   $@"
 	$(Q)$(MD2GUIDE) docs/pcmciacheck.md $@ --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
 
-# CFInfo utility (requires vbcc)
+# lsptres.guide: copied from the submodule build, not generated here.
+$(GUIDE_LSPTRES): $(PTABLE_VERSION_FILE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)cp $(PTABLE)/dist/docs/lsptres.guide $@
+	$(Q)echo "  PTABLE  $@"
+
 $(TARGET_CFINFO): $(SOURCE_CFINFO)
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_CFINFO)"
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_CFINFO)) bytes, md5:$$(md5sum $(TARGET_CFINFO) | cut -c1-8)"
 
-# pcmciaspeed utility (requires vbcc)
 $(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED)
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIASPEED)"
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIASPEED_VERSION)"' -DDATE='"$(PCMCIASPEED_DATE)"' -o $(TARGET_PCMCIASPEED) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIASPEED)) bytes, md5:$$(md5sum $(TARGET_PCMCIASPEED) | cut -c1-8)"
 
-# pcmciacheck utility (requires vbcc)
 $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIACHECK)"
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIACHECK)) bytes, md5:$$(md5sum $(TARGET_PCMCIACHECK) | cut -c1-8)"
+
+# lsptres: copied from the submodule build (dist/c/lsptres), not compiled here.
+$(TARGET_LSPTRES): $(PTABLE_VERSION_FILE)
+	$(Q)mkdir -p $(OUTDIR_C)
+	$(Q)cp $(PTABLE)/dist/c/lsptres $@
+	$(Q)echo "  PTABLE  $@ (md5:$$(md5sum $@ | cut -c1-8))"
+
+$(AUTOMOUNT_TARGETS): $(OUTDIR)/%/libs/compactflash.automount: $(SOURCE_AUTOMOUNT) $(SRCDIR)/cfd_pub.i $(AUTOMOUNT_VERSION_INC) $(PTABLE_SRC)/ptable_pub.i
+	$(eval flav := $(word 1,$(subst /, ,$*)))
+	$(Q)mkdir -p $(@D)
+	$(Q)echo "  VASM    $@ [$(flav), automount]"
+	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_68000) $(DEBUG_$(flav)) -o $@ $<
+	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # ============================================================
 # Release targets
@@ -399,7 +473,7 @@ $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
 COMPONENT_VERSIONS_NL = $(shell sh tools/components.sh plain $(COMPONENT_ARGS))
 
 # Generate readme from template
-$(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
+$(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
 	@echo "Generating $(README_NAME) from template..."
 	@tool_checksums=""; \
 	for tool_info in $(TOOLS_ALL); do \
@@ -425,7 +499,7 @@ $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(README_NAME) guides check-lha
+release: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(README_NAME) guides check-lha
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
 	@echo "=================================="
 	$(eval STAGING := $(shell mktemp -d))
@@ -433,8 +507,8 @@ release: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(README
 	@echo "Copying files..."
 	@# Per-flavor binary trees (cfd/full/<cpu>/{devs,libs}/<file>)
 	@cp -r dist/full dist/small "$(STAGING)/cfd/"
-	@# Flavor-shared assets (tools, mountlist, docs, images)
-	@cp -r dist/c dist/Storage dist/docs dist/images "$(STAGING)/cfd/"
+	@# Flavor-shared assets (tools, mountlist, example config, docs, images)
+	@cp -r dist/c dist/Storage dist/ENVARC dist/docs dist/images "$(STAGING)/cfd/"
 	@# Top-level icons paired with the top-level drawers/files above.
 	@# (devs.info / libs.info are reused per-flavor below, not at
 	@# the cfd/ root - there are no top-level devs/ or libs/ drawers.)
@@ -500,8 +574,8 @@ check-lha:
 # ============================================================
 
 # Show checksums for all built artifacts
-checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK)
-	@for target in $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK); do \
+checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
+	@for target in $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES); do \
 		if [ -f "$$target" ]; then \
 			echo "=== $${target} ==="; \
 			ls -l "$$target"; \
@@ -514,7 +588,8 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 
 # Clean build artifacts
 clean:
-	rm -f $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(VERSION_INC) $(PLIB_VERSION_INC) $(VERSION_STAMP)
+	rm -f $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES) $(VERSION_INC) $(VERSION_STAMP) $(AUTOMOUNT_VERSION_INC)
+	$(Q)[ ! -f $(PTABLE_SRC)/ptable_lib.s ] || $(MAKE) -C $(PTABLE) clean
 	$(Q)for d in $(OUTDIR)/full $(OUTDIR)/small ; do \
 		[ ! -d $$d ] || find $$d -depth -type d -empty -delete ; \
 	done
@@ -540,6 +615,7 @@ help:
 	@echo "  library-small-000- Build 68000 small ptable.library only"
 	@echo "  tools            - Build all tools"
 	@echo "  guide / guides   - Generate AmigaGuide documentation from Markdown"
+	@echo "  ptable-sync      - Move $(PTABLE) to its upstream tip and rebuild (uncommitted)"
 	@echo ""
 	@echo "Options:"
 	@echo "  V=1                 - Verbose output (show full compiler messages)"
@@ -577,6 +653,7 @@ help:
 	@echo "  $(TARGET_CFINFO) - card info utility"
 	@echo "  $(TARGET_PCMCIASPEED) - pcmcia speed/timing benchmark utility"
 	@echo "  $(TARGET_PCMCIACHECK) - pcmcia check utility"
+	@echo "  $(TARGET_LSPTRES) - partition.resource lister"
 	@echo "  $(README_NAME) - Aminet readme"
 	@echo "  $(ARCHIVE_NAME) - Aminet release archive"
 	@echo ""

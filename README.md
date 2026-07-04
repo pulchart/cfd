@@ -25,6 +25,7 @@ See [docs/changes.md](docs/changes.md) for release news and history.
 
 ## Documentation Included
 
+- [docs/automount.md](docs/automount.md) - autoboot, automount, and ENV:cfd.prefs configuration.
 - [docs/changes.md](docs/changes.md) - release notes and original CFD history.
 - [docs/CFInfo.md](docs/CFInfo.md) - CFInfo card information utility documentation.
 - [docs/pcmciaspeed.md](docs/pcmciaspeed.md) - PCMCIA timing benchmark documentation.
@@ -48,7 +49,7 @@ The archive ships two flavours (`full` / `small`) and two CPU tiers (`68020+` / 
 | full | 68000+ | full/68000/devs/compactflash.device | ~11.3 KB |
 | small | 68000+ | small/68000/devs/compactflash.device | ~8.0 KB |
 
-Companion `ptable.library` binaries live next to the device in the same flavour/CPU tree (`<flavour>/<cpu>/libs/ptable.library`).
+Companion libraries live next to the device in the same flavour/CPU tree under `<flavour>/<cpu>/libs/`: `ptable.library` (partition scan/mount) and the optional `compactflash.automount` (boot/automount bringup, only needed for autoboot or automount).
 
 Pick the tier that matches your CPU, then pick the full or small flavour:
 - Use the **full** version if you want serial debug output (`Flags = 8`)
@@ -69,97 +70,35 @@ The inner `devs/` and `libs/` drawers map directly onto `SYS:Devs/` and `SYS:Lib
 
 Have fat95 installed on your system. Mount the drive by double-clicking `Storage/DOSDrivers/CF0`.
 
+Inserted cards automount by default (with the optional `compactflash.automount` module active). To tune it, or disable it with `AUTOMOUNT 0`, copy the example config to `ENVARC:` (and `ENV:`):
+```
+Copy cfd/ENVARC/cfd.prefs to ENVARC:cfd.prefs
+Copy cfd/ENVARC/cfd.prefs to ENV:cfd.prefs
+```
+See [docs/automount.md](docs/automount.md) for all keys and the optional `compactflash.automount` module.
+
 For OS 3.5+:
 ```
 Copy def_CF0.info sys:prefs/env-archive/sys
 Copy def_CF0.info env:sys
 ```
 
-## Autoboot / Automount (ROM-resident)
+## Autoboot / Automount
 
-At Kickstart cold start `compactflash.device` opens `ptable.library`, which walks the RDB on the inserted card, registers any filesystem handlers stored in the RDB into `FileSystem.resource`, and publishes each partition via `AddBootNode` (bootable) or `AddDosNode` (mountable only).
+`compactflash.device` can boot straight from an RDB-partitioned CF card (ROM-resident only) and automount inserted cards at DOS time (RDB, MBR, GPT, and flat whole-disk FAT). Both are driven by `ptable.library` plus the optional `compactflash.automount` module; without them the device still works as a plain mount-only device.
 
-*ROM-resident requirement*
+Automount is **on by default everywhere** (ROM-resident and file-based alike); disable it with `AUTOMOUNT 0` in `ENV:cfd.prefs` (see the example config above). Removing a card fully unmounts all supported filesystems by default; `UNMOUNT <names>` restricts it and `UNMOUNT NONE` keeps the handlers. The resident driver re-reads that file on every card insert and removal.
 
-`ptable.library` is **optional** for the driver. Without it, `compactflash.device` still works fully as a mount-only device via `DEVS:DOSDrivers/CF0` as example. It is **required** for autoboot and automount. To activate, both compactflash.device and ptable.library must be flashed into a ROM image.
+The per-filesystem config keys (`UNMOUNT`, `FLAGS_<fs>`, `CONTROL_<fs>`) recognise exactly five filesystem names and no others: `DOS`, `FFS`, `SFS`, `PFS`, `FAT`. Any other name is silently ignored. See [docs/automount.md](docs/automount.md) for the full config reference.
 
-*Building your own ROM*
-
-A scripted Capitoline-based ROM builder for creating a 1 MB AmigaOS 3.2.3 / 3.1 / 2.05 Kickstart with `compactflash.device` + `ptable.library` embedded lives in the companion [amigaos-kickstart-builder](https://github.com/pulchart/amigaos-kickstart-builder) repo.
-
-*Partition handling*
-
-How each RDB partition is handled at boot:
-
-| RDB partition flag | BootPri | Result |
-|--------------------|---------|--------|
-| normal | ≥ 0 | bootable: appears in Early Startup boot device list |
-| normal | < 0 | non-bootable: mounted as a DOS volume |
-| NOMOUNT (bit 1 set) | any | skipped entirely: not mounted, not in DOS list |
-
-BootPri is stored in the RDB partition environment and controls boot order.
-
-*Boot order*
-
-The driver starts during Kickstart boot after the internal IDE is ready. The relevant modules in boot order are:
-
-| Module | Role |
-|--------|------|
-| `card.resource` | PCMCIA slot initialised |
-| `trackdisk.device` | floppy |
-| `carddisk.device` | Kickstart built-in PCMCIA handler |
-| `scsi.device` | internal IDE initialised |
-| **`compactflash.boot`** | **CF card check + partition scan**. It opens `ptable.library`. `ptable.library` walks the RDB, registers any filesystem handlers it finds, and publishes each partition via `AddBootNode` (bootable) or `AddDosNode` (mountable only). |
-| `strap` | boot menu / Workbench start |
-
-The driver runs after the internal IDE is initialised, so it does not interfere with it. If the IDE stalls at boot (e.g. no drive connected), CF autoboot will not trigger either.
-
-*Cold-boot timing*
-
-The boot stub starts with a **no-card pre-gate**: a single read of the Gayle tells it whether a CF card is in the slot. If the slot is empty, the stub returns immediately.
-
-If a card IS present, the driver tolerates slow cards/adapters by polling for up to ~1.8 s in total (1 s for card-detect stabilisation, ~400 ms each for the two CIS tuple reads). Stable cards complete the first iteration of each loop, so a healthy card pays no measurable delay.
-
-*Boot debug output*
-
-`ptable.library` opens the device with `Flags=0`. Serial debug output at cold boot comes from a `full` build only and is unconditional, not gated by the mountlist `Flags = 8` setting. Two components emit output: `compactflash.device` uses the `[CFD] boot:` prefix, and `ptable.library` uses `[RDB]`:
-
+`compactflash.automount` provides the boot/automount bringup: in a ROM it gives cold-boot autoboot and opens the device after DOS so the automount agent runs; on disk you get the same run-time automount (hot-swap) by adding it to your startup-sequence with:
 ```
-[CFD] boot: open ptable.library ...
-[CFD] boot: ptable.library not preloaded, InitResident()...
-[CFD] boot: BootScanRDB(compactflash.device,0)
-[RDB] scan
-[RDB] found RDSK
-[RDB] +fs PFS v20.0
-[RDB] skip SDH10
-[RDB] skip SDH11
-[RDB] +boot SDH0
-[RDB] +dos  SDH1
-[RDB] +dos  SDH2
-[RDB] done
+LoadModule LIBS:compactflash.automount LIBS:ptable.library DEVS:compactflash.device
 ```
 
-| Line | Meaning |
-|------|---------|
-| `[CFD] boot: open ptable.library ...` | device opened ptable.library |
-| `[CFD] boot: ptable.library not preloaded, InitResident()...` | library was not yet in memory; loaded from ROM via `InitResident()` |
-| `[CFD] boot: BootScanRDB(compactflash.device,0)` | device hands off RDB scan to ptable.library for unit 0 |
-| `[RDB] scan` | ptable.library begins scanning for the RDB |
-| `[RDB] found RDSK` | RDB block located on the card |
-| `[RDB] +fs PFS v20.0` | filesystem handler loaded from RDB (DosType + version) |
-| `[RDB] skip SDH10` | partition skipped (NOMOUNT flag set in RDB) |
-| `[RDB] +boot SDH0` | bootable partition registered via `AddBootNode` |
-| `[RDB] +dos  SDH1` | mountable-only partition registered via `AddDosNode` |
-| `[RDB] done` | RDB scan complete |
+The full reference (the `ENV:cfd.prefs` keys, deployment matrix, removable-media model, cold-boot details and serial-debug output) lives in [docs/automount.md](docs/automount.md) (`automount.guide`).
 
-*Expansion board entry*
-
-`ptable.library` registers a synthetic expansion board entry so the Kickstart Early Startup boot menu sees the device. The entry is visible in expansion-board inspection tools (e.g. `ShowConfig`) as a board with the following identifiers:
-
-| Field | Value |
-|-------|-------|
-| Vendor ID  | `65535 ($FFFF)` (as 'no vendor') |
-| Product ID | `1` |
+To build a Kickstart ROM with `compactflash.device` + `ptable.library` embedded, see the companion [amigaos-kickstart-builder](https://github.com/pulchart/amigaos-kickstart-builder) repo.
 
 ## Hardware Notes
 
@@ -231,22 +170,22 @@ Use a adapter `DB-25 Female to DB-9 Male`, the adapter uses Straight-Through con
 
 Once the hardware is connected, monitor the serial port (e.g., `screen /dev/ttyUSB0 9600`, `minicom -b 9600 -o -D /dev/ttyUSB0`, `putty`) on remote computer to see online initialization process.
 
-Cold boot (ROM-resident `ptable.library`, RDB-partitioned card):
+Cold boot (ROM-resident `compactflash.automount` + `ptable.library`, RDB-partitioned card). The `[CFD] boot:` lines come from `compactflash.automount`, the `[PT]` lines from `ptable.library`:
 ```
-[CFD] boot: open ptable.library v1...
+[CFD] boot: open ptable.library ...
 [CFD] boot: ptable.library not preloaded, InitResident()...
-[CFD] boot: BootScanRDB(compactflash.device,0)
-[RDB] scan
-[RDB] found RDSK
-[RDB] +fs PFS v20.0
-[RDB] +boot SDH0
-[RDB] +dos  SDH1
-[RDB] done
+[CFD] boot: BootScanPartitions(compactflash.device,0)
+[PT] cold boot: scanning for partitions
+[PT] RDB partition table
+[PT] + filesystem handler PFS v20.0
+[PT] + boot  SDH0
+[PT] + mount SDH1
+[PT] cold boot done, partitions registered: 2
 ```
 
 Card identification (hot-plug):
 ```
-[CFD] compactflash.device 1.42 (02.05.2026) [68020]
+[CFD] compactflash.device 2.0-dev (10.07.2026) [68020]
 [CFD] Card inserted
 [CFD] Identifying card...
 [CFD] Reset
@@ -256,7 +195,7 @@ Card identification (hot-plug):
 [CFD] Voltage: 5V
 [CFD] CIS gate
 [CFD] ..DEVICE: type=0x0D speed=400ns size=0x00000800
-[CFD] ..FUNCID: 0x04
+[CFD] ..FUNCEXT: link=0x02, type=0x01, ifc=0x01
 [CFD] ..RESULT: accept
 [CFD] ..CONFIG: addr=0x00000200
 (or: [CFD] ..CONFIG: default (0x200))
@@ -289,8 +228,25 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 [CFD] ..done, multi RW: 256
 [CFD] Card identified OK
 [CFD] Notify clients
+[MW] config: read=-1 auto=1 flags=0
+[MW] scanning compactflash.device:0 for partitions
+[PT] scanning for partitions
+[PT] MBR partition table
+[PT] partitions found: 1
+[MW] scan done, partitions known: 1
+[MW] mounting new partitions
+[PT] mounting partitions
+[PT] mounted CFa0
+[MW] mounted volumes: 1
 [CFD] Card removed
+[MW] config: read=-1 auto=1 flags=0
+[MW] card removed
+[PT] card removed, media absent
+[PT] unmounting partitions
+[PT] unmounted CFa0
+[MW] entries detached: 1
 ```
+The `[MW]` lines come from the automount mount worker (they appear when `compactflash.automount` is active), the `[PT]` lines from `ptable.library`. `read=-1` means no `ENV:cfd.prefs` is set, so the defaults apply (`auto=1`).
 
 #### Capturing serial output without a null-modem cable
 
@@ -560,7 +516,7 @@ The driver auto-detects the transfer mode during card initialization by testing 
 | BYTE (alt2) | 8-bit byte access via alternate register. Rarely used fallback mode. |
 | MMAP | Memory mapped word access. Direct memory transfer (requires PCMCIA memory mapping). |
 
-Most CF cards work with WORD mode. The driver tests write/read patterns during initialization and falls back to BYTE modes if 16-bit access fails. The selected mode is shown in serial debug output as `[CFD] Transfer: WORD` or similar.
+Most CF cards work with WORD mode. The driver tests write/read patterns during initialization and falls back to BYTE modes if 16-bit access fails. The selected mode is shown in serial debug output as `[CFD] ..done, transfer mode: WORD`.
 
 ## Tools
 
@@ -634,6 +590,19 @@ Extract NDK to project directory:
 mkdir NDK && cd NDK && lha x ~/Downloads/NDK3.2.lha
 ```
 
+### ptable submodule
+
+`ptable.library` is not built from this repo. It lives in [amigaos-ptable](https://github.com/pulchart/amigaos-ptable) and is embedded as the `extern/ptable` submodule; `make` builds it there and copies the resulting binaries, `lsptres` and `lsptres.guide` into `dist/`, so a release always ships the ptable-built bytes.
+
+```bash
+git clone --recurse-submodules https://github.com/pulchart/cfd   # fresh clone
+git submodule update --init                                      # existing clone
+make ptable-sync                                                 # move to upstream tip + rebuild
+make PTABLE=/path/to/amigaos-ptable                              # build against a local checkout
+```
+
+`make ptable-sync` fetches `origin` in the submodule, checks out its `master` tip, and rebuilds everything that bundles it. It leaves the result uncommitted: review it, then commit the `extern/ptable` gitlink with the rebuilt `dist/` artifacts. It follows the branch tip rather than the recorded pin, which is also the recovery path when an upstream history rewrite orphans the pinned commit.
+
 ### Quick Start
 
 ```bash
@@ -671,6 +640,7 @@ make V=1
 | `make library-full-000` | 68000 full `ptable.library` only |
 | `make library-small-000` | 68000 small `ptable.library` only |
 | `make tools` | Build utilities (requires vbcc + NDK) |
+| `make ptable-sync` | Move `extern/ptable` to its upstream tip and rebuild (left uncommitted) |
 | `make GTIMING=1` | Build with Gayle timing optimization (experimental) |
 | `make release` | Create Aminet LHA archive |
 | `make checksums` | Show file sizes and checksums |

@@ -5,7 +5,7 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v20260609.lha
+Replaces:     driver/media/cfd.v20260614.lha
 Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
 
 PCMCIA CompactFlash driver and supporting tools for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -17,8 +17,21 @@ COMPONENTS IN THIS RELEASE
 CHANGES IN @DATE@
 =====================
 
-Documentation-only update (no binaries changed). Release notes and
-original CFD history are included in docs/changes.guide.
+compactflash.device:
+
+* Automount: hotplugged cards mount automatically at DOS time (on by
+  default; disable with AUTOMOUNT 0 in the new ENV:cfd.prefs config
+  file). Removing a card unmounts all supported filesystems by default.
+  Boot and automount bringup is split into a separate
+  compactflash.automount module. See automount.guide.
+
+ptable.library:
+
+* Unified partition scanning: one scanner parses RDB, MBR, GPT, and
+  whole-disk FAT and publishes every partition into a shared
+  partition.resource, now used by both compactflash.device and fat95
+  instead of each carrying its own. The new lsptres tool lists the
+  resource. Library: https://github.com/pulchart/amigaos-ptable
 
 FEATURES
 ========
@@ -26,6 +39,8 @@ FEATURES
 * TD64 and SCSI emulation support
 * Works with fat95 filesystem for FAT32 support, not excluding Amiga native
   (ffs, sfs, pfs) filesystems
+* Scans and automounts RDB, MBR, GPT, and flat (whole-disk FAT) partition
+  tables via ptable.library
 * Serial debug output for troubleshooting (Flags = 8)
 * Transfer speeds up to 2.2 MB/s read, 1.9 MB/s write
   (in multi-sector mode if firmware supports it or with Flags = 16 override)
@@ -44,16 +59,23 @@ The archive ships two flavours (full / small) and two CPU tiers,
 each as a sysroot ready to drop onto SYS:.
 
   68020+ (A1200 stock, 68020+):
-    full/68020/devs/compactflash.device   debug-capable
-    small/68020/devs/compactflash.device  no debug code
-    full/68020/libs/ptable.library        debug-capable
-    small/68020/libs/ptable.library       no debug code
+    full/68020/devs/compactflash.device       debug-capable
+    small/68020/devs/compactflash.device      no debug code
+    full/68020/libs/ptable.library            debug-capable
+    small/68020/libs/ptable.library           no debug code
+    full/68020/libs/compactflash.automount      optional, debug-capable
+    small/68020/libs/compactflash.automount     optional, no debug code
 
   68000 (stock A600, 68000+):
-    full/68000/devs/compactflash.device   debug-capable
-    small/68000/devs/compactflash.device  no debug code
-    full/68000/libs/ptable.library        debug-capable
-    small/68000/libs/ptable.library       no debug code
+    full/68000/devs/compactflash.device       debug-capable
+    small/68000/devs/compactflash.device      no debug code
+    full/68000/libs/ptable.library            debug-capable
+    small/68000/libs/ptable.library           no debug code
+    full/68000/libs/compactflash.automount      optional, debug-capable
+    small/68000/libs/compactflash.automount     optional, no debug code
+
+  compactflash.automount is the optional boot/automount bringup module;
+  install it only if you want autoboot or automount (see AUTOBOOT/AUTOMOUNT).
 
 Choose based on your needs:
 - Use the full flavour if you need serial debug output (Flags = 8)
@@ -68,6 +90,13 @@ Steps for normal mount-only use (no autoboot):
 3. Have fat95 installed on your system
 4. Mount the drive by double-clicking Storage/DOSDrivers/CF0
 
+Inserted cards automount by default. To tune it, or disable it with
+AUTOMOUNT 0, copy the example config:
+   Copy ENVARC/cfd.prefs to ENVARC:cfd.prefs
+   Copy ENVARC/cfd.prefs to ENV:cfd.prefs
+The resident driver re-reads cfd.prefs on every card insert and
+removal. See automount.guide for all keys.
+
 For autoboot, see the AUTOBOOT section below.
 
 For OS 3.5+:
@@ -76,21 +105,40 @@ For OS 3.5+:
 AUTOBOOT/AUTOMOUNT
 ==================
 
-Autoboot is now provided by a separate ptable.library shipped under
-<flavor>/<cpu>/libs/. At Kickstart cold start the compactflash.device
-opens ptable.library and asks it to walk the RDB on the inserted card,
-load any filesystem handlers carried in into FileSystem.resource,
-and publish each partition via AddBootNode (bootable) or AddDosNode
-(non-bootable).
+Boot/automount is provided by ptable.library plus the optional
+compactflash.automount module (both shipped under <flavor>/<cpu>/libs/).
+The plain compactflash.device on its own is a normal mount-only device.
 
-Both the compactflash.device and the ptable.library MUST be ROM-resident
-for this to work. A disk-only ptable.library install is silently ignored.
-The device driver still works as a normal mount-only device.
+compactflash.automount carries two parts:
+  - cold-boot autoboot: at Kickstart cold start it walks the RDB on the
+    card, loads filesystem handlers into FileSystem.resource, and
+    publishes each partition via AddBootNode (bootable) / AddDosNode.
+    This needs compactflash.device + compactflash.automount + ptable.library
+    ROM-resident; a disk-only install is silently ignored.
+  - after-DOS bringup: it opens the device once DOS is up so the
+    card-detect interrupt and the automount agent start.
 
-On cold boot the driver tolerates slow cards and adapters by polling
-for up to ~1.8s. When a card is present and stable the delay is zero.
+Automount is ON by default everywhere. Disable it with AUTOMOUNT 0 in
+ENV:cfd.prefs (copy ENVARC/cfd.prefs as shown in INSTALLATION). On
+removal all supported filesystems are fully unmounted by default;
+UNMOUNT <names> restricts this, UNMOUNT NONE keeps the handlers. The
+resident driver re-reads cfd.prefs on every card insert and removal.
 
-More details can be found in fat95's guide and GitHub project page.
+On disk (no ROM), you get the same run-time automount (hot-swap) by
+adding to your user-startup-sequence:
+   LoadModule LIBS:compactflash.automount LIBS:ptable.library DEVS:compactflash.device
+(plus L:fat95). LoadModule cannot provide cold-boot autoboot; that needs
+a real ROM.
+
+The per-filesystem config keys (UNMOUNT, FLAGS_<fs>, CONTROL_<fs>)
+recognise exactly five filesystem names and no others: DOS, FFS, SFS,
+PFS, FAT. Any other name is silently ignored.
+
+FAT partitions still need fat95 loaded so its filesystem code is
+registered. On cold boot the driver tolerates slow cards by polling for
+up to ~1.8s; with a stable card the delay is zero.
+
+More details are in automount.guide.
 
 MOUNT FLAGS
 ===========
@@ -111,7 +159,7 @@ With Flags = 8, connect serial cable and monitor at 9600 baud. The first
 line is a version banner that identifies the driver version and CPU tier
 ([68020] or [68000]):
 
-  [CFD] compactflash.device 1.42 (03.05.2026) [68020]
+  [CFD] compactflash.device 2.0-dev (10.07.2026) [68020]
   [CFD] Card inserted
   [CFD] Identifying card...
   [CFD] Reset
@@ -156,19 +204,19 @@ line is a version banner that identifies the driver version and CPU tier
   [CFD] Notify clients
   [CFD] Card removed
 
-Serial debug output at cold boot comes from a full build only and is unconditional, 
+Serial debug output at cold boot comes from a full build only and is unconditional,
 not gated by the mountlist Flags=8 setting. Two components emit output:
-compactflash.device uses the [CFD] boot: prefix, and ptable.library uses [RDB].
+compactflash.automount uses the [CFD] boot: prefix, and ptable.library uses [PT].
 
 Note that ptable.library opens the device with Flags=0, so the per-card identify
 log ([CFD] Reset, [CFD] CIS gate, etc.) is not printed during autoboot.
 
   [CFD] boot: open ptable.library ...
   [CFD] boot: ptable.library not preloaded, InitResident()...
-  [CFD] boot: BootScanRDB(compactflash.device,0)
-  [RDB] scan
-  [RDB] no RDB
-  [RDB] done
+  [CFD] boot: BootScanPartitions(compactflash.device,0)
+  [PT] cold boot: scanning for partitions
+  [PT] no partition table (not RDB/MBR/GPT/FAT)
+  [PT] cold boot done, partitions registered: 0
 
 
 ENFORCE MULTI MODE (FLAG 16)
@@ -272,12 +320,18 @@ cfd/small/68020/devs/compactflash.device - 68020+, no debug code
 cfd/full/68000/devs/compactflash.device  - 68000+, debug-capable (serial output with Flags=8)
 cfd/small/68000/devs/compactflash.device - 68000+, no debug code
 
-ptable.library (optional) enables autoboot and automount from RDB-partitioned cards;
-                          must be ROM-resident to work, disk-only install has no effect:
+ptable.library (optional) - partition scanner/automounter (RDB/MBR/GPT/FAT):
 cfd/full/68020/libs/ptable.library       - 68020+, debug-capable (serial output always on at boot)
 cfd/small/68020/libs/ptable.library      - 68020+, no debug code
 cfd/full/68000/libs/ptable.library       - 68000+, debug-capable (serial output always on at boot)
 cfd/small/68000/libs/ptable.library      - 68000+, no debug code
+
+compactflash.automount (optional) - boot/automount bringup; install for autoboot (ROM)
+                                  or DOS-time automount (ROM, or on disk via LoadModule):
+cfd/full/68020/libs/compactflash.automount  - debug-capable (serial output always on at boot)
+cfd/small/68020/libs/compactflash.automount - no debug code
+cfd/full/68000/libs/compactflash.automount  - debug-capable (serial output always on at boot)
+cfd/small/68000/libs/compactflash.automount - no debug code
 
 cfd/c/CFInfo      - Card information utility (displays model, size, capabilities)
 cfd/c/pcmciacheck - PCMCIA check utility
@@ -285,6 +339,7 @@ cfd/c/pcmciaspeed - Speed test utility
 
 cfd/Storage/DOSDrivers/CF0      - Mountlist entry (with flags documentation)
 cfd/Storage/DOSDrivers/CF0.info - Mountlist Workbench icon
+cfd/ENVARC/cfd.prefs            - Example config (copy to ENVARC:cfd.prefs to automount)
 
 cfd/docs/cfd.guide         - Main documentation
 cfd/docs/changes.guide     - Release notes and original CFD history

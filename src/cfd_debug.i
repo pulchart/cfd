@@ -25,6 +25,10 @@ DBGNUM	macro
 	bsr	_DebugHex
 	endm
 
+DBGDEC	macro
+	bsr	_DebugDecimal32		;d0.l as unsigned decimal
+	endm
+
 DBGNL	macro
 	bsr	_DebugNewline
 	endm
@@ -74,6 +78,9 @@ DBGCHR	macro
 	endm
 
 DBGNUM	macro
+	endm
+
+DBGDEC	macro
 	endm
 
 DBGNL	macro

@@ -1,0 +1,3 @@
+[submodule "extern/ptable"]
+	path = extern/ptable
+	url = https://github.com/pulchart/amigaos-ptable

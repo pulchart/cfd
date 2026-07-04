@@ -3,7 +3,7 @@
 ;
 ; Provides _bootDebug: print NUL-terminated string at (a0) via
 ; Exec/RawPutChar, using (_AbsExecBase).w so a6 may hold any
-; value on entry.  All caller registers preserved.
+; value on entry. All caller registers preserved.
 ;
 ; Independent of any per-mount (like Flags=8)
 ; Body is omitted in non-DEBUG builds.
