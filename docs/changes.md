@@ -8,7 +8,7 @@ _Components in this release_:
 - `ptable.library 2.0-dev (30.07.2026)` _(new)_
 - `CFInfo 1.37 (11.01.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
-- `pcmciacheck 1.39 (22.05.2026)`
+- `pcmciacheck 2.0 (06.08.2026)` _(new)_
 - `lsptres 1.0-dev (30.07.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
@@ -19,6 +19,15 @@ _Components in this release_:
 ##### Partition Table library
 
 - **Unified partition scanning.** One scanner parses RDB, MBR, GPT, and flat (whole-disk) partition tables and publishes every partition into a shared `partition.resource`, now used by both `compactflash.device` and `fat95` instead of each carrying its own. The new `lsptres` tool lists the resource. See [ptable.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/ptable.md) and [lsptres.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/lsptres.md).
+
+##### Tools
+
+*pcmciacheck 2.0*
+- **New `-identify` read-stability test.** ([#67](https://github.com/pulchart/cfd/issues/67)) Reads the same sector several times per mode and reports `STABLE`, `UNSTABLE` or `STUCK`. A card that returns different bytes on each read, or the same word over and over, corrupts files, and that is why the driver refuses it with `FAILED (data mismatch)` or `FAILED (repeated pattern)`. Only the mode the driver actually uses decides the verdict. `-r <runs>` sets the number of runs (default 5). Console only, no log file, like `-cis`.
+
+- **A Gayle PCMCIA timing can be given** (`100`, `150`, `250`, `720`): `-s <speed>` for the normal run, `pcmciacheck -identify <speed>` for the stability test. Both accept `all`: `-identify all` prints a verdict matrix so you can see whether a card only misbehaves at the faster timings, and `-s all` repeats the capture at every timing and logs all of them, so the raw data behind such a fault can be attached to a bug report. Restored on exit, and a diagnostic only: the driver programs that register itself.
+
+- **The read and write mode tests follow the driver more accurately**, and `-cis` now reports the real access speed of cards that use the extended encoding. See [pcmciacheck.md](pcmciacheck.md).
 
 ## 20260614
 
