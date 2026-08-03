@@ -59,7 +59,7 @@
   * @{fg shine}ptable.library 2.0-dev (30.07.2026)@{fg text} @{i}(new)@{ui}
   * @{fg shine}CFInfo 1.37 (11.01.2026)@{fg text}
   * @{fg shine}pcmciaspeed 1.36 (02.01.2026)@{fg text}
-  * @{fg shine}pcmciacheck 1.39 (22.05.2026)@{fg text}
+  * @{fg shine}pcmciacheck 2.0 (06.08.2026)@{fg text} @{i}(new)@{ui}
   * @{fg shine}lsptres 1.0-dev (30.07.2026)@{fg text} @{i}(new)@{ui}
 
 @{b}CompactFlash Driver@{ub}
@@ -76,6 +76,29 @@
     (whole-disk) partition tables and publishes every partition into a shared
     @{fg shine}partition.resource@{fg text} , now used by both @{fg shine}compactflash.device@{fg text} and @{fg shine}fat95@{fg text} instead of
     each carrying its own. The new @{fg shine}lsptres@{fg text} tool lists the resource. See @{"  ptable.guide  " link "ptable.guide/Main"} and @{"  lsptres.guide  " link "lsptres.guide/Main"} .
+
+@{b}Tools@{ub}
+
+@{i}pcmciacheck 2.0@{ui}
+  * @{b}New @{fg shine}-identify@{fg text} read-stability test.@{ub} (#67
+    (https://github.com/pulchart/cfd/issues/67)) Reads the same sector several
+    times per mode and reports @{fg shine}STABLE@{fg text} , @{fg shine}UNSTABLE@{fg text} or @{fg shine}STUCK@{fg text} . A card that returns
+    different bytes on each read, or the same word over and over, corrupts files,
+    and that is why the driver refuses it with @{fg shine}FAILED (data mismatch)@{fg text} or
+    @{fg shine}FAILED (repeated pattern)@{fg text} . Only the mode the driver actually uses decides the
+    verdict. @{fg shine}-r <runs>@{fg text} sets the number of runs (default 5). Console only, no log
+    file, like @{fg shine}-cis@{fg text} .
+
+  * @{b}A Gayle PCMCIA timing can be given@{ub} ( @{fg shine}100@{fg text} , @{fg shine}150@{fg text} , @{fg shine}250@{fg text} , @{fg shine}720@{fg text} ): @{fg shine}-s <speed>@{fg text} for
+    the normal run, @{fg shine}pcmciacheck -identify <speed>@{fg text} for the stability test. Both
+    accept @{fg shine}all@{fg text} : @{fg shine}-identify all@{fg text} prints a verdict matrix so you can see whether a
+    card only misbehaves at the faster timings, and @{fg shine}-s all@{fg text} repeats the capture at
+    every timing and logs all of them, so the raw data behind such a fault can be
+    attached to a bug report. Restored on exit, and a diagnostic only: the driver
+    programs that register itself.
+
+  * @{b}The read and write mode tests follow the driver more accurately@{ub} , and @{fg shine}-cis@{fg text} now
+    reports the real access speed of cards that use the extended encoding. See @{"  pcmciacheck.guide  " link "pcmciacheck.guide/Main"} .
 
 ----------------------------------------
 @{"<< Prev" link Main}  @{"Contents" link Main}  @{"Next >>" link 20260614}

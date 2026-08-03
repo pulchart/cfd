@@ -33,6 +33,27 @@ ptable.library:
   instead of each carrying its own. The new lsptres tool lists the
   resource. Library: https://github.com/pulchart/amigaos-ptable
 
+pcmciacheck:
+
+* New "-identify" read-stability test: reads the same sector several
+  times per mode and reports STABLE, UNSTABLE or STUCK. A card that
+  returns different bytes on each read, or the same word over and over,
+  corrupts files, and that is why the driver refuses it with "Getting
+  IDE ID ... FAILED (data mismatch)" or "FAILED (repeated pattern)".
+
+* A Gayle PCMCIA timing can be given (100, 150, 250, 720): -s <speed>
+  for the normal run, "pcmciacheck -identify <speed>" for the stability
+  test. Both accept "all": "-identify all" prints a verdict matrix so
+  you can see whether a card only misbehaves at the faster timings, and
+  "-s all" repeats the capture at every timing and logs all of them, so
+  the raw data behind such a fault can be attached to a bug report.
+  Restored on exit, and a diagnostic only: the driver programs that
+  register itself.
+
+* The read and write mode tests follow the driver more accurately, and
+  -cis now reports the real access speed of cards that use the extended
+  encoding.
+
 FEATURES
 ========
 * Supports CompactFlash, MicroDrive, and various adapters (SD, MemoryStick, SmartMedia)
