@@ -1,11 +1,11 @@
-## 20260730-dev
+## 20260817-dev
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.0-dev (30.07.2026)` _(new)_
+- `compactflash.device 2.0-dev (17.08.2026)` _(new)_
 - `compactflash.automount 2.0-dev (30.07.2026)` _(new)_
-- `ptable.library 2.0-dev (30.07.2026)` _(new)_
+- `ptable.library 2.0-dev (17.08.2026)` _(new)_
 - `CFInfo 1.37 (11.01.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.0 (06.08.2026)` _(new)_
@@ -14,7 +14,7 @@ _Components in this release_:
 
 ##### CompactFlash Driver
 
-- **Automount.** Hotplugged cards mount automatically at DOS time, on by default; disable with `AUTOMOUNT 0` in the new `ENV:cfd.prefs` config file. Removing a card fully unmounts all supported filesystems by default (`UNMOUNT <names>` restricts it, `UNMOUNT NONE` keeps the handlers). Boot and automount bringup is split into a separate `compactflash.automount` module. See [automount.md](automount.md).
+- **Automount.** Hotplugged cards mount automatically at DOS time, on by default; disable with `AUTOMOUNT 0` in the new `ENV:cfd.prefs` config file. Removing a card fully unmounts all supported filesystems by default (`UNMOUNT <names>` restricts it, `UNMOUNT NONE` keeps the handlers). Boot and automount bringup is split into a separate `compactflash.automount` module. Cold boot registers the RDB partitions (the autoboot chain); MBR, GPT and flat partitions are mounted by the automount agent once DOS is up, so `cfd.prefs` applies to them on a ROM-resident system too. See [automount.md](automount.md).
 
 ##### Partition Table library
 

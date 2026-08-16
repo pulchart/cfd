@@ -10,6 +10,7 @@
 CFD_Unit	= 52			;pointer to the (single) CFU
 CFD_BootDone	= 56			;byte: RTF_COLDSTART one-shot guard
 CFD_DosReady	= 57			;byte: set when DOS is functional (after-DOS)
+CFD_PrefsReady	= 58			;byte: cfd.prefs resolved once (no boot retry)
 
 ; CompactFlashUnit (CFU)
 CFU_MountAgent	= 980			;MountAgent Task ptr (0 = none)

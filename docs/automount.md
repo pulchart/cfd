@@ -42,7 +42,9 @@ Typical setups:
 
 `AUTOMOUNT` defaults **on everywhere** (ROM-resident and on-disk alike). Disable it with `AUTOMOUNT 0` in `ENV:cfd.prefs`; the resident driver re-reads that file on every card insert, so the setting takes effect without a rebuild. An explicit `AUTOMOUNT 0`/`1` always takes precedence over the default. An example config is shipped as `ENVARC/cfd.prefs` (copy it to `ENVARC:cfd.prefs` and `ENV:cfd.prefs`).
 
-One caveat for ROM-resident systems: the after-DOS bringup runs before the startup-sequence assigns `ENV:`, so `cfd.prefs` is not yet readable at that point and the built-in defaults apply. A card already in the slot at cold boot therefore auto-mounts once even when `ENVARC:cfd.prefs` says `AUTOMOUNT 0`; the setting takes effect as soon as `ENV:` exists (the next insert or removal re-reads it). Cold-boot RDB *autoboot* is unaffected, it does not depend on `AUTOMOUNT`.
+The prefs are read from the first of three sources that has them: `ENV:cfd.prefs` (via `GetVar`), then `ENVARC:cfd.prefs`, then `SYS:Prefs/Env-Archive/cfd.prefs`. The third one covers the boot window: Startup-Sequence assigns `ENV:` and `ENVARC:` only after the after-DOS bringup that starts the automount agent, while `SYS:` already exists at that point. A card present at boot is therefore mounted with your prefs applied (`AUTOMOUNT`, `FLAGS`, `CONTROL_*`), not the built-in defaults. Once Startup-Sequence has run, `ENV:` is the source, so a change there applies to the next insert.
+
+The cold-boot `RTF_COLDSTART` scan runs before DOS exists and cannot read `cfd.prefs`. It therefore registers **RDB partitions only**, the autoboot chain: bootable ones as boot-menu entries, the rest as mountable volumes, exactly as before. MBR, GPT and flat (superfloppy) partitions found at cold boot are published into `partition.resource` but not mounted there; the DOS-time automount mounts them once the prefs are known, so `AUTOMOUNT`, `FLAGS` and `CONTROL_*` apply to them on a ROM-resident system too. Cold-boot RDB *autoboot* does not depend on `AUTOMOUNT`, and RDB partitions registered at cold boot are never unmounted by the automount agent.
 
 Other notes:
 
@@ -65,13 +67,13 @@ A scripted Capitoline-based ROM builder for a 1 MB AmigaOS 3.2.3 / 3.1 / 2.05 Ki
 
 ## ENV:cfd.prefs reference
 
-Configuration is read from `ENV:cfd.prefs` at mount time. Write `ENVARC:cfd.prefs` too if you want it to survive a reboot. The driver re-reads the file on every card insert and every card removal, so a change takes effect the next time you insert or remove a card, with no reboot or rebuild needed. It reads the live `ENV:` copy, so update `ENV:cfd.prefs` for a change to apply now; editing only `ENVARC:cfd.prefs` does not take effect until the next reboot copies it into `ENV:`. Because removal is re-read too, a changed `UNMOUNT` applies to the very next card you pull. The format is one key per line, the value following the key after whitespace; keys are matched case-sensitively as whole words (so `FLAGS` does not match inside `FLAGS_DOS`). A missing key keeps its default.
+Configuration is read at mount time from the first source that has it: `ENV:cfd.prefs`, then `ENVARC:cfd.prefs`, then `SYS:Prefs/Env-Archive/cfd.prefs`. Once the machine is up that is always the live `ENV:` copy, so update `ENV:cfd.prefs` for a change to apply now, and write `ENVARC:cfd.prefs` too if you want it to survive a reboot. The two file paths are what the first mount after boot uses, before Startup-Sequence has assigned `ENV:`. The driver re-reads the config on every card insert and every card removal, so a change takes effect the next time you insert or remove a card, with no reboot or rebuild needed. Because removal is re-read too, a changed `UNMOUNT` applies to the very next card you pull. The format is one key per line, the value following the key after whitespace; keys are matched case-sensitively as whole words (so `FLAGS` does not match inside `FLAGS_DOS`). A missing key keeps its default.
 
-There is no comment syntax: put only the keys you want set. A `;`-prefixed line such as `; FLAGS 0` is still parsed as `FLAGS 0` (the parser finds the keyword anywhere in the file). Free-text notes are safe only if they avoid the uppercase key words. An example you can copy is shipped as `ENVARC/cfd.prefs`.
+Lines can be commented out with `;` or `#`: everything from that character to the end of the line is ignored, so `; FLAGS 0` really is disabled. An example you can copy is shipped as `ENVARC/cfd.prefs`. The config is read up to 511 bytes.
 
 | Key | Value | Default | Meaning |
 |---|---|---|---|
-| `AUTOMOUNT` | `0` or `1` | on | Mount partitions on insert. |
+| `AUTOMOUNT` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | on | Mount partitions on insert. Any other value is ignored and the default applies. |
 | `FLAGS` | decimal | `0` | Mount flags applied to every mount. See the bit table below. |
 | `CONTROL` | string | none | Mount CONTROL string applied to every mount. |
 | `UNMOUNT` | names | all | Filesystems to fully unmount on removal (see "Removable-media model"). Any subset of `DOS FFS SFS PFS FAT`; a key with no recognized names (e.g. `UNMOUNT NONE`) keeps every handler. |
@@ -112,6 +114,8 @@ Either way the partition stays visible in `lsptres` (shown absent) while the car
 
 `AUTOMOUNT` gates only the mount step; it does not unmount. Changing `AUTOMOUNT 1` to `0` does not unmount volumes already mounted. To clear them, pull the card (the default removal policy unmounts them) or reboot.
 
+The same applies to `FLAGS` and `CONTROL`: a handler reads them when it starts, so a changed `CONTROL_<fs>` reaches a partition only when that partition is mounted again. Under `UNMOUNT NONE`, or for a filesystem left out of the `UNMOUNT` list, the handler is kept across a card swap and keeps the values it started with. List the filesystem in `UNMOUNT` and reinsert the card to apply a new one.
+
 ## Cold-boot autoboot details (ROM-resident)
 
 How each RDB partition is handled at cold boot:
@@ -123,6 +127,8 @@ How each RDB partition is handled at cold boot:
 | NOMOUNT (bit 1 set) | any | skipped: not mounted, not in the DOS list |
 
 BootPri is stored in the RDB partition environment and controls boot order.
+
+Only RDB partitions are registered at cold boot. MBR, GPT and flat partitions on a card present at cold boot are published to `partition.resource` and listed by `lsptres` as not mounted (`P---`); the automount agent mounts them once DOS is up and `cfd.prefs` is readable.
 
 The driver's cold-boot autoboot runs late in Kickstart's resident init, after the internal IDE (`scsi.device`) has started. Because that init is sequential, if the IDE stalls at boot (for example no drive connected), CF autoboot never gets its turn and does not trigger either. The boot stub first does a single Gayle read to check for a card; an empty slot returns immediately. With a card present it tolerates slow cards by polling up to about 1.8 s total; a healthy card adds no measurable delay.
 
