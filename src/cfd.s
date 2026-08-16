@@ -138,6 +138,10 @@ CopyMem		= -624
 ;-- dos.library (worker reads the config var)
 DosGetVar	= -906
 Delay		= -198			;dos.library
+DosOpen		= -30			;dos.library
+DosClose	= -36			;dos.library
+DosRead		= -42			;dos.library
+MODE_OLDFILE	= 1005
 GVF_GLOBAL_ONLY	= $100
 GVF_BINARY_VAR	= $400
 CacheClearE	= -642
@@ -3350,11 +3354,15 @@ _mw_haveLib:
 	else
 	beq.w	_mw_done
 	endc
-	bsr	_mwReadConfig		;ENV:cfd.prefs -> a5 frame
+	bsr	_mwReadConfig		;cfd.prefs -> a5 frame
 	ifd	DEBUG
 	move.w	CFG_MountCfg+mc_Flags+2(a5),d0	;global FLAGS -> gate so worker trace shows
 	or.w	d0,CFU_OpenFlags(a3)
 	DBGMSG	dbg_mw_cfg_b
+	moveq.l	#0,d0
+	move.b	CFG_Source(a5),d0	;CFGSRC_*
+	DBGDEC
+	DBGMSG	dbg_mw_cfg_rd
 	move.l	CFG_DbgRead(a5),d0
 	DBGDEC
 	DBGMSG	dbg_mw_cfg_am
@@ -3364,6 +3372,14 @@ _mw_haveLib:
 	DBGMSG	dbg_mw_cfg_fl
 	move.l	CFG_MountCfg+mc_Flags(a5),d0
 	DBGDEC
+	tst.b	CFG_AmBad(a5)
+	beq.s	_mw_dbg_trunc
+	DBGMSG	dbg_mw_cfg_ambad
+_mw_dbg_trunc:
+	tst.b	CFG_Trunc(a5)
+	beq.s	_mw_dbg_cfgend
+	DBGMSG	dbg_mw_cfg_trunc
+_mw_dbg_cfgend:
 	DBGNL
 	endc
 	tst.l	CFU_DriveSize(a3)
@@ -3451,21 +3467,158 @@ _mw_out:
 ; UNMOUNT NONE) keeps handlers on removal instead.
 ; In : a5 = config frame. Preserves a3/a4/a5/d6/d7.
 ;===========================================================
-CFG_BUFSZ	= 256
+CFG_BUFSZ	= 512
 CFG_OVMAX	= 6			;max override rows
 CFG_NCTL	= 8			;control-pool slots (global + per-FS)
 CFG_CTLSZ	= 32			;bytes per control slot
 
-CFG_Buf		= 0			;config text buffer (0..255)
-CFG_Prefixes	= 256			;UNMOUNT dostype list, 0-terminated (8 longs)
-CFG_AutoMount	= 288			;byte (1 = automount on)
-CFG_CtlNext	= 289			;byte (control slots used)
-CFG_OvNext	= 290			;byte (override rows used)
-CFG_DbgRead	= 292			;long GetVar result (-1 = var not defined)
-CFG_MountCfg	= 296			;MountCfg (mc_Flags/mc_Control/mc_Overrides)
-CFG_Overrides	= 308			;(CFG_OVMAX+1) override rows * ovr_Sizeof
-CFG_Controls	= 420			;CFG_NCTL control C-string slots * CFG_CTLSZ
-CFG_SIZEOF	= 676
+;-- CFG_Source values
+CFGSRC_NONE	= 0			;no prefs found: built-in defaults
+CFGSRC_ENV	= 1			;ENV:cfd.prefs (GetVar)
+CFGSRC_ENVARC	= 2			;ENVARC:cfd.prefs
+CFGSRC_ARCHIVE	= 3			;SYS:Prefs/Env-Archive/cfd.prefs
+
+CFG_Buf		= 0			;config text buffer (0..CFG_BUFSZ-1)
+CFG_Prefixes	= 512			;UNMOUNT dostype list, 0-terminated (8 longs)
+CFG_AutoMount	= 544			;byte (1 = automount on)
+CFG_CtlNext	= 545			;byte (control slots used)
+CFG_OvNext	= 546			;byte (override rows used)
+CFG_Source	= 547			;byte CFGSRC_*
+CFG_AmBad	= 548			;byte (1 = AUTOMOUNT value not recognized)
+CFG_Trunc	= 549			;byte (1 = prefs filled the buffer)
+CFG_DbgRead	= 552			;long bytes read (-1 = no prefs found)
+CFG_MountCfg	= 556			;MountCfg (mc_Flags/mc_Control/mc_Overrides)
+CFG_Overrides	= 568			;(CFG_OVMAX+1) override rows * ovr_Sizeof
+CFG_Controls	= 680			;CFG_NCTL control C-string slots * CFG_CTLSZ
+CFG_SIZEOF	= 936
+
+;-- _mwLoadPrefs: read cfd.prefs into CFG_Buf from the first source that has
+;   it: ENV: (GetVar), ENVARC:cfd.prefs, SYS:Prefs/Env-Archive/cfd.prefs.
+;   Startup-Sequence assigns ENV:/ENVARC: after the RTF_AFTERDOS bringup that
+;   starts the worker, so at the first automount only the SYS: path resolves;
+;   dos.library assigns SYS: at boot. On that first pass with a card present
+;   the cascade is retried before falling back to the built-in defaults.
+;   In : a2 = DOSBase, a3 = &Unit, a4 = &Dev, a5 = config frame
+;   Out: d3 = bytes read, or -1 if no source has it; CFG_Source set
+PREFS_STEP	= 10			;ticks between retries (1/5 s)
+PREFS_TRIES	= 10			;~2 s total budget
+_mwLoadPrefs:
+	movem.l	d0-d2/d4-d7/a0-a1/a6,-(sp)
+	moveq.l	#PREFS_TRIES,d7		;d7 = remaining tries
+_mlp_try:
+;-- 1. ENV: via GetVar, binary so newlines are kept
+	move.l	a2,a6
+	lea	s_cfgname(pc),a0
+	move.l	a0,d1			;name "cfd.prefs" (bare, no ENV:)
+	lea	CFG_Buf(a5),a0
+	move.l	a0,d2			;buffer
+	move.l	#CFG_BUFSZ-1,d3
+	move.l	#GVF_GLOBAL_ONLY!GVF_BINARY_VAR,d4
+	jsr	DosGetVar(a6)
+	move.l	d0,d3
+	moveq.l	#CFGSRC_ENV,d6
+	tst.l	d3
+	bgt.s	_mlp_got
+;-- 2. ENVARC:cfd.prefs
+	lea	s_envarc_prefs(pc),a0
+	bsr	_mwLoadFile
+	move.l	d0,d3
+	moveq.l	#CFGSRC_ENVARC,d6
+	tst.l	d3
+	bgt.s	_mlp_got
+;-- 3. the same file before Startup-Sequence assigns ENVARC:
+	lea	s_env_archive(pc),a0
+	bsr	_mwLoadFile
+	move.l	d0,d3
+	moveq.l	#CFGSRC_ARCHIVE,d6
+	tst.l	d3
+	bgt.s	_mlp_got
+;-- no source yet: retry on the first pass with a card present
+	tst.b	CFD_PrefsReady(a4)
+	bne.s	_mlp_none
+	tst.l	CFU_DriveSize(a3)
+	beq.s	_mlp_none
+	subq.w	#1,d7
+	beq.s	_mlp_none
+	move.l	a2,a6
+	moveq.l	#PREFS_STEP,d1
+	jsr	Delay(a6)
+	bra.w	_mlp_try
+_mlp_none:
+	moveq.l	#-1,d3
+	clr.b	CFG_Source(a5)		;CFGSRC_NONE
+	bra.s	_mlp_out
+_mlp_got:
+	move.b	d6,CFG_Source(a5)
+	move.b	#1,CFD_PrefsReady(a4)	;resolved once: later passes do not retry
+_mlp_out:
+	movem.l	(sp)+,d0-d2/d4-d7/a0-a1/a6
+	rts
+
+;-- _mwLoadFile: read a prefs file into CFG_Buf.
+;   In : a0 = file name, a2 = DOSBase, a5 = config frame
+;   Out: d0 = bytes read, or -1 if the file cannot be opened or read
+_mwLoadFile:
+	movem.l	d1-d4/a0-a1/a6,-(sp)
+	move.l	a2,a6
+	move.l	a0,d1
+	move.l	#MODE_OLDFILE,d2
+	jsr	DosOpen(a6)
+	move.l	d0,d4			;d4 = file handle
+	bne.s	_mlf_read
+	moveq.l	#-1,d0
+	bra.s	_mlf_out
+_mlf_read:
+	move.l	d4,d1
+	lea	CFG_Buf(a5),a0
+	move.l	a0,d2
+	move.l	#CFG_BUFSZ-1,d3
+	jsr	DosRead(a6)
+	move.l	d0,d3			;d3 = bytes read, -1 = read error
+	move.l	d4,d1
+	jsr	DosClose(a6)
+	move.l	d3,d0
+_mlf_out:
+	movem.l	(sp)+,d1-d4/a0-a1/a6
+	rts
+
+;-- _cfgStripComments: blank out ; and # comments up to the end of their line.
+;   The keyword search runs over the whole buffer, so without this a commented
+;   out key is still matched.
+;   In : a0 = NUL-terminated buffer
+_cfgStripComments:
+	movem.l	d0/a0,-(sp)
+_csc_scan:
+	move.b	(a0),d0
+	beq.s	_csc_out
+	cmp.b	#';',d0
+	beq.s	_csc_blank
+	cmp.b	#'#',d0
+	beq.s	_csc_blank
+	addq.l	#1,a0
+	bra.s	_csc_scan
+_csc_blank:
+	move.b	#' ',(a0)+
+	move.b	(a0),d0
+	beq.s	_csc_out
+	cmp.b	#13,d0
+	beq.s	_csc_scan
+	cmp.b	#10,d0
+	beq.s	_csc_scan
+	bra.s	_csc_blank
+_csc_out:
+	movem.l	(sp)+,d0/a0
+	rts
+
+;-- _cfgUpper: fold one ASCII letter in d0.b to upper case.
+_cfgUpper:
+	cmp.b	#'a',d0
+	bcs.s	_cup_out
+	cmp.b	#'z',d0
+	bhi.s	_cup_out
+	sub.b	#'a'-'A',d0
+_cup_out:
+	rts
 
 _mwReadConfig:
 	movem.l	d0-d7/a0-a4/a6,-(sp)
@@ -3474,6 +3627,9 @@ _mwReadConfig:
 	move.l	#-1,CFG_DbgRead(a5)
 	clr.b	CFG_CtlNext(a5)
 	clr.b	CFG_OvNext(a5)
+	clr.b	CFG_Source(a5)
+	clr.b	CFG_AmBad(a5)
+	clr.b	CFG_Trunc(a5)
 	clr.l	CFG_MountCfg+mc_Flags(a5)
 	clr.l	CFG_MountCfg+mc_Control(a5)
 	clr.l	CFG_MountCfg+mc_Overrides(a5)
@@ -3499,42 +3655,58 @@ _cfg_umdef_done:
 	tst.l	d0
 	beq.w	_cfg_done		;no dos.library -> defaults
 	move.l	d0,a2			;a2 = DOSBase
-;-- read the global env var whole (binary so newlines are kept)
-	move.l	a2,a6
-	lea	s_cfgname(pc),a0
-	move.l	a0,d1			;name = "cfd.prefs" (bare, no ENV:)
-	lea	CFG_Buf(a5),a0
-	move.l	a0,d2			;buffer
-	move.l	#CFG_BUFSZ-1,d3		;buffer size
-	move.l	#GVF_GLOBAL_ONLY!GVF_BINARY_VAR,d4
-	jsr	DosGetVar(a6)
-	move.l	d0,d3			;d3 = length, or -1 if not defined
+	bsr	_mwLoadPrefs		;d3 = bytes read, or -1
 	move.l	d3,CFG_DbgRead(a5)
 	move.l	a2,a1
 	move.l	(_AbsExecBase).w,a6
 	jsr	CloseLibrary(a6)
 	tst.l	d3
-	ble.w	_cfg_done		;not defined / empty -> defaults
+	ble.w	_cfg_done		;no prefs -> defaults
 	cmp.l	#CFG_BUFSZ-1,d3
 	bcs.s	_cfg_term
 	move.l	#CFG_BUFSZ-1,d3
+	move.b	#1,CFG_Trunc(a5)	;prefs filled the buffer: rest not parsed
 _cfg_term:
 	lea	CFG_Buf(a5),a0
 	clr.b	0(a0,d3.l)		;NUL-terminate
+	lea	CFG_Buf(a5),a0
+	bsr	_cfgStripComments
 ;-- AUTOMOUNT
 	lea	CFG_Buf(a5),a0
 	lea	kw_automount(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
 	beq.s	_cfg_flags
+;-- accepted values: 0 1 ON OFF YES NO, either case. Anything else keeps the
+;   default and is reported in the worker trace.
 	move.l	d0,a0
 	bsr	_cfgSkipSp
-	cmp.b	#'0',(a0)
-	bne.s	_cfg_am_on		;explicit non-0 value -> on (overrides default)
-	clr.b	CFG_AutoMount(a5)	;AUTOMOUNT 0 -> off
+	move.b	(a0),d0
+	cmp.b	#'0',d0
+	beq.s	_cfg_am_off
+	cmp.b	#'1',d0
+	beq.s	_cfg_am_on
+	bsr	_cfgUpper
+	cmp.b	#'N',d0			;NO
+	beq.s	_cfg_am_off
+	cmp.b	#'Y',d0			;YES
+	beq.s	_cfg_am_on
+	cmp.b	#'O',d0			;ON / OFF
+	bne.s	_cfg_am_bad
+	move.b	1(a0),d0
+	bsr	_cfgUpper
+	cmp.b	#'F',d0
+	beq.s	_cfg_am_off
+	cmp.b	#'N',d0
+	beq.s	_cfg_am_on
+_cfg_am_bad:
+	move.b	#1,CFG_AmBad(a5)	;unrecognized value -> keep the default
+	bra.s	_cfg_flags
+_cfg_am_off:
+	clr.b	CFG_AutoMount(a5)
 	bra.s	_cfg_flags
 _cfg_am_on:
-	move.b	#1,CFG_AutoMount(a5)	;AUTOMOUNT 1 -> on
+	move.b	#1,CFG_AutoMount(a5)
 _cfg_flags:
 ;-- global FLAGS
 	lea	CFG_Buf(a5),a0
@@ -3808,6 +3980,8 @@ _cfoa_full:
 	rts
 
 s_cfgname:	dc.b	"cfd.prefs",0
+s_envarc_prefs:	dc.b	"ENVARC:cfd.prefs",0
+s_env_archive:	dc.b	"SYS:Prefs/Env-Archive/cfd.prefs",0
 kw_automount:	dc.b	"AUTOMOUNT",0
 kw_flags:	dc.b	"FLAGS",0
 kw_control:	dc.b	"CONTROL",0
@@ -3897,11 +4071,17 @@ dbg_mw_umnt_b:
 dbg_mw_umnt_a:
 	dc.b	"[MW] entries detached: ",0
 dbg_mw_cfg_b:
-	dc.b	"[MW] config: read=",0
+	dc.b	"[MW] config: src=",0
+dbg_mw_cfg_rd:
+	dc.b	" read=",0
 dbg_mw_cfg_am:
 	dc.b	" auto=",0
 dbg_mw_cfg_fl:
 	dc.b	" flags=",0
+dbg_mw_cfg_ambad:
+	dc.b	" (AUTOMOUNT value ignored)",0
+dbg_mw_cfg_trunc:
+	dc.b	" (prefs truncated)",0
 	even
 	endc
 
