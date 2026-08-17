@@ -4075,7 +4075,7 @@ dbg_mw_pt_fail:
 dbg_mw_scan_b:
 	dc.b	"[MW] scanning compactflash.device:0 for partitions",13,10,0
 dbg_mw_scan_a:
-	dc.b	"[MW] scan done, partitions known: ",0
+	dc.b	"[MW] scan done, new partitions: ",0
 dbg_mw_mnt_b:
 	dc.b	"[MW] mounting new partitions",13,10,0
 dbg_mw_mnt_a:
