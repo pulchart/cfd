@@ -222,8 +222,12 @@ s_automount:
 	tst.l	d0
 	beq.w	_dr_out
 	move.l	d0,a3			;a3 = &CFD
-	tst.b	CFD_DosReady(a3)	;idempotence guard
+;-- Own one-shot guard. CFD_DosReady is also written by the mount agent, so
+;   testing that here can suppress the Signal below, which is the only wake
+;   the agent gets on a ROM boot.
+	tst.b	CFD_DosHook(a3)
 	bne.w	_dr_out
+	move.b	#1,CFD_DosHook(a3)
 
 ;-- open unit 0 permanently. MsgPort + IOStdReq live in a one-shot public
 ;   allocation (never freed): the device stays open, the port receives no
@@ -280,11 +284,13 @@ _dr_out:
 ;
 ; Sequence:
 ;   1. Find/init compactflash.device if not yet in DeviceList.
-;   2. Exit early if CFD_BootDone already set (2nd cold-start pass).
+;   2. Exit early if CFD_BootDone already set (2nd cold-start pass), else set
+;      it now: the scan below opens the device, which spawns the mount agent
+;      while this runs, and the agent reads the flag.
 ;   3. Find/init ptable.library; if absent (disk-only install) exit silently
 ;      (the device still works, only autoboot is unavailable).
 ;   4. BootScanPartitions("compactflash.device", 0).
-;   5. Set CFD_BootDone, CloseLibrary, return.
+;   5. CloseLibrary, return.
 ; a6 = SysBase.
 ;===========================================================
 s_autobootstub:
@@ -308,6 +314,11 @@ _bs_devPresent:
 	move.l	d7,a0
 	tst.b	CFD_BootDone(a0)
 	bne.w	_bs_done
+;-- Mark the cold path as taken BEFORE OpenDevice. The device open below
+;   starts the unit task, which spawns the mount agent while this scan is
+;   still running; the agent reads this flag to tell a ROM install (wait for
+;   the after-DOS hook) from a disk-loaded one (mark DOS ready itself).
+	move.b	#1,CFD_BootDone(a0)
 
 ;-- No-card pre-gate. Read live Gayle CCDET ($DA8000 bit 6, set =
 ;   card present); when the slot is empty skip OpenDevice to avoid
@@ -319,7 +330,7 @@ _bs_devPresent:
 	lea	dbg_bs_no_card(pc),a0
 	bsr	_bootDebug
 	endc
-	bra.w	_bs_mark
+	bra.w	_bs_done
 _bs_have_card:
 
 ;-- OpenLibrary "ptable.library", v2 (unified pipeline: BootScanPartitions).
@@ -340,14 +351,14 @@ _bs_have_card:
 	endc
 	lea	RdbLibName(pc),a1
 	jsr	FindResident(a6)
-	DBG_BEQ_MSG dbg_bs_noires,_bs_mark
+	DBG_BEQ_MSG dbg_bs_noires,_bs_done
 	move.l	d0,a1			;a1 = &Resident
 	sub.l	a0,a0			;a0 = NULL (no SegList)
 	jsr	InitResident(a6)
 	moveq.l	#2,d0
 	lea	RdbLibName(pc),a1
 	jsr	OpenLibrary(a6)
-	DBG_BEQ_MSG dbg_bs_initfail,_bs_mark
+	DBG_BEQ_MSG dbg_bs_initfail,_bs_done
 
 _bs_libOk:
 	move.l	d0,a3			;a3 = ptable.library base
@@ -367,13 +378,6 @@ _bs_libOk:
 	move.l	a3,a1
 	move.l	a5,a6
 	jsr	CloseLibrary(a6)
-
-;-- Set the one-shot guard. d7 still holds &CFD from the _bs_devPresent /
-;   post-InitResident find above; every path that reaches here has already
-;   validated d7, so no second Forbid+FindName is needed.
-_bs_mark:
-	move.l	d7,a0
-	move.b	#1,CFD_BootDone(a0)
 
 _bs_done:
 	moveq.l	#0,d0

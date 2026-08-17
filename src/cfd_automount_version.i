@@ -2,5 +2,5 @@
 FILE_VERSION	= 2
 FILE_REVISION	= 0
 VERSION_STRING	macro
-	dc.b	"compactflash.automount 2.0-dev (30.07.2026)"
+	dc.b	"compactflash.automount 2.0-dev (17.08.2026)"
 	endm
