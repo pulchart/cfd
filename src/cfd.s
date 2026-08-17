@@ -579,7 +579,9 @@ CFD_SegList	= 48			;segment list for expunge
 ;
 ;   offset  size  field
 ;     56     1    CFD_BootDone   one-shot re-entry guard set by the
-;                                RTF_COLDSTART stub at end of scan
+;                                RTF_COLDSTART stub before its scan opens
+;                                the device (the open spawns the MountAgent,
+;                                which reads this flag)
 ;     57     1    CFD_DosReady   set by the RTF_AFTERDOS hook when
 ;                                System-Startup reports DOS functional
 ;                                (step 13, see NDK system-startup.doc);
@@ -3196,9 +3198,11 @@ _MountAgentEntry:
 	move.l	d4,CFU_MountDone(a3)
 	move.l	d5,CFU_MountSig(a3)	;publish last: signals valid now
 
-;-- Disk-loaded driver: CFD_BootDone == 0 means RTF_COLDSTART /
-;   RTF_AFTERDOS never ran, so mark DOS ready here (DOS is up at
-;   disk-load time). ROM builds (== 1) keep the AFTERDOS gate.
+;-- Disk-loaded driver: CFD_BootDone == 0 means the RTF_COLDSTART stub never
+;   ran, so DOS is up already (the agent is spawned by the device open the
+;   RTF_AFTERDOS hook does). Mark DOS ready here. On a ROM boot the stub sets
+;   CFD_BootDone before its scan opens the device, so this branch is not taken
+;   pre-DOS and the AFTERDOS gate stays in charge.
 	tst.b	CFD_BootDone(a4)
 	bne.s	_ma_loop
 	move.b	#1,CFD_DosReady(a4)
@@ -3422,6 +3426,16 @@ _mw_settled:
 	DBGNL
 	bra.s	_mw_close
 _mw_unmount:
+;-- CFU_DriveSize is also 0 while a card sits in the slot unidentified, e.g.
+;   during bringup. Read the live Gayle card-detect line ($DA8000 bit 6, set =
+;   card present) and leave the mounts alone in that case; the unit task
+;   signals the agent again when the identify finishes.
+	btst.b	#6,$00DA8000
+	beq.s	_mw_umnt_go
+	DBGMSG	dbg_mw_umnt_wait
+	DBGNL
+	bra.s	_mw_close
+_mw_umnt_go:
 ;-- card removed: empty UNMOUNT list -> MarkAbsent (keep node + handler);
 ;   non-empty -> UnmountPartitions(prefixList) (unmount the listed filesystems).
 	DBGMSG	dbg_mw_umnt_b
@@ -4070,6 +4084,8 @@ dbg_mw_umnt_b:
 	dc.b	"[MW] card removed",13,10,0
 dbg_mw_umnt_a:
 	dc.b	"[MW] entries detached: ",0
+dbg_mw_umnt_wait:
+	dc.b	"[MW] card still in slot, not identified yet: keeping mounts",0
 dbg_mw_cfg_b:
 	dc.b	"[MW] config: src=",0
 dbg_mw_cfg_rd:
