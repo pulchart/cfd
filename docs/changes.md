@@ -5,7 +5,7 @@ _Components in this release_:
 
 - `compactflash.device 2.0-dev (17.08.2026)` _(new)_
 - `compactflash.automount 2.0-dev (17.08.2026)` _(new)_
-- `ptable.library 2.0-dev (17.08.2026)` _(new)_
+- `ptable.library 2.0-dev (18.08.2026)` _(new)_
 - `CFInfo 1.37 (11.01.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.0 (06.08.2026)` _(new)_

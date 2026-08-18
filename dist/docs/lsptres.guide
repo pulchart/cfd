@@ -49,11 +49,12 @@
 
 @{fg shine}lsptres@{fg text} lists @{fg shine}partition.resource@{fg text} : every partition that @{fg shine}ptable.library@{fg text}
 has discovered and published, whether registered at cold boot or scanned
-when a card was hotplugged. It reports the partition scheme it came from
-(RDB, MBR, GPT or a partition-table-less "flat" superfloppy), the
-DosType, mount state, and the mount Flags / CONTROL string resolved for
-it. It is the companion to fat95's @{fg shine}lsfsres@{fg text} , which lists
-@{fg shine}FileSystem.resource@{fg text} .
+when a card was hotplugged.
+
+Each row reports the partition scheme it came from (RDB, MBR, GPT or a
+partition-table-less "flat" superfloppy), the DosType, the mount state,
+and the mount Flags and CONTROL string resolved for it. It is the
+companion to fat95's @{fg shine}lsfsres@{fg text} , which lists @{fg shine}FileSystem.resource@{fg text} .
 
 @{b}Use cases@{ub}:
   * Confirm a hotplugged card's partitions were scanned and mounted.
@@ -175,11 +176,13 @@ Text of @{fg shine}0x46415400@{fg text} is @{fg shine}FAT.@{fg text} (the traili
 @{i}A single MBR partition reattached over a 3-partition GPT card (the `I` flag)@{ui}
 
 Starting from the three-FAT GPT card above (all @{fg shine}P--M@{fg text} ), that card was
-removed and a single-partition MBR card inserted in its place. The scan
-re-matches the new card's one partition to the @{fg shine}CFa0@{fg text} slot - note its Src
-flips @{fg shine}GPT@{fg text} -> @{fg shine}MBR@{fg text} , the fresh card's scheme. The @{fg shine}CFa1@{fg text} and @{fg shine}CFa2@{fg text} handlers
-were never unmounted, and the MBR card has no partition for them, so
-those slots go @{fg shine}I@{fg text} (invalid): the present bit clears while mounted stays.
+removed and a single-partition MBR card inserted in its place.
+
+The scan re-matches the new card's one partition to the @{fg shine}CFa0@{fg text} slot, and
+its Src flips @{fg shine}GPT@{fg text} to @{fg shine}MBR@{fg text} , the fresh card's scheme. The @{fg shine}CFa1@{fg text} and @{fg shine}CFa2@{fg text}
+handlers were never unmounted and the MBR card has no partition for
+them, so those slots go @{fg shine}I@{fg text} (invalid): the present bit clears while
+mounted stays.
 
 @{fg highlight}
   Name         Device        Unit Part Src Pri DosType    Text Flags MFlg Ctrl
