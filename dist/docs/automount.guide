@@ -134,6 +134,15 @@ On removal, the @{fg shine}UNMOUNT@{fg text} key decides per filesystem:
 Either way the partition stays visible in @{fg shine}lsptres@{fg text} while the card is out,
 shown absent, and is re-confirmed or re-published on reinsert.
 
+A card that is still in use is not unmounted. A filesystem cannot give
+up a volume something holds a lock on, an open Workbench window on it
+being the usual case, because the volume node has to stay in the DOS
+list for that lock to remain valid. It declines, and the partition is
+kept and marked absent exactly as @{fg shine}UNMOUNT NONE@{fg text} would leave it, so its
+handler stays in service. Close the window, or whatever else is holding
+the volume, and the next removal unmounts it. With @{fg shine}FLAGS 8@{fg text} the serial
+trace names the refusal.
+
 Two settings only take effect on the next mount:
 
   * @{fg shine}AUTOMOUNT@{fg text} gates the mount step, it never unmounts. Changing @{fg shine}1@{fg text} to @{fg shine}0@{fg text} leaves
