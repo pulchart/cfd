@@ -114,15 +114,15 @@ FAT cards are the case that needs attention: MBR, GPT and whole-disk (flat) FAT 
 
 At Kickstart cold start, before DOS exists, the driver opens `ptable.library`, which walks the card's RDB, loads any filesystem handlers stored in it, and registers each partition:
 
-| RDB partition flag | BootPri | Result |
-|---|---|---|
-| normal | >= 0 | bootable: appears in the Early Startup boot device list |
-| normal | < 0 | non-bootable: mounted as a DOS volume |
-| NOMOUNT (bit 1 set) | any | skipped: not mounted, not in the DOS list |
+| RDB partition flag | Result |
+|---|---|
+| bootable (bit 0 set) | appears in the Early Startup boot device list |
+| bootable clear | mounted as a DOS volume, not offered as a boot device |
+| NOMOUNT (bit 1 set) | skipped: not mounted, not in the DOS list |
 
-BootPri is stored in the RDB partition environment and controls boot order.
+Both flags live in the RDB partition entry and are set by the partitioning tool that created it. BootPri, stored in the partition environment, does not decide bootability; it orders the boot list.
 
-Only RDB partitions are registered at cold boot, because that runs before DOS and `cfd.prefs` cannot be read yet. MBR, GPT and flat partitions on a card present at cold boot are published to `partition.resource` and listed as `P---`; the automount agent mounts them once DOS is up, so `AUTOMOUNT`, `FLAGS` and `CONTROL_*` apply to them too. Autoboot itself does not depend on `AUTOMOUNT`, and RDB partitions registered at cold boot are never unmounted by the automount agent.
+Only RDB partitions are registered at cold boot, because that runs before DOS and `cfd.prefs` cannot be read yet. MBR, GPT and flat partitions on a card present at cold boot are published to `partition.resource` and listed as `P---`; the automount agent mounts them once DOS is up, so `AUTOMOUNT`, `FLAGS` and `CONTROL_*` apply to them too. Autoboot itself does not depend on `AUTOMOUNT`. Removal is not special either: pull the card and the partitions registered at cold boot follow the same `UNMOUNT` policy as any other, so the default unmounts them and `UNMOUNT NONE` keeps their handlers.
 
 Cold-boot autoboot runs late in Kickstart's resident init, after the internal IDE (`scsi.device`) has started. That init is sequential, so if the IDE stalls at boot (no drive connected, for instance) CF autoboot never gets its turn either. The boot stub first does a single Gayle read to check for a card; an empty slot returns immediately. With a card present it tolerates slow cards by polling up to about 1.8 s; a healthy card adds no measurable delay.
 
