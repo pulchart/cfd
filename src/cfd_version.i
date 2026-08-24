@@ -3,8 +3,8 @@ FILE_VERSION	= 2
 FILE_REVISION	= 0
 VERSION_STRING	macro
 	ifd	__68020__
-	dc.b	"compactflash.device 2.0-dev (17.08.2026) [68020]"
+	dc.b	"compactflash.device 2.0-dev (25.08.2026) [68020]"
 	else
-	dc.b	"compactflash.device 2.0-dev (17.08.2026) [68000]"
+	dc.b	"compactflash.device 2.0-dev (25.08.2026) [68000]"
 	endc
 	endm
