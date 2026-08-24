@@ -2,3 +2,6 @@
 AUTOMOUNT 1
 FLAGS 0
 CONTROL_FAT -d-D+q
+; Mount FAT cards with CrossDOS instead of fat95 (both lines needed):
+; DOSTYPE_FAT 0x4D534400
+; HANDLER_FAT L:CrossDOSFileSystem

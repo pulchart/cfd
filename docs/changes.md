@@ -1,24 +1,26 @@
-## 20260817-dev
+## 20260825-dev
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.0-dev (17.08.2026)` _(new)_
-- `compactflash.automount 2.0-dev (17.08.2026)` _(new)_
-- `ptable.library 2.0-dev (18.08.2026)` _(new)_
+- `compactflash.device 2.0-dev (25.08.2026)` _(new)_
+- `compactflash.automount 2.0-dev (25.08.2026)` _(new)_
+- `ptable.library 2.0-dev (25.08.2026)` _(new)_
 - `CFInfo 1.37 (11.01.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.0 (06.08.2026)` _(new)_
-- `lsptres 1.0-dev (30.07.2026)` _(new)_
+- `lsptres 1.0-dev (25.08.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
 ##### CompactFlash Driver
 
 - **Automount.** Hotplugged cards mount automatically at DOS time, on by default; disable with `AUTOMOUNT 0` in the new `ENV:cfd.prefs` config file. Removing a card fully unmounts all supported filesystems by default (`UNMOUNT <names>` restricts it, `UNMOUNT NONE` keeps the handlers). Boot and automount bringup is split into a separate `compactflash.automount` module. Cold boot registers the RDB partitions (the autoboot chain); MBR, GPT and flat partitions are mounted by the automount agent once DOS is up, so `cfd.prefs` applies to them on a ROM-resident system too. See [automount.md](automount.md).
+- **The FAT filesystem is selectable.** `DOSTYPE_FAT 0x4D534400` with `HANDLER_FAT L:CrossDOSFileSystem` in `cfd.prefs` mounts FAT cards with CrossDOS instead of fat95; `HANDLER_FAT L:fat95` alone loads fat95 from disk when it is not resident. See [automount.md](automount.md).
 
 ##### Partition Table library
 
 - **Unified partition scanning.** One scanner parses RDB, MBR, GPT, and flat (whole-disk) partition tables and publishes every partition into a shared `partition.resource`, now used by both `compactflash.device` and `fat95` instead of each carrying its own. The new `lsptres` tool lists the resource. See [ptable.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/ptable.md) and [lsptres.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/lsptres.md).
+- **Selectable filesystem for MBR/GPT FAT partitions**, driven by the `DOSTYPE_FAT` and `HANDLER_FAT` keys above. `lsptres` shows the DosType a partition is mounted with.
 
 ##### Tools
 

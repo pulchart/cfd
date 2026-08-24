@@ -3064,7 +3064,7 @@ _t_end:
 ;     card absent  -> UnmountPartitions
 ; Both LVOs are idempotent, so a coalesced or stale wake is harmless.
 ;
-; The agent is a bare Exec Task. The worker process reads ENV:ptable.prefs
+; The agent is a bare Exec Task. The worker process reads ENV:cfd.prefs
 ; (AUTOMOUNT / FLAGS / UNMOUNT) and applies it.
 ;===========================================================
 
@@ -3376,6 +3376,14 @@ _mw_haveLib:
 	DBGMSG	dbg_mw_cfg_fl
 	move.l	CFG_MountCfg+mc_Flags(a5),d0
 	DBGDEC
+;-- only when DOSTYPE_FAT was given, so the usual trace line is unchanged.
+;   Raw hex on purpose: a mistyped value is otherwise invisible until the
+;   partition quietly fails to mount.
+	move.l	CFG_MountCfg+mc_NodeDosType(a5),d0
+	beq.s	_mw_dbg_amchk
+	DBGMSG	dbg_mw_cfg_dt
+	DBGNUM
+_mw_dbg_amchk:
 	tst.b	CFG_AmBad(a5)
 	beq.s	_mw_dbg_trunc
 	DBGMSG	dbg_mw_cfg_ambad
@@ -3483,8 +3491,9 @@ _mw_out:
 ;===========================================================
 CFG_BUFSZ	= 512
 CFG_OVMAX	= 6			;max override rows
-CFG_NCTL	= 8			;control-pool slots (global + per-FS)
-CFG_CTLSZ	= 32			;bytes per control slot
+CFG_NCTL	= 10			;string-pool slots: CONTROL and HANDLER values
+					;share the pool, global + per-FS each
+CFG_CTLSZ	= 32			;bytes per string slot
 
 ;-- CFG_Source values
 CFGSRC_NONE	= 0			;no prefs found: built-in defaults
@@ -3501,10 +3510,23 @@ CFG_Source	= 547			;byte CFGSRC_*
 CFG_AmBad	= 548			;byte (1 = AUTOMOUNT value not recognized)
 CFG_Trunc	= 549			;byte (1 = prefs filled the buffer)
 CFG_DbgRead	= 552			;long bytes read (-1 = no prefs found)
-CFG_MountCfg	= 556			;MountCfg (mc_Flags/mc_Control/mc_Overrides)
-CFG_Overrides	= 568			;(CFG_OVMAX+1) override rows * ovr_Sizeof
-CFG_Controls	= 680			;CFG_NCTL control C-string slots * CFG_CTLSZ
-CFG_SIZEOF	= 936
+CFG_MountCfg	= 556			;MountCfg, mc_Sizeof bytes
+CFG_Overrides	= 576			;(CFG_OVMAX+1) override rows * ovr_Sizeof
+CFG_Controls	= 688			;CFG_NCTL string slots * CFG_CTLSZ
+CFG_SIZEOF	= 1008
+
+;-- the frame offsets above are hand-written, so let the assembler check the
+;   blocks still tile exactly. A ptable-side mc_/ovr_ size change then breaks
+;   the build here instead of silently overlapping two fields at runtime.
+	ifne	CFG_Overrides-(CFG_MountCfg+mc_Sizeof)
+	fail	"CFG_Overrides does not follow CFG_MountCfg"
+	endc
+	ifne	CFG_Controls-(CFG_Overrides+(CFG_OVMAX+1)*ovr_Sizeof)
+	fail	"CFG_Controls does not follow CFG_Overrides"
+	endc
+	ifne	CFG_SIZEOF-(CFG_Controls+CFG_NCTL*CFG_CTLSZ)
+	fail	"CFG_SIZEOF does not cover CFG_Controls"
+	endc
 
 ;-- _mwLoadPrefs: read cfd.prefs into CFG_Buf from the first source that has
 ;   it: ENV: (GetVar), ENVARC:cfd.prefs, SYS:Prefs/Env-Archive/cfd.prefs.
@@ -3647,6 +3669,8 @@ _mwReadConfig:
 	clr.l	CFG_MountCfg+mc_Flags(a5)
 	clr.l	CFG_MountCfg+mc_Control(a5)
 	clr.l	CFG_MountCfg+mc_Overrides(a5)
+	clr.l	CFG_MountCfg+mc_NodeDosType(a5)
+	clr.l	CFG_MountCfg+mc_NodeHandler(a5)
 ;-- default UNMOUNT list: every um_table prefix (unmount all supported
 ;   filesystems on removal). An explicit UNMOUNT key rebuilds the list; a key
 ;   with no recognized names leaves it empty (keep handlers). 6 prefixes +
@@ -3738,11 +3762,35 @@ _cfg_control:
 	lea	kw_control(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
-	beq.s	_cfg_ovkw
+	beq.s	_cfg_dostype		;absent key falls to the NEXT block, not past it
 	move.l	d0,a0
 	bsr	_cfgSkipSp
 	bsr	_cfgCtl
 	move.l	d0,CFG_MountCfg+mc_Control(a5)
+_cfg_dostype:
+;-- DOSTYPE_FAT: mount MBR/GPT FAT partitions as this DosType instead of the
+;   detected one, which also pins the node to that partition's block range.
+	lea	CFG_Buf(a5),a0
+	lea	kw_dostype_fat(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_handler
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	bsr	_cfgHex
+	move.l	d0,CFG_MountCfg+mc_NodeDosType(a5)
+_cfg_handler:
+;-- HANDLER_FAT: where to load the handler from when it is not in
+;   FileSystem.resource. Absent means resource only, no fallback.
+	lea	CFG_Buf(a5),a0
+	lea	kw_handler_fat(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_ovkw
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	bsr	_cfgCtl
+	move.l	d0,CFG_MountCfg+mc_NodeHandler(a5)
 _cfg_ovkw:
 ;-- per-FS overrides: {keyword, dostype-prefix, isControl} rows
 	lea	ovkw_table(pc),a4
@@ -3906,6 +3954,52 @@ _cfgdec_e:
 	movem.l	(sp)+,d1-d2
 	rts
 
+;-- _cfgHex: parse the hex value at a0. Accepts 0x..., $... and bare hex,
+;   case-insensitively, and stops at the first non-hex-digit character.
+;   Out: d0 = value (0 if there was no digit at all). Same convention as
+;   _cfgDec: advances a0, preserves d1-d2.
+_cfgHex:
+	movem.l	d1-d2,-(sp)
+	moveq.l	#0,d1			;d1 = accumulator
+	move.b	(a0),d0
+	cmp.b	#'$',d0
+	bne.s	_cfghex_0x
+	addq.l	#1,a0			;skip '$'
+	bra.s	_cfghex_l
+_cfghex_0x:
+	cmp.b	#'0',d0
+	bne.s	_cfghex_l
+	move.b	1(a0),d0
+	and.b	#$DF,d0			;fold case: 'x' -> 'X'
+	cmp.b	#'X',d0
+	bne.s	_cfghex_l
+	addq.l	#2,a0			;skip "0x"
+_cfghex_l:
+	moveq.l	#0,d0
+	move.b	(a0),d0
+	cmp.b	#'0',d0
+	blo.s	_cfghex_e
+	cmp.b	#'9',d0
+	bhi.s	_cfghex_a
+	sub.b	#'0',d0
+	bra.s	_cfghex_acc
+_cfghex_a:
+	and.b	#$DF,d0			;fold 'a'..'f' to 'A'..'F'
+	cmp.b	#'A',d0
+	blo.s	_cfghex_e
+	cmp.b	#'F',d0
+	bhi.s	_cfghex_e
+	sub.b	#'A'-10,d0
+_cfghex_acc:
+	addq.l	#1,a0
+	lsl.l	#4,d1
+	add.l	d0,d1
+	bra.s	_cfghex_l
+_cfghex_e:
+	move.l	d1,d0
+	movem.l	(sp)+,d1-d2
+	rts
+
 ;-- _cfgCtl: copy the CONTROL value at a0 (optionally "quoted") into the next
 ;   control-pool slot. Out: d0 = slot addr, or 0 (empty / pool full).
 ;   Preserves a1-a4/d1-d4.
@@ -4010,6 +4104,8 @@ kw_ctl_ffs:	dc.b	"CONTROL_FFS",0
 kw_ctl_sfs:	dc.b	"CONTROL_SFS",0
 kw_ctl_pfs:	dc.b	"CONTROL_PFS",0
 kw_ctl_fat:	dc.b	"CONTROL_FAT",0
+kw_dostype_fat:	dc.b	"DOSTYPE_FAT",0
+kw_handler_fat:	dc.b	"HANDLER_FAT",0
 nm_pfs:		dc.b	"PFS",0
 nm_dos:		dc.b	"DOS",0
 nm_ffs:		dc.b	"FFS",0
@@ -4094,6 +4190,8 @@ dbg_mw_cfg_am:
 	dc.b	" auto=",0
 dbg_mw_cfg_fl:
 	dc.b	" flags=",0
+dbg_mw_cfg_dt:
+	dc.b	" dostype=",0
 dbg_mw_cfg_ambad:
 	dc.b	" (AUTOMOUNT value ignored)",0
 dbg_mw_cfg_trunc:
