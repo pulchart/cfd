@@ -3511,9 +3511,9 @@ CFG_AmBad	= 548			;byte (1 = AUTOMOUNT value not recognized)
 CFG_Trunc	= 549			;byte (1 = prefs filled the buffer)
 CFG_DbgRead	= 552			;long bytes read (-1 = no prefs found)
 CFG_MountCfg	= 556			;MountCfg, mc_Sizeof bytes
-CFG_Overrides	= 576			;(CFG_OVMAX+1) override rows * ovr_Sizeof
-CFG_Controls	= 688			;CFG_NCTL string slots * CFG_CTLSZ
-CFG_SIZEOF	= 1008
+CFG_Overrides	= 580			;(CFG_OVMAX+1) override rows * ovr_Sizeof
+CFG_Controls	= 692			;CFG_NCTL string slots * CFG_CTLSZ
+CFG_SIZEOF	= 1012
 
 ;-- the frame offsets above are hand-written, so let the assembler check the
 ;   blocks still tile exactly. A ptable-side mc_/ovr_ size change then breaks
@@ -3669,6 +3669,7 @@ _mwReadConfig:
 	clr.l	CFG_MountCfg+mc_Flags(a5)
 	clr.l	CFG_MountCfg+mc_Control(a5)
 	clr.l	CFG_MountCfg+mc_Overrides(a5)
+	move.l	#mc_Sizeof,CFG_MountCfg+mc_Size(a5)
 	clr.l	CFG_MountCfg+mc_NodeDosType(a5)
 	clr.l	CFG_MountCfg+mc_NodeHandler(a5)
 ;-- default UNMOUNT list: every um_table prefix (unmount all supported
