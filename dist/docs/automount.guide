@@ -136,12 +136,25 @@ On removal, the @{fg shine}UNMOUNT@{fg text} key decides per filesystem:
     the handler. This is the native AmigaOS removable-media behaviour.
   * @{b}@{fg shine}UNMOUNT NONE@{fg text}@{ub} (or any name that is not recognised) keeps every handler.
 
-A partition running on your own mountlist is exempt from all of this.
-When the mount came from a hand @{fg shine}DEVS:DOSDrivers@{fg text} entry, whether it
-claimed the card itself ( @{fg shine}CF0>CFAUX@{fg text} ) or the automount adopted it
-because the names matched, no @{fg shine}UNMOUNT@{fg text} setting ever tears it down: on
-removal it is kept and marked absent like @{fg shine}UNMOUNT NONE@{fg text} , and reinserting
-a card puts it back in service. You mounted it, so only you remove it.
+A partition can also be served by your own mountlist instead of an
+automount-built node: either your hand @{fg shine}DEVS:DOSDrivers@{fg text} handler claimed
+the card itself ( @{fg shine}CF0>CFAUX@{fg text} ), or the automount adopted your node
+because the names matched. @{fg shine}lsptres@{fg text} marks these rows in the fifth Flags
+position: @{fg shine}s@{fg text} when the mount follows the @{fg shine}UNMOUNT@{fg text} policy (the default: pull
+the card and it is torn down with everything else, and the next card is
+automounted under the synthesized name), @{fg shine}S@{fg text} when @{fg shine}UNMOUNT_STATIC 0@{fg text}
+protects it.
+
+With @{fg shine}UNMOUNT_STATIC 0@{fg text} the mount is kept on removal and marked absent
+like @{fg shine}UNMOUNT NONE@{fg text} ( @{fg shine}[PT] static mount kept@{fg text} on serial), and reinserting a
+card puts the same handler back in service. You mounted it, so only you
+remove it. If you do remove it by hand (e.g. @{fg shine}Assign CFAUX: DISMOUNT@{fg text} ),
+the partition stays claimed in @{fg shine}partition.resource@{fg text} , so the automount
+does not take it over until a reboot or a fresh @{fg shine}Mount@{fg text} . The policy is
+stamped into the partition entries during the mount pass on insert,
+which is what @{fg shine}lsptres@{fg text} shows and what the removal obeys, so a changed
+@{fg shine}UNMOUNT_STATIC@{fg text} applies to cards inserted afterwards, not to the very
+next pull.
 
 Under @{fg shine}UNMOUNT NONE@{fg text} , or for a filesystem left out of the list, the
 partition stays visible in @{fg shine}lsptres@{fg text} while the card is out, shown absent.
@@ -158,7 +171,7 @@ the volume, and the next removal unmounts it. A full ptable.library
 build prints the refusal on serial unconditionally; @{fg shine}FLAGS 8@{fg text} adds the
 driver's @{fg shine}[MW]@{fg text} / @{fg shine}[MA]@{fg text} lines around it.
 
-Two settings only take effect on the next mount:
+Three settings only take effect on the next mount:
 
   * @{fg shine}AUTOMOUNT@{fg text} gates the mount step, it never unmounts. Changing @{fg shine}1@{fg text} to @{fg shine}0@{fg text} leaves
     volumes that are already mounted alone. To clear them, pull the card or
@@ -167,6 +180,9 @@ Two settings only take effect on the next mount:
     or for a filesystem left out of the @{fg shine}UNMOUNT@{fg text} list, the handler survives a card
     swap and keeps the values it started with. List that filesystem in @{fg shine}UNMOUNT@{fg text} and
     reinsert the card to apply new ones.
+  * @{fg shine}UNMOUNT_STATIC@{fg text} is stamped into the partition entries during the mount pass on
+    insert; a change applies to cards inserted afterwards. @{fg shine}lsptres@{fg text} always shows
+    the stamped state ( @{fg shine}S@{fg text} / @{fg shine}s@{fg text} ), which is exactly what the next removal will do.
 
 ----------------------------------------
 @{"<< Prev" link Quick_start}  @{"Contents" link Main}  @{"Next >>" link Configuration__ENV_cfd_prefs}
@@ -206,55 +222,70 @@ Format:
     is disabled.
   * The file is read up to 511 bytes.
 
-  @{b}Key@{ub}           @{b}Value@{ub}                @{b}Default@{ub}         @{b}Meaning@{ub}               
-  ------------  -------------------  --------------  --------------------  
-  @{fg shine}AUTOMOUNT@{fg text}     @{fg shine}0@{fg text}/@{fg shine}1@{fg text}, @{fg shine}ON@{fg text}/@{fg shine}OFF@{fg text}, @{fg shine}YES@{fg text}/@{fg shine}NO@{fg text}  on              Mount partitions on   
-                                                     insert. Only the      
-                                                     first letter          
-                                                     decides ( @{fg shine}N@{fg text} / @{fg shine}0@{fg text}       
-                                                     off, @{fg shine}Y@{fg text} / @{fg shine}1@{fg text} on, @{fg shine}O@{fg text} +    
-                                                     @{fg shine}N@{fg text} / @{fg shine}F@{fg text} ), so e.g.      
-                                                     @{fg shine}NEVER@{fg text} reads as off;   
-                                                     anything else is      
-                                                     ignored and the       
-                                                     default applies.      
-  @{fg shine}FLAGS@{fg text}         decimal              @{fg shine}0@{fg text}               Mount flags applied   
-                                                     to every mount. See   
-                                                     the bit table         
-                                                     below.                
-  @{fg shine}CONTROL@{fg text}       string               none            Mount CONTROL         
-                                                     string applied to     
-                                                     every mount. At       
-                                                     most 31 characters.   
-  @{fg shine}UNMOUNT@{fg text}       names                all             Filesystems to        
-                                                     fully unmount on      
-                                                     removal. Any subset   
-                                                     of                    
-                                                     @{fg shine}DOS FFS SFS PFS FAT@{fg text}   
-                                                     ; a key with no       
-                                                     recognized names      
-                                                     (e.g. @{fg shine}UNMOUNT NONE@{fg text}    
-                                                     ) keeps every         
-                                                     handler.              
-  @{fg shine}FLAGS_<fs>@{fg text}    decimal              global @{fg shine}FLAGS@{fg text}    Per-filesystem        
-                                                     override of @{fg shine}FLAGS@{fg text} .   
-  @{fg shine}CONTROL_<fs>@{fg text}  string               global @{fg shine}CONTROL@{fg text}  Per-filesystem        
-                                                     override of @{fg shine}CONTROL@{fg text}   
-                                                     .                     
-  @{fg shine}DOSTYPE_FAT@{fg text}   hex                  detected        Mount MBR/GPT FAT     
-                                                     partitions as this    
-                                                     DosType instead of    
-                                                     the detected one.     
-                                                     See @{"Choosing the FAT filesystem" link choosing_the_fat_filesystem} .                
-  @{fg shine}HANDLER_FAT@{fg text}   string               none            Where to load the     
-                                                     FAT handler from      
-                                                     when it is not        
-                                                     already in            
-                                                     @{fg shine}FileSystem.resource@{fg text}   
-                                                     , e.g.                
-                                                     @{fg shine}L:CrossDOSFileSystem@{fg text}  
-                                                     . At most 23          
-                                                     characters.           
+  @{b}Key@{ub}             @{b}Value@{ub}                @{b}Default@{ub}         @{b}Meaning@{ub}               
+  --------------  -------------------  --------------  --------------------  
+  @{fg shine}AUTOMOUNT@{fg text}       @{fg shine}0@{fg text}/@{fg shine}1@{fg text}, @{fg shine}ON@{fg text}/@{fg shine}OFF@{fg text}, @{fg shine}YES@{fg text}/@{fg shine}NO@{fg text}  on              Mount partitions on   
+                                                       insert. Only the      
+                                                       first letter          
+                                                       decides ( @{fg shine}N@{fg text} / @{fg shine}0@{fg text}       
+                                                       off, @{fg shine}Y@{fg text} / @{fg shine}1@{fg text} on, @{fg shine}O@{fg text} +    
+                                                       @{fg shine}N@{fg text} / @{fg shine}F@{fg text} ), so e.g.      
+                                                       @{fg shine}NEVER@{fg text} reads as off;   
+                                                       anything else is      
+                                                       ignored and the       
+                                                       default applies.      
+  @{fg shine}FLAGS@{fg text}           decimal              @{fg shine}0@{fg text}               Mount flags applied   
+                                                       to every mount. See   
+                                                       the bit table         
+                                                       below.                
+  @{fg shine}CONTROL@{fg text}         string               none            Mount CONTROL         
+                                                       string applied to     
+                                                       every mount. At       
+                                                       most 31 characters.   
+  @{fg shine}UNMOUNT@{fg text}         names                all             Filesystems to        
+                                                       fully unmount on      
+                                                       removal. Any subset   
+                                                       of                    
+                                                       @{fg shine}DOS FFS SFS PFS FAT@{fg text}   
+                                                       ; a key with no       
+                                                       recognized names      
+                                                       (e.g. @{fg shine}UNMOUNT NONE@{fg text}    
+                                                       ) keeps every         
+                                                       handler.              
+  @{fg shine}UNMOUNT_STATIC@{fg text}  @{fg shine}0@{fg text}/@{fg shine}1@{fg text}, @{fg shine}ON@{fg text}/@{fg shine}OFF@{fg text}, @{fg shine}YES@{fg text}/@{fg shine}NO@{fg text}  on              @{fg shine}0@{fg text} exempts             
+                                                       hand-mounted (        
+                                                       @{fg shine}DEVS:DOSDrivers@{fg text} )     
+                                                       partitions from       
+                                                       @{fg shine}UNMOUNT@{fg text} : on          
+                                                       removal they are      
+                                                       kept and marked       
+                                                       absent, the handler   
+                                                       stays in service (    
+                                                       @{fg shine}S@{fg text} in @{fg shine}lsptres@{fg text} ).       
+                                                       Default @{fg shine}1@{fg text} : they      
+                                                       are unmounted like    
+                                                       everything else ( @{fg shine}s@{fg text}   
+                                                       ). Takes effect on    
+                                                       the next insert.      
+  @{fg shine}FLAGS_<fs>@{fg text}      decimal              global @{fg shine}FLAGS@{fg text}    Per-filesystem        
+                                                       override of @{fg shine}FLAGS@{fg text} .   
+  @{fg shine}CONTROL_<fs>@{fg text}    string               global @{fg shine}CONTROL@{fg text}  Per-filesystem        
+                                                       override of @{fg shine}CONTROL@{fg text}   
+                                                       .                     
+  @{fg shine}DOSTYPE_FAT@{fg text}     hex                  detected        Mount MBR/GPT FAT     
+                                                       partitions as this    
+                                                       DosType instead of    
+                                                       the detected one.     
+                                                       See @{"Choosing the FAT filesystem" link choosing_the_fat_filesystem} .                
+  @{fg shine}HANDLER_FAT@{fg text}     string               none            Where to load the     
+                                                       FAT handler from      
+                                                       when it is not        
+                                                       already in            
+                                                       @{fg shine}FileSystem.resource@{fg text}   
+                                                       , e.g.                
+                                                       @{fg shine}L:CrossDOSFileSystem@{fg text}  
+                                                       . At most 23          
+                                                       characters.           
 
 @{fg shine}FLAGS@{fg text} bits (see also the README "Mount Flags" section):
 
@@ -308,7 +339,7 @@ So to hand FAT cards to CrossDOS:
 partition table. Both keys are needed today: CrossDOSFileSystem is a
 file in @{fg shine}L:@{fg text} , and on a machine with fat95 it never registers itself in
 @{fg shine}FileSystem.resource@{fg text} , so without @{fg shine}HANDLER_FAT@{fg text} there is nothing to bind
-and the partition stays @{fg shine}P---@{fg text} . If a FAT handler is ever resident with
+and the partition stays @{fg shine}P----@{fg text} . If a FAT handler is ever resident with
 its own DosType, drop the @{fg shine}HANDLER_FAT@{fg text} line and the @{fg shine}DOSTYPE_FAT@{fg text} line
 alone is enough.
 
@@ -333,7 +364,7 @@ Things worth knowing:
     where the code comes from, so auto-detect stays intact.
   * @{b}A wrong value does not silently fall back.@{ub} If nothing serves the DosType you
     named and no handler path resolves, the partition stays published but
-    unmounted, listed by @{fg shine}lsptres@{fg text} as @{fg shine}P---@{fg text} . On a full build @{fg shine}FLAGS 8@{fg text} prints the
+    unmounted, listed by @{fg shine}lsptres@{fg text} as @{fg shine}P----@{fg text} . On a full build @{fg shine}FLAGS 8@{fg text} prints the
     parsed number as @{fg shine}dostype=4D534400@{fg text} in the worker trace, which is the quickest
     way to spot a typo. @{fg shine}lsptres@{fg text} shows the outcome in its @{fg shine}DosType@{fg text} column.
   * @{b}Changing either key needs a card pull@{ub} , or a reboot under @{fg shine}UNMOUNT NONE@{fg text} . Until
@@ -355,7 +386,7 @@ Automount mounts a partition only when a handler for its filesystem is
 already in the system. Unless you gave it a @{fg shine}HANDLER_FAT@{fg text} path (see @{"Choosing the FAT filesystem" link choosing_the_fat_filesystem} ), it
 does not load a handler from @{fg shine}L:@{fg text} by itself, so a handler file sitting
 unused in @{fg shine}L:@{fg text} does not count. A partition with no handler is still
-scanned and listed by @{fg shine}lsptres@{fg text} , but stays @{fg shine}P---@{fg text} (present, not mounted);
+scanned and listed by @{fg shine}lsptres@{fg text} , but stays @{fg shine}P----@{fg text} (present, not mounted);
 it is never falsely shown as mounted. This is the same for every
 filesystem: FFS, SFS, PFS, FAT and any other.
 
@@ -406,7 +437,7 @@ environment, does not decide bootability; it orders the boot list.
 Only RDB partitions are registered at cold boot, because that runs
 before DOS and @{fg shine}cfd.prefs@{fg text} cannot be read yet. MBR, GPT and flat
 partitions on a card present at cold boot are published to
-@{fg shine}partition.resource@{fg text} and listed as @{fg shine}P---@{fg text} ; the automount agent mounts them
+@{fg shine}partition.resource@{fg text} and listed as @{fg shine}P----@{fg text} ; the automount agent mounts them
 once DOS is up, so @{fg shine}AUTOMOUNT@{fg text} , @{fg shine}FLAGS@{fg text} and @{fg shine}CONTROL_*@{fg text} apply to them too.
 Autoboot itself does not depend on @{fg shine}AUTOMOUNT@{fg text} . Removal is not special
 either: pull the card and the partitions registered at cold boot follow
@@ -454,10 +485,10 @@ whether or not its partitions are mounted. The first character of the
   @{fg shine}I@{fg text}     invalid: the slot is still mounted,     
         but the card currently inserted has no  
         such partition, typically after a card  
-        swap. Shows as @{fg shine}I--M@{fg text} and returns to @{fg shine}P@{fg text}    
+        swap. Shows as @{fg shine}I--M-@{fg text} and returns to @{fg shine}P@{fg text}   
         when the original card comes back       
   @{fg shine}-@{fg text}     absent: no card in the drive. A kept    
-        mount whose media is gone shows @{fg shine}---M@{fg text}    
+        mount whose media is gone shows @{fg shine}---M-@{fg text}   
 
 The remaining characters are @{fg shine}B@{fg text} bootable, @{fg shine}N@{fg text} nomount, @{fg shine}M@{fg text} mounted. @{fg shine}MFlg@{fg text} is
 the resolved mount flags and @{fg shine}Ctrl@{fg text} the resolved CONTROL string. A mounted

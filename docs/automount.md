@@ -48,16 +48,19 @@ On removal, the `UNMOUNT` key decides per filesystem:
 - **`UNMOUNT <fs>`:** only the listed filesystems are unmounted like that. A filesystem not listed is marked absent instead: its DOS node and handler stay in memory, and reinserting the same card reattaches it without re-initialising the handler. This is the native AmigaOS removable-media behaviour.
 - **`UNMOUNT NONE`** (or any name that is not recognised) keeps every handler.
 
-A partition running on your own mountlist is exempt from all of this. When the mount came from a hand `DEVS:DOSDrivers` entry, whether it claimed the card itself (`CF0>CFAUX`) or the automount adopted it because the names matched, no `UNMOUNT` setting ever tears it down: on removal it is kept and marked absent like `UNMOUNT NONE`, and reinserting a card puts it back in service. You mounted it, so only you remove it.
+A partition can also be served by your own mountlist instead of an automount-built node: either your hand `DEVS:DOSDrivers` handler claimed the card itself (`CF0>CFAUX`), or the automount adopted your node because the names matched. `lsptres` marks these rows in the fifth Flags position: `s` when the mount follows the `UNMOUNT` policy (the default: pull the card and it is torn down with everything else, and the next card is automounted under the synthesized name), `S` when `UNMOUNT_STATIC 0` protects it.
+
+With `UNMOUNT_STATIC 0` the mount is kept on removal and marked absent like `UNMOUNT NONE` (`[PT] static mount kept` on serial), and reinserting a card puts the same handler back in service. You mounted it, so only you remove it. If you do remove it by hand (e.g. `Assign CFAUX: DISMOUNT`), the partition stays claimed in `partition.resource`, so the automount does not take it over until a reboot or a fresh `Mount`. The policy is stamped into the partition entries during the mount pass on insert, which is what `lsptres` shows and what the removal obeys, so a changed `UNMOUNT_STATIC` applies to cards inserted afterwards, not to the very next pull.
 
 Under `UNMOUNT NONE`, or for a filesystem left out of the list, the partition stays visible in `lsptres` while the card is out, shown absent. A fully unmounted partition is removed from the resource and re-published on the next insert.
 
 A card that is still in use is not unmounted. A filesystem cannot give up a volume something holds a lock on, an open Workbench window on it being the usual case, because the volume node has to stay in the DOS list for that lock to remain valid. It declines, and the partition is kept and marked absent exactly as `UNMOUNT NONE` would leave it, so its handler stays in service. Close the window, or whatever else is holding the volume, and the next removal unmounts it. A full ptable.library build prints the refusal on serial unconditionally; `FLAGS 8` adds the driver's `[MW]`/`[MA]` lines around it.
 
-Two settings only take effect on the next mount:
+Three settings only take effect on the next mount:
 
 - `AUTOMOUNT` gates the mount step, it never unmounts. Changing `1` to `0` leaves volumes that are already mounted alone. To clear them, pull the card or reboot.
 - `FLAGS` and `CONTROL` are read by a handler when it starts. Under `UNMOUNT NONE`, or for a filesystem left out of the `UNMOUNT` list, the handler survives a card swap and keeps the values it started with. List that filesystem in `UNMOUNT` and reinsert the card to apply new ones.
+- `UNMOUNT_STATIC` is stamped into the partition entries during the mount pass on insert; a change applies to cards inserted afterwards. `lsptres` always shows the stamped state (`S`/`s`), which is exactly what the next removal will do.
 
 ## Configuration: ENV:cfd.prefs
 
@@ -84,6 +87,7 @@ Format:
 | `FLAGS` | decimal | `0` | Mount flags applied to every mount. See the bit table below. |
 | `CONTROL` | string | none | Mount CONTROL string applied to every mount. At most 31 characters. |
 | `UNMOUNT` | names | all | Filesystems to fully unmount on removal. Any subset of `DOS FFS SFS PFS FAT`; a key with no recognized names (e.g. `UNMOUNT NONE`) keeps every handler. |
+| `UNMOUNT_STATIC` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | on | `0` exempts hand-mounted (`DEVS:DOSDrivers`) partitions from `UNMOUNT`: on removal they are kept and marked absent, the handler stays in service (`S` in `lsptres`). Default `1`: they are unmounted like everything else (`s`). Takes effect on the next insert. |
 | `FLAGS_<fs>` | decimal | global `FLAGS` | Per-filesystem override of `FLAGS`. |
 | `CONTROL_<fs>` | string | global `CONTROL` | Per-filesystem override of `CONTROL`. |
 | `DOSTYPE_FAT` | hex | detected | Mount MBR/GPT FAT partitions as this DosType instead of the detected one. See [Choosing the FAT filesystem](#choosing-the-fat-filesystem). |
@@ -117,7 +121,7 @@ DOSTYPE_FAT 0x4D534400
 HANDLER_FAT L:CrossDOSFileSystem
 ```
 
-`0x4D534400` is `MSD\0`, the CrossDOS DosType for FAT on media with no partition table. Both keys are needed today: CrossDOSFileSystem is a file in `L:`, and on a machine with fat95 it never registers itself in `FileSystem.resource`, so without `HANDLER_FAT` there is nothing to bind and the partition stays `P---`. If a FAT handler is ever resident with its own DosType, drop the `HANDLER_FAT` line and the `DOSTYPE_FAT` line alone is enough.
+`0x4D534400` is `MSD\0`, the CrossDOS DosType for FAT on media with no partition table. Both keys are needed today: CrossDOSFileSystem is a file in `L:`, and on a machine with fat95 it never registers itself in `FileSystem.resource`, so without `HANDLER_FAT` there is nothing to bind and the partition stays `P----`. If a FAT handler is ever resident with its own DosType, drop the `HANDLER_FAT` line and the `DOSTYPE_FAT` line alone is enough.
 
 `HANDLER_FAT` is useful on its own too. On a machine where fat95 is neither in ROM nor already registered, this loads it from disk for the ordinary auto-detect mount:
 
@@ -129,13 +133,13 @@ Things worth knowing:
 
 - **CrossDOS handles the same FAT variants fat95 does**, so this is a real choice and not a restricted one: FAT32 and long filenames (VFAT) arrived in CrossDOS 45.4 and AmigaOS 3.2 ships 45.39.
 - **`DOSTYPE_FAT` pins the mount to one partition's block range**, because a handler told which filesystem to be is not one auto-detecting its own partition. So unlike the default it does not follow a card swap by itself: keep the default `UNMOUNT` policy (or list `FAT`) with it, so the node is torn down and rebuilt for the next card. `HANDLER_FAT` on its own does not change this - it only says where the code comes from, so auto-detect stays intact.
-- **A wrong value does not silently fall back.** If nothing serves the DosType you named and no handler path resolves, the partition stays published but unmounted, listed by `lsptres` as `P---`. On a full build `FLAGS 8` prints the parsed number as `dostype=4D534400` in the worker trace, which is the quickest way to spot a typo. `lsptres` shows the outcome in its `DosType` column.
+- **A wrong value does not silently fall back.** If nothing serves the DosType you named and no handler path resolves, the partition stays published but unmounted, listed by `lsptres` as `P----`. On a full build `FLAGS 8` prints the parsed number as `dostype=4D534400` in the worker trace, which is the quickest way to spot a typo. `lsptres` shows the outcome in its `DosType` column.
 - **Changing either key needs a card pull**, or a reboot under `UNMOUNT NONE`. Until the old node goes away its handler is still bound to that partition, and you do not want two handlers caching the same blocks.
 - This is about MBR and GPT cards only. RDB partitions always use the filesystem recorded on the card, and nothing here applies at cold boot, where `cfd.prefs` cannot be read yet.
 
 ## When a partition does not mount
 
-Automount mounts a partition only when a handler for its filesystem is already in the system. Unless you gave it a `HANDLER_FAT` path (see [Choosing the FAT filesystem](#choosing-the-fat-filesystem)), it does not load a handler from `L:` by itself, so a handler file sitting unused in `L:` does not count. A partition with no handler is still scanned and listed by `lsptres`, but stays `P---` (present, not mounted); it is never falsely shown as mounted. This is the same for every filesystem: FFS, SFS, PFS, FAT and any other.
+Automount mounts a partition only when a handler for its filesystem is already in the system. Unless you gave it a `HANDLER_FAT` path (see [Choosing the FAT filesystem](#choosing-the-fat-filesystem)), it does not load a handler from `L:` by itself, so a handler file sitting unused in `L:` does not count. A partition with no handler is still scanned and listed by `lsptres`, but stays `P----` (present, not mounted); it is never falsely shown as mounted. This is the same for every filesystem: FFS, SFS, PFS, FAT and any other.
 
 A handler becomes available in one of these ways:
 
@@ -158,7 +162,7 @@ At Kickstart cold start, before DOS exists, the driver opens `ptable.library`, w
 
 Both flags live in the RDB partition entry and are set by the partitioning tool that created it. BootPri, stored in the partition environment, does not decide bootability; it orders the boot list.
 
-Only RDB partitions are registered at cold boot, because that runs before DOS and `cfd.prefs` cannot be read yet. MBR, GPT and flat partitions on a card present at cold boot are published to `partition.resource` and listed as `P---`; the automount agent mounts them once DOS is up, so `AUTOMOUNT`, `FLAGS` and `CONTROL_*` apply to them too. Autoboot itself does not depend on `AUTOMOUNT`. Removal is not special either: pull the card and the partitions registered at cold boot follow the same `UNMOUNT` policy as any other, so the default unmounts them and `UNMOUNT NONE` keeps their handlers.
+Only RDB partitions are registered at cold boot, because that runs before DOS and `cfd.prefs` cannot be read yet. MBR, GPT and flat partitions on a card present at cold boot are published to `partition.resource` and listed as `P----`; the automount agent mounts them once DOS is up, so `AUTOMOUNT`, `FLAGS` and `CONTROL_*` apply to them too. Autoboot itself does not depend on `AUTOMOUNT`. Removal is not special either: pull the card and the partitions registered at cold boot follow the same `UNMOUNT` policy as any other, so the default unmounts them and `UNMOUNT NONE` keeps their handlers.
 
 Cold-boot autoboot runs late in Kickstart's resident init, after the internal IDE (`scsi.device`) has started. That init is sequential, so if the IDE stalls at boot (no drive connected, for instance) CF autoboot never gets its turn either. The boot stub first does a single Gayle read to check for a card; an empty slot returns immediately. With a card present it tolerates slow cards by polling the media state for up to 5 s; a healthy card adds no measurable delay.
 
@@ -173,8 +177,8 @@ Cold-boot autoboot runs late in Kickstart's resident init, after the internal ID
 | Char | Meaning |
 |---|---|
 | `P` | present: the card in the slot has this partition |
-| `I` | invalid: the slot is still mounted, but the card currently inserted has no such partition, typically after a card swap. Shows as `I--M` and returns to `P` when the original card comes back |
-| `-` | absent: no card in the drive. A kept mount whose media is gone shows `---M` |
+| `I` | invalid: the slot is still mounted, but the card currently inserted has no such partition, typically after a card swap. Shows as `I--M-` and returns to `P` when the original card comes back |
+| `-` | absent: no card in the drive. A kept mount whose media is gone shows `---M-` |
 
 The remaining characters are `B` bootable, `N` nomount, `M` mounted. `MFlg` is the resolved mount flags and `Ctrl` the resolved CONTROL string. A mounted volume shows as `scanname>dosname` when its real DOS name differs from the scanned name.
 
