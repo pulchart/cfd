@@ -8,7 +8,8 @@
 
 ; CompactFlashDevice (CFD)
 CFD_Unit	= 52			;pointer to the (single) CFU
-CFD_BootDone	= 56			;byte: RTF_COLDSTART one-shot guard, set on entry
+CFD_BootDone	= 56			;byte: RTF_COLDSTART one-shot guard, set once the
+					;stub passes its find/guard checks
 CFD_DosReady	= 57			;byte: set when DOS is functional (after-DOS)
 CFD_PrefsReady	= 58			;byte: cfd.prefs resolved once (no boot retry)
 CFD_DosHook	= 59			;byte: RTF_AFTERDOS one-shot guard

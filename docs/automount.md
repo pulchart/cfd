@@ -2,7 +2,7 @@
 
 Insert a CF card and its partitions mount by themselves; pull it and they go away again. With the driver in a Kickstart ROM you can also boot straight off the card. This guide covers both, and the `ENV:cfd.prefs` file that configures them.
 
-The scanning and mounting itself is done by `ptable.library`, which is required for all of it. Without that library `compactflash.device` still works, but as a plain mount-only device: you mount partitions yourself through `DEVS:DOSDrivers/`. See `ptable.guide` for the library internals.
+The scanning and mounting itself is done by `ptable.library`, which is required for all of it. Without that library `compactflash.device` still works, but as a plain mount-only device: you mount partitions yourself through `DEVS:DOSDrivers/`. See `ptable.guide` (shipped with the ptable.library archive) for the library internals.
 
 ## Quick start
 
@@ -29,11 +29,10 @@ Automount is **on by default**, so nothing else is needed to try it. A config fi
 ```
 AUTOMOUNT 1
 FLAGS 0
-UNMOUNT FAT
-CONTROL_FAT +q
+CONTROL_FAT -d-D+q
 ```
 
-That keeps automount on, fully unmounts only FAT volumes when the card is pulled, and passes fat95's `+q` (quiet) option to FAT mounts.
+That keeps automount on, fully unmounts every supported filesystem when the card is pulled (the default, since there is no `UNMOUNT` key), and passes fat95 `-d-D+q`: no extra date stamps as file comments, and the quiet option so a pulled card does not raise requesters.
 
 ## What happens when you insert or remove a card
 
@@ -45,13 +44,13 @@ On insert:
 
 On removal, the `UNMOUNT` key decides per filesystem:
 
-- **Default, no `UNMOUNT` key:** every partition is fully unmounted. The handler is stopped, the DOS node removed and the memory freed. Reinserting the card mounts it fresh.
+- **Default, no `UNMOUNT` key:** every partition of a supported filesystem (`DOS`/`FFS`/`SFS`/`PFS`/`FAT`) is fully unmounted; anything else is kept and marked absent. The handler is stopped, the DOS node removed and the memory freed. Reinserting the card mounts it fresh.
 - **`UNMOUNT <fs>`:** only the listed filesystems are unmounted like that. A filesystem not listed is marked absent instead: its DOS node and handler stay in memory, and reinserting the same card reattaches it without re-initialising the handler. This is the native AmigaOS removable-media behaviour.
 - **`UNMOUNT NONE`** (or any name that is not recognised) keeps every handler.
 
-Either way the partition stays visible in `lsptres` while the card is out, shown absent, and is re-confirmed or re-published on reinsert.
+Under `UNMOUNT NONE`, or for a filesystem left out of the list, the partition stays visible in `lsptres` while the card is out, shown absent. A fully unmounted partition is removed from the resource and re-published on the next insert.
 
-A card that is still in use is not unmounted. A filesystem cannot give up a volume something holds a lock on, an open Workbench window on it being the usual case, because the volume node has to stay in the DOS list for that lock to remain valid. It declines, and the partition is kept and marked absent exactly as `UNMOUNT NONE` would leave it, so its handler stays in service. Close the window, or whatever else is holding the volume, and the next removal unmounts it. With `FLAGS 8` the serial trace names the refusal.
+A card that is still in use is not unmounted. A filesystem cannot give up a volume something holds a lock on, an open Workbench window on it being the usual case, because the volume node has to stay in the DOS list for that lock to remain valid. It declines, and the partition is kept and marked absent exactly as `UNMOUNT NONE` would leave it, so its handler stays in service. Close the window, or whatever else is holding the volume, and the next removal unmounts it. A full ptable.library build prints the refusal on serial unconditionally; `FLAGS 8` adds the driver's `[MW]`/`[MA]` lines around it.
 
 Two settings only take effect on the next mount:
 
@@ -73,20 +72,20 @@ The last two matter at boot: Startup-Sequence assigns `ENV:` and `ENVARC:` only 
 Format:
 
 - One key per line, the value after whitespace. A missing key keeps its default.
-- Keys are matched case-sensitively as whole words, so `FLAGS` does not match inside `FLAGS_DOS`.
+- Keys are matched case-sensitively as whole words, so `FLAGS` does not match inside `FLAGS_DOS`. The search covers the whole file, not just line starts: a key name appearing as a whole word inside another key's value is picked up too, so do not use key names or the `UNMOUNT` filesystem names inside unquoted values.
 - `;` or `#` starts a comment: the rest of that line is ignored, so `; FLAGS 0` really is disabled.
 - The file is read up to 511 bytes.
 
 | Key | Value | Default | Meaning |
 |---|---|---|---|
-| `AUTOMOUNT` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | on | Mount partitions on insert. Any other value is ignored and the default applies. |
+| `AUTOMOUNT` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | on | Mount partitions on insert. Only the first letter decides (`N`/`0` off, `Y`/`1` on, `O`+`N`/`F`), so e.g. `NEVER` reads as off; anything else is ignored and the default applies. |
 | `FLAGS` | decimal | `0` | Mount flags applied to every mount. See the bit table below. |
-| `CONTROL` | string | none | Mount CONTROL string applied to every mount. |
+| `CONTROL` | string | none | Mount CONTROL string applied to every mount. At most 31 characters. |
 | `UNMOUNT` | names | all | Filesystems to fully unmount on removal. Any subset of `DOS FFS SFS PFS FAT`; a key with no recognized names (e.g. `UNMOUNT NONE`) keeps every handler. |
 | `FLAGS_<fs>` | decimal | global `FLAGS` | Per-filesystem override of `FLAGS`. |
 | `CONTROL_<fs>` | string | global `CONTROL` | Per-filesystem override of `CONTROL`. |
 | `DOSTYPE_FAT` | hex | detected | Mount MBR/GPT FAT partitions as this DosType instead of the detected one. See [Choosing the FAT filesystem](#choosing-the-fat-filesystem). |
-| `HANDLER_FAT` | string | none | Where to load the FAT handler from when it is not already in `FileSystem.resource`, e.g. `L:CrossDOSFileSystem`. |
+| `HANDLER_FAT` | string | none | Where to load the FAT handler from when it is not already in `FileSystem.resource`, e.g. `L:CrossDOSFileSystem`. At most 23 characters. |
 
 `FLAGS` bits (see also the README "Mount Flags" section):
 
@@ -159,7 +158,7 @@ Both flags live in the RDB partition entry and are set by the partitioning tool 
 
 Only RDB partitions are registered at cold boot, because that runs before DOS and `cfd.prefs` cannot be read yet. MBR, GPT and flat partitions on a card present at cold boot are published to `partition.resource` and listed as `P---`; the automount agent mounts them once DOS is up, so `AUTOMOUNT`, `FLAGS` and `CONTROL_*` apply to them too. Autoboot itself does not depend on `AUTOMOUNT`. Removal is not special either: pull the card and the partitions registered at cold boot follow the same `UNMOUNT` policy as any other, so the default unmounts them and `UNMOUNT NONE` keeps their handlers.
 
-Cold-boot autoboot runs late in Kickstart's resident init, after the internal IDE (`scsi.device`) has started. That init is sequential, so if the IDE stalls at boot (no drive connected, for instance) CF autoboot never gets its turn either. The boot stub first does a single Gayle read to check for a card; an empty slot returns immediately. With a card present it tolerates slow cards by polling up to about 1.8 s; a healthy card adds no measurable delay.
+Cold-boot autoboot runs late in Kickstart's resident init, after the internal IDE (`scsi.device`) has started. That init is sequential, so if the IDE stalls at boot (no drive connected, for instance) CF autoboot never gets its turn either. The boot stub first does a single Gayle read to check for a card; an empty slot returns immediately. With a card present it tolerates slow cards by polling the media state for up to 5 s; a healthy card adds no measurable delay.
 
 `ptable.library` also registers a synthetic expansion board (Vendor ID `65535 ($FFFF)`, Product ID `1`) so the Early Startup boot menu sees the device. It shows up in tools like `ShowConfig`.
 
@@ -185,10 +184,10 @@ For a serial trace of a DOS-time mount, set `FLAGS 8` (full build, 9600 baud). A
 [PT] cold boot: scanning for partitions
 [PT] RDB partition table
 [PT] + filesystem handler PFS v20.0
-[PT] - skip  SDH10
-[PT] + boot  SDH0
-[PT] + mount SDH1
-[PT] + mount SDH2
+[PT] - skip  SDH10 (no-mount) (MAC\0, 32 MB)
+[PT] + boot  SDH0 (PFS\3, 512 MB)
+[PT] + mount SDH1 (PFS\3, 1024 MB)
+[PT] + mount SDH2 (PFS\3, 495 MB)
 [PT] cold boot done, partitions registered: 3
 ```
 

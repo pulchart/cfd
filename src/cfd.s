@@ -3075,11 +3075,13 @@ _t_end:
 ; NotifyClients on insert/remove) it reconciles partition.resource
 ; via ptable.library v2:
 ;     card present -> ScanPartitions + MountPartitions
-;     card absent  -> UnmountPartitions
-; Both LVOs are idempotent, so a coalesced or stale wake is harmless.
+;     card absent  -> UnmountPartitions, or MarkAbsent when the
+;                     configured UNMOUNT list is empty
+; The LVOs are idempotent, so a coalesced or stale wake is harmless.
 ;
 ; The agent is a bare Exec Task. The worker process reads ENV:cfd.prefs
-; (AUTOMOUNT / FLAGS / UNMOUNT) and applies it.
+; (AUTOMOUNT / FLAGS / CONTROL / UNMOUNT, their _<fs> variants, and
+; DOSTYPE_FAT / HANDLER_FAT) and applies it.
 ;===========================================================
 
 ;-- _MountAgentSignal: wake the agent if it is up. a3=&Unit, a4=&Dev.
@@ -3541,7 +3543,8 @@ _mw_out:
 ;===========================================================
 ; _mwReadConfig: read ENV:cfd.prefs into the config frame via GetVar (global,
 ; binary so multi-line is read whole) and build a MountCfg. Line-oriented,
-; exact whole-word keys: AUTOMOUNT / FLAGS / CONTROL / UNMOUNT (global) plus
+; exact whole-word keys: AUTOMOUNT / FLAGS / CONTROL / UNMOUNT / DOSTYPE_FAT /
+; HANDLER_FAT (global) plus
 ; FLAGS_<fs> / CONTROL_<fs> per-dostype overrides. A missing var or key keeps
 ; the default (flags 0, no control). AUTOMOUNT defaults on everywhere (ROM and
 ; file-based alike); opt out with AUTOMOUNT 0 in cfd.prefs. UNMOUNT defaults to
@@ -3551,8 +3554,10 @@ _mw_out:
 ;===========================================================
 CFG_BUFSZ	= 512
 CFG_OVMAX	= 6			;max override rows
-CFG_NCTL	= 10			;string-pool slots: CONTROL and HANDLER values
-					;share the pool, global + per-FS each
+CFG_NCTL	= 10			;string-pool slots, shared by the CONTROL
+					;values and HANDLER_FAT; worst case is 8
+					;(global CONTROL + six CONTROL_<fs> rows,
+					;PFS burning two, + HANDLER_FAT)
 CFG_CTLSZ	= 32			;bytes per string slot
 
 ;-- CFG_Source values
