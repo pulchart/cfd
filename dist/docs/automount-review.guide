@@ -21,7 +21,8 @@
     @{"7. Configuration parser edges" link 7__Configuration_parser_edges}
     @{"8. Static mounts and UNMOUNT_STATIC" link 8__Static_mounts_and_UNMOUNT_STATIC}
     @{"9. One partition, one handler" link 9__One_partition__one_handler}
-    @{"10. Teardown lifecycle (disk-loaded modules)" link 10__Teardown_lifecycle__disk_loaded_modules_}
+    @{"10a. Flush with the automount set loaded" link 10a__Flush_with_the_automount_set_loaded}
+    @{"10b. Driver expunge without the automount module" link 10b__Driver_expunge_without_the_automount_module}
     @{"11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
 
 @endnode
@@ -30,7 +31,8 @@
 @{b}Index@{ub}
 
   @{"1. Basic automount" link 1__Basic_automount}
-  @{"10. Teardown lifecycle (disk-loaded modules)" link 10__Teardown_lifecycle__disk_loaded_modules_}
+  @{"10a. Flush with the automount set loaded" link 10a__Flush_with_the_automount_set_loaded}
+  @{"10b. Driver expunge without the automount module" link 10b__Driver_expunge_without_the_automount_module}
   @{"11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
   @{"2. Scheme swap in one slot" link 2__Scheme_swap_in_one_slot}
   @{"3. Two cards with the same RDB name" link 3__Two_cards_with_the_same_RDB_name}
@@ -297,30 +299,60 @@ cache one volume, reading mostly works, any write corrupts it, and
 @{fg shine}[PT] mounted as CFAUX@{fg text} ). Never write in that state.
 
 ----------------------------------------
-@{"<< Prev" link 8__Static_mounts_and_UNMOUNT_STATIC}  @{"Contents" link Main}  @{"Next >>" link 10__Teardown_lifecycle__disk_loaded_modules_}
+@{"<< Prev" link 8__Static_mounts_and_UNMOUNT_STATIC}  @{"Contents" link Main}  @{"Next >>" link 10a__Flush_with_the_automount_set_loaded}
 
 @endnode
 
-@node 10__Teardown_lifecycle__disk_loaded_modules_ "10. Teardown lifecycle (disk-loaded modules)"
-@{b}10. Teardown lifecycle (disk-loaded modules)@{ub}
+@node 10a__Flush_with_the_automount_set_loaded "10a. Flush with the automount set loaded"
+@{b}10a. Flush with the automount set loaded@{ub}
 
-Requires @{fg shine}compactflash.device@{fg text} and @{fg shine}ptable.library@{fg text} loaded from disk, not
-from ROM.
+Requires the modules loaded from disk, not from ROM. A task lister
+(Scout, or a CLI one) shows the @{fg shine}CF.MountAgent@{fg text} task the driver runs per
+unit; any first @{fg shine}OpenDevice@{fg text} starts it.
 
-  1. @{fg shine}LoadModule@{fg text} the automount set; confirm a @{fg shine}CF.MountAgent@{fg text} task exists (e.g. in
-     Scout).
+Setup:
+@{fg shine}LoadModule LIBS:compactflash.automount LIBS:ptable.library DEVS:compactflash.device L:fat95@{fg text}
+.
+
+  1. Boot with the set loaded; confirm the @{fg shine}CF.MountAgent@{fg text} task exists.
   2. Insert a card, let it mount, pull it (default @{fg shine}UNMOUNT@{fg text}, everything torn down).
-  3. Close anything holding the device, then @{fg shine}Avail FLUSH@{fg text} twice.
+  3. @{fg shine}Avail FLUSH@{fg text} twice.
   4. Insert a card.
 
-Expected: the flush expunges the driver cleanly - the mount agent is
-handshaked down first, no @{fg shine}CF.MountAgent@{fg text} task remains, and the later
-insert must not crash. @{fg shine}ptable.library@{fg text} refuses to expunge while
-@{fg shine}partition.resource@{fg text} exists, so the resource never points into freed
-memory and a second copy of it can never appear.
+Expected: the flush is a NO-OP for the driver. The automount module
+keeps the device open permanently, so it can never expunge:
+@{fg shine}CF.MountAgent@{fg text} survives the flush and the later insert mounts normally.
+(Removing the automount set is not a runtime operation; it takes a
+reboot without the @{fg shine}LoadModule@{fg text} line.)
 
 ----------------------------------------
-@{"<< Prev" link 9__One_partition__one_handler}  @{"Contents" link Main}  @{"Next >>" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
+@{"<< Prev" link 9__One_partition__one_handler}  @{"Contents" link Main}  @{"Next >>" link 10b__Driver_expunge_without_the_automount_module}
+
+@endnode
+
+@node 10b__Driver_expunge_without_the_automount_module "10b. Driver expunge without the automount module"
+@{b}10b. Driver expunge without the automount module@{ub}
+
+Setup: no @{fg shine}LoadModule@{fg text} ; @{fg shine}compactflash.device@{fg text} in @{fg shine}DEVS:@{fg text} , @{fg shine}ptable.library@{fg text} in
+@{fg shine}LIBS:@{fg text} , @{fg shine}L:fat95@{fg text} , a hand @{fg shine}CFAUX@{fg text} DOSDriver.
+
+  1. Insert a FAT card, @{fg shine}Mount CFAUX:@{fg text} , @{fg shine}dir CFAUX:@{fg text} - the device open starts the
+     unit and its @{fg shine}CF.MountAgent@{fg text} .
+  2. @{fg shine}MOUNT CFAUX: SHUTDOWN@{fg text} , then @{fg shine}ASSIGN CFAUX: DISMOUNT@{fg text} (scenario 11) - the
+     handler exits and closes the device.
+  3. @{fg shine}Avail FLUSH@{fg text} twice.
+  4. @{fg shine}Mount CFAUX:@{fg text} and @{fg shine}dir CFAUX:@{fg text} again.
+
+Expected: with nothing holding the device, the flush expunges the driver
+cleanly - the agent is handshaked down before the unit, no @{fg shine}CF.MountAgent@{fg text}
+task remains, and nothing crashes. @{fg shine}ptable.library@{fg text} (pulled from @{fg shine}LIBS:@{fg text} by
+the auto-detect mount) refuses to expunge while @{fg shine}partition.resource@{fg text}
+exists, so the resource never points into freed memory, @{fg shine}lsptres@{fg text} keeps
+working, and a second copy of the resource can never appear. The
+re-mount then loads everything afresh and works.
+
+----------------------------------------
+@{"<< Prev" link 10a__Flush_with_the_automount_set_loaded}  @{"Contents" link Main}  @{"Next >>" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
 
 @endnode
 
@@ -360,6 +392,6 @@ entry claimed; the next card removal under a tearing @{fg shine}UNMOUNT@{fg text
 cleans such a leftover gracefully.
 
 ----------------------------------------
-@{"<< Prev" link 10__Teardown_lifecycle__disk_loaded_modules_}  @{"Contents" link Main}
+@{"<< Prev" link 10b__Driver_expunge_without_the_automount_module}  @{"Contents" link Main}
 
 @endnode
