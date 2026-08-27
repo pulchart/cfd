@@ -104,7 +104,7 @@ Expected: the quoted value ends at its line, so `Ctrl` reads `+q` and the follow
 5. Reinsert once more.
 6. `Assign CFAUX: DISMOUNT`.
 
-Expected: (2) the running handler claims the partition first and the automount backs off: `lsptres` shows `CF0>CFAUX` with the fifth flag `s` (static, follows `UNMOUNT`), no automount `CF0` appears. (3) By default the static mount is torn down like everything else (`[PT] unmounted CF0`); the next card is automounted under the synthesized name. (4) With `UNMOUNT_STATIC 0` the row shows `S` and the pull keeps the mount: `[PT] static mount kept`, row `---MS`, `Assign` still lists `CFAUX`. (5) The same handler reattaches. The `s`/`S` letter always shows what the next removal will do; a changed key takes effect on the next insert. (6) A hand-removed mount leaves the partition claimed in the resource until a reboot or a fresh `Mount`.
+Expected: (2) the running handler claims the partition first and the automount backs off: `lsptres` shows `CF0>CFAUX` with the fifth flag `s` (static, follows `UNMOUNT`), no automount `CF0` appears. (3) By default the static mount is torn down like everything else (`[PT] unmounted CF0`); the next card is automounted under the synthesized name. (4) With `UNMOUNT_STATIC 0` the row shows `S` and the pull keeps the mount: `[PT] static mount kept`, row `---MS`, `Assign` still lists `CFAUX`. (5) The same handler reattaches. The `s`/`S` letter always shows what the next removal will do; a changed key takes effect on the next insert. (6) A cleanly shut down mount unregisters itself and the partition is free again (see scenario 11); a handler that disappears without an accepted `ACTION_DIE` leaves the partition claimed until a reboot, a fresh `Mount`, or the next card removal under a tearing `UNMOUNT` policy cleans the leftover.
 
 ```
 Name         Device        Unit Part Src Pri DosType    Text Flags  MFlg Ctrl
@@ -131,3 +131,16 @@ Requires `compactflash.device` and `ptable.library` loaded from disk, not from R
 4. Insert a card.
 
 Expected: the flush expunges the driver cleanly - the mount agent is handshaked down first, no `CF.MountAgent` task remains, and the later insert must not crash. `ptable.library` refuses to expunge while `partition.resource` exists, so the resource never points into freed memory and a second copy of it can never appear.
+
+## 11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)
+
+AmigaOS Mount documents `MOUNT <dev>: SHUTDOWN && ASSIGN <dev>: DISMOUNT` as the clean way to unmount a volume by hand; this scenario verifies it against a static mount. The behaviour rests on the filesystem handler, not on the automount: `SHUTDOWN` works only as well as the handler's `ACTION_DIE` support (Mount's own help notes that not all handlers can be shut down). The expectations below describe fat95; a different handler that refuses or misbehaves here is that handler's defect to report and fix.
+
+1. As in scenario 8: `Mount CFAUX:`, `dir CFAUX:`, insert MBR-FAT or GPT-FAT so the hand handler claims the partition (`CF0>CFAUX`).
+2. Open a window on `CFAUX:` (or hold a lock), then `MOUNT CFAUX: SHUTDOWN`.
+3. Close the window, `MOUNT CFAUX: SHUTDOWN` again.
+4. `dir CFAUX:`.
+5. `MOUNT CFAUX: SHUTDOWN && ASSIGN CFAUX: DISMOUNT`.
+6. Pull the card and reinsert it.
+
+Expected: (2) the shutdown is refused with `object is in use` while anything holds the volume; the handler keeps serving. (3) The shutdown is accepted silently and the handler exits a moment later; the device node stays (`Assign` still lists `CFAUX`), and the handler unregisters its mount on the way out, so the `lsptres` row returns to `CF0` `P----`. Repeating the command then reports device not mounted (no live handler to ask). (4) The handler restarts from the kept node and claims the partition again (`CF0>CFAUX`). (5) Both commands run (the shutdown returns success); the name is unlinked and the entry stays published-only, so the partition is free: a fresh `Mount CFAUX:` works, and (6) after a pull and reinsert the automount mounts it as `CF0`. Only a handler that disappears without an accepted `ACTION_DIE` leaves the entry claimed; the next card removal under a tearing `UNMOUNT` policy cleans such a leftover gracefully.

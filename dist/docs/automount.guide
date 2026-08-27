@@ -150,9 +150,13 @@ protects it.
 With @{fg shine}UNMOUNT_STATIC 0@{fg text} the mount is kept on removal and marked absent
 like @{fg shine}UNMOUNT NONE@{fg text} ( @{fg shine}[PT] static mount kept@{fg text} on serial), and reinserting a
 card puts the same handler back in service. You mounted it, so only you
-remove it. If you do remove it by hand (e.g. @{fg shine}Assign CFAUX: DISMOUNT@{fg text} ),
-the partition stays claimed in @{fg shine}partition.resource@{fg text} , so the automount
-does not take it over until a reboot or a fresh @{fg shine}Mount@{fg text} .
+remove it. To remove it by hand,
+@{fg shine}MOUNT CFAUX: SHUTDOWN && ASSIGN CFAUX: DISMOUNT@{fg text} is the clean idiom: the
+handler unregisters its mount on the way out and the partition is the
+automount's (or a fresh @{fg shine}Mount@{fg text} 's) again. A handler that disappears
+without an accepted shutdown leaves the partition claimed until a
+reboot, a fresh @{fg shine}Mount@{fg text} , or the next card removal under a tearing @{fg shine}UNMOUNT@{fg text}
+policy, which cleans the leftover.
 
 The other way around, a hand mount over a partition the automount (or
 any other handler) already serves is refused: the new handler reports
