@@ -121,16 +121,29 @@ CF0>CFAUX    compactflash.    0    0 GPT   0 0x464154FF FAT. P--Ms     0 -d-D
 
 Expected: (2) the second mount fails and accesses report `object is in use` (error 202); the serial shows no second `[PT] mounted as`; `lsptres` keeps the single `CF0` row; the Workbench icons do not fight. (3) With the card out the error returns to a plain no-disk. (4) With `MOUNT_USED 1` the second mount succeeds at your own risk: two handlers cache one volume, reading mostly works, any write corrupts it, and `partition.resource` keeps the original `CF0` registration (no `[PT] mounted as CFAUX`). Never write in that state.
 
-## 10. Teardown lifecycle (disk-loaded modules)
+## 10a. Flush with the automount set loaded
 
-Requires `compactflash.device` and `ptable.library` loaded from disk, not from ROM.
+Requires the modules loaded from disk, not from ROM. A task lister (Scout, or a CLI one) shows the `CF.MountAgent` task the driver runs per unit; any first `OpenDevice` starts it.
 
-1. `LoadModule` the automount set; confirm a `CF.MountAgent` task exists (e.g. in Scout).
+Setup: `LoadModule LIBS:compactflash.automount LIBS:ptable.library DEVS:compactflash.device L:fat95`.
+
+1. Boot with the set loaded; confirm the `CF.MountAgent` task exists.
 2. Insert a card, let it mount, pull it (default `UNMOUNT`, everything torn down).
-3. Close anything holding the device, then `Avail FLUSH` twice.
+3. `Avail FLUSH` twice.
 4. Insert a card.
 
-Expected: the flush expunges the driver cleanly - the mount agent is handshaked down first, no `CF.MountAgent` task remains, and the later insert must not crash. `ptable.library` refuses to expunge while `partition.resource` exists, so the resource never points into freed memory and a second copy of it can never appear.
+Expected: the flush is a NO-OP for the driver. The automount module keeps the device open permanently, so it can never expunge: `CF.MountAgent` survives the flush and the later insert mounts normally. (Removing the automount set is not a runtime operation; it takes a reboot without the `LoadModule` line.)
+
+## 10b. Driver expunge without the automount module
+
+Setup: no `LoadModule`; `compactflash.device` in `DEVS:`, `ptable.library` in `LIBS:`, `L:fat95`, a hand `CFAUX` DOSDriver.
+
+1. Insert a FAT card, `Mount CFAUX:`, `dir CFAUX:` - the device open starts the unit and its `CF.MountAgent`.
+2. `MOUNT CFAUX: SHUTDOWN`, then `ASSIGN CFAUX: DISMOUNT` (scenario 11) - the handler exits and closes the device.
+3. `Avail FLUSH` twice.
+4. `Mount CFAUX:` and `dir CFAUX:` again.
+
+Expected: with nothing holding the device, the flush expunges the driver cleanly - the agent is handshaked down before the unit, no `CF.MountAgent` task remains, and nothing crashes. `ptable.library` (pulled from `LIBS:` by the auto-detect mount) refuses to expunge while `partition.resource` exists, so the resource never points into freed memory, `lsptres` keeps working, and a second copy of the resource can never appear. The re-mount then loads everything afresh and works.
 
 ## 11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)
 
