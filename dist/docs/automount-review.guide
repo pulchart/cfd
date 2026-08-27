@@ -22,6 +22,7 @@
     @{"8. Static mounts and UNMOUNT_STATIC" link 8__Static_mounts_and_UNMOUNT_STATIC}
     @{"9. One partition, one handler" link 9__One_partition__one_handler}
     @{"10. Teardown lifecycle (disk-loaded modules)" link 10__Teardown_lifecycle__disk_loaded_modules_}
+    @{"11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
 
 @endnode
 
@@ -30,6 +31,7 @@
 
   @{"1. Basic automount" link 1__Basic_automount}
   @{"10. Teardown lifecycle (disk-loaded modules)" link 10__Teardown_lifecycle__disk_loaded_modules_}
+  @{"11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
   @{"2. Scheme swap in one slot" link 2__Scheme_swap_in_one_slot}
   @{"3. Two cards with the same RDB name" link 3__Two_cards_with_the_same_RDB_name}
   @{"4. Reuse of a same-named hand mountlist" link 4__Reuse_of_a_same_named_hand_mountlist}
@@ -260,8 +262,11 @@ the next card is automounted under the synthesized name. (4) With
 @{fg shine}[PT] static mount kept@{fg text} , row @{fg shine}---MS@{fg text} , @{fg shine}Assign@{fg text} still lists @{fg shine}CFAUX@{fg text} . (5) The
 same handler reattaches. The @{fg shine}s@{fg text} / @{fg shine}S@{fg text} letter always shows what the next
 removal will do; a changed key takes effect on the next insert. (6) A
-hand-removed mount leaves the partition claimed in the resource until a
-reboot or a fresh @{fg shine}Mount@{fg text} .
+cleanly shut down mount unregisters itself and the partition is free
+again (see scenario 11); a handler that disappears without an accepted
+@{fg shine}ACTION_DIE@{fg text} leaves the partition claimed until a reboot, a fresh @{fg shine}Mount@{fg text} ,
+or the next card removal under a tearing @{fg shine}UNMOUNT@{fg text} policy cleans the
+leftover.
 
 @{fg highlight}
   Name         Device        Unit Part Src Pri DosType    Text Flags  MFlg Ctrl
@@ -315,6 +320,46 @@ insert must not crash. @{fg shine}ptable.library@{fg text} refuses to expunge wh
 memory and a second copy of it can never appear.
 
 ----------------------------------------
-@{"<< Prev" link 9__One_partition__one_handler}  @{"Contents" link Main}
+@{"<< Prev" link 9__One_partition__one_handler}  @{"Contents" link Main}  @{"Next >>" link 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_}
+
+@endnode
+
+@node 11__Clean_hand_unmount__MOUNT_SHUTDOWN___ASSIGN_DISMOUNT_ "11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)"
+@{b}11. Clean hand unmount (MOUNT SHUTDOWN + ASSIGN DISMOUNT)@{ub}
+
+AmigaOS Mount documents @{fg shine}MOUNT <dev>: SHUTDOWN && ASSIGN <dev>: DISMOUNT@{fg text}
+as the clean way to unmount a volume by hand; this scenario verifies it
+against a static mount. The behaviour rests on the filesystem handler,
+not on the automount: @{fg shine}SHUTDOWN@{fg text} works only as well as the handler's
+@{fg shine}ACTION_DIE@{fg text} support (Mount's own help notes that not all handlers can be
+shut down). The expectations below describe fat95; a different handler
+that refuses or misbehaves here is that handler's defect to report and
+fix.
+
+  1. As in scenario 8: @{fg shine}Mount CFAUX:@{fg text} , @{fg shine}dir CFAUX:@{fg text} , insert MBR-FAT or GPT-FAT so
+     the hand handler claims the partition ( @{fg shine}CF0>CFAUX@{fg text} ).
+  2. Open a window on @{fg shine}CFAUX:@{fg text} (or hold a lock), then @{fg shine}MOUNT CFAUX: SHUTDOWN@{fg text}.
+  3. Close the window, @{fg shine}MOUNT CFAUX: SHUTDOWN@{fg text} again.
+  4. @{fg shine}dir CFAUX:@{fg text}.
+  5. @{fg shine}MOUNT CFAUX: SHUTDOWN && ASSIGN CFAUX: DISMOUNT@{fg text}.
+  6. Pull the card and reinsert it.
+
+Expected: (2) the shutdown is refused with @{fg shine}object is in use@{fg text} while
+anything holds the volume; the handler keeps serving. (3) The shutdown
+is accepted silently and the handler exits a moment later; the device
+node stays ( @{fg shine}Assign@{fg text} still lists @{fg shine}CFAUX@{fg text} ), and the handler unregisters its
+mount on the way out, so the @{fg shine}lsptres@{fg text} row returns to @{fg shine}CF0@{fg text} @{fg shine}P----@{fg text} .
+Repeating the command then reports device not mounted (no live handler
+to ask). (4) The handler restarts from the kept node and claims the
+partition again ( @{fg shine}CF0>CFAUX@{fg text} ). (5) Both commands run (the shutdown
+returns success); the name is unlinked and the entry stays
+published-only, so the partition is free: a fresh @{fg shine}Mount CFAUX:@{fg text} works,
+and (6) after a pull and reinsert the automount mounts it as @{fg shine}CF0@{fg text} . Only
+a handler that disappears without an accepted @{fg shine}ACTION_DIE@{fg text} leaves the
+entry claimed; the next card removal under a tearing @{fg shine}UNMOUNT@{fg text} policy
+cleans such a leftover gracefully.
+
+----------------------------------------
+@{"<< Prev" link 10__Teardown_lifecycle__disk_loaded_modules_}  @{"Contents" link Main}
 
 @endnode
