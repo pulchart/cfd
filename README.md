@@ -236,14 +236,14 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 [MW] scan done, partitions known: 1
 [MW] mounting new partitions
 [PT] mounting partitions
-[PT] mounted CFa0
+[PT] mounted CF0
 [MW] mounted volumes: 1
 [CFD] Card removed
 [MW] config: read=-1 auto=1 flags=0
 [MW] card removed
 [PT] card removed, media absent
 [PT] unmounting partitions
-[PT] unmounted CFa0
+[PT] unmounted CF0
 [MW] entries detached: 1
 ```
 The `[MW]` lines come from the automount mount worker (they appear when `compactflash.automount` is active), the `[PT]` lines from `ptable.library`. `read=-1` means no `ENV:cfd.prefs` is set, so the defaults apply (`auto=1`).

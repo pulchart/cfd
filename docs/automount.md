@@ -40,7 +40,7 @@ On insert:
 
 - The card is scanned and every partition is published to `partition.resource`, always, even with automount off. `lsptres` lists them either way.
 - With automount on, partitions that are not mounted yet are mounted.
-- If you mounted a device-dostype DOSDriver by hand (for example `CFAUX`), automount pauses on each pass so that handler can claim its own partition first, then reuses it (shown as `CFa0>CFAUX`) and mounts only the others, instead of starting a second handler on the same partition.
+- If you mounted a device-dostype DOSDriver by hand (for example `CFAUX`), automount pauses on each pass so that handler can claim its own partition first, then reuses it (shown as `CF0>CFAUX`) and mounts only the others, instead of starting a second handler on the same partition.
 
 On removal, the `UNMOUNT` key decides per filesystem:
 
