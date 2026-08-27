@@ -228,6 +228,9 @@ s_automount:
 	tst.b	CFD_DosHook(a3)
 	bne.w	_dr_out
 	move.b	#1,CFD_DosHook(a3)
+;-- DOS is functional from this point whatever happens below: say so first,
+;   or a failed allocation/open would leave the agent deferring forever
+	move.b	#1,CFD_DosReady(a3)
 
 ;-- open unit 0 permanently. MsgPort + IOStdReq live in a one-shot public
 ;   allocation (never freed): the device stays open, the port receives no
@@ -236,7 +239,7 @@ s_automount:
 	move.l	#MEMF_PUBLIC+MEMF_CLEAR,d1
 	jsr	AllocMem(a6)
 	tst.l	d0
-	beq.w	_dr_out
+	beq.w	_dr_kick
 	move.l	d0,a2			;a2 = MsgPort; +MP_Sizeof = IOStdReq
 	move.b	#NT_MSGPORT,LN_Type(a2)
 	move.b	#PA_IGNORE,MP_Flags(a2)
@@ -253,8 +256,9 @@ s_automount:
 	tst.l	d0
 	bne.s	_dr_openfail
 
-;-- DOS is ready: unblock the agent and reprocess deferred events
-	move.b	#1,CFD_DosReady(a3)
+;-- unblock the agent and reprocess deferred events (CFD_DosReady is
+;   already set above, before anything here could fail)
+_dr_kick:
 	move.l	CFD_Unit(a3),d0
 	beq.s	_dr_out
 	move.l	d0,a0
@@ -270,6 +274,7 @@ _dr_openfail:
 	move.l	a2,a1
 	moveq.l	#MP_Sizeof+IO_Sizeof,d0
 	jsr	FreeMem(a6)
+	bra.s	_dr_kick
 _dr_out:
 	movem.l	(sp)+,d2/a2-a3/a6
 	moveq.l	#0,d0

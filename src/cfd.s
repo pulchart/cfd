@@ -1394,6 +1394,20 @@ KillUnit:
 	CALLSAME FindTask
 	move.l	d0,CFU_KillTask(a3)
 	or.w	#CFUF_STOPPED+CFUF_FLUSH+CFUF_TERM,CFU_Flags(a3)
+;-- take the mount agent down first: an in-flight worker still needs the
+;   unit task alive to finish its device I/O, and the agent (which waits the
+;   worker out) references the CFU until it has removed itself. The agent
+;   acknowledges on CFU_KillSig exactly as the unit task does below.
+	move.l	CFU_MountAgent(a3),d0
+	beq.s	ku_noagent
+	move.l	CFU_MountSig(a3),d0
+	beq.s	ku_agwait		;signals not published yet: the agent
+	move.l	CFU_MountAgent(a3),a1	;checks TERM before its first Wait
+	CALLSAME Signal
+ku_agwait:
+	move.l	CFU_KillSig(a3),d0
+	CALLSAME Wait
+ku_noagent:
 	move.l	CFU_Signals3(a3),d0
 	move.l	CFU_Process(a3),a1
 	CALLSAME Signal
@@ -3197,6 +3211,11 @@ _MountAgentEntry:
 	bset	d0,d4			;d4 = done mask
 	move.l	d4,CFU_MountDone(a3)
 	move.l	d5,CFU_MountSig(a3)	;publish last: signals valid now
+;-- KillUnit may already want us gone (it sets CFUF_TERM before it reads
+;   CFU_MountSig, so exactly one side sees the other)
+	moveq.l	#CFUF_TERM,d0
+	and.w	CFU_Flags(a3),d0
+	bne.w	_ma_term
 
 ;-- Disk-loaded driver: CFD_BootDone == 0 means the RTF_COLDSTART stub never
 ;   ran, so DOS is up already (the agent is spawned by the device open the
@@ -3214,6 +3233,9 @@ _MountAgentEntry:
 _ma_loop:
 	move.l	d5,d0
 	CALLEXEC Wait
+	moveq.l	#CFUF_TERM,d0
+	and.w	CFU_Flags(a3),d0
+	bne.w	_ma_term
 	ifd	DEBUG
 	move.l	CFU_DriveSize(a3),d0
 	bne.s	_ma_wk_in
@@ -3295,11 +3317,39 @@ _mado_done:
 	movem.l	(sp)+,d0/a1
 	rts
 
-;-- _ma_die: setup failed; clear identity and remove self.
+;-- _ma_term: KillUnit wants us gone. Any in-flight worker has already been
+;   waited out (the only paths here are the top-of-loop and post-publish TERM
+;   checks). Clearing the identity and acknowledging happen under Forbid, so
+;   the killer cannot free the CFU or unload this code segment while the
+;   final instructions still run; RemTask drops the Forbid with the task.
+_ma_term:
+	clr.l	CFU_MountSig(a3)
+	clr.l	CFU_MountDone(a3)
+	move.l	d5,d0
+	LOG2
+	CALLEXEC FreeSignal
+	move.l	d4,d0
+	LOG2
+	CALLEXEC FreeSignal
+	tst.l	d7
+	beq.s	_mat_nodos
+	move.l	d7,a1
+	CALLEXEC CloseLibrary
+_mat_nodos:
+	CALLEXEC Forbid
+	clr.l	CFU_MountAgent(a3)
+	move.l	CFU_KillSig(a3),d0
+	move.l	CFU_KillTask(a3),a1
+	CALLEXEC Signal
+	sub.l	a1,a1
+	JMPEXEC	RemTask
+
+;-- _ma_die: setup failed; clear identity and remove self. The identity is
+;   cleared and a waiting killer acknowledged under one Forbid, so KillUnit
+;   either sees no agent or gets its signal, never neither.
 _ma_die:
 	clr.l	CFU_MountSig(a3)
 	clr.l	CFU_MountDone(a3)
-	clr.l	CFU_MountAgent(a3)
 	tst.l	d5
 	beq.s	_ma_die_2
 	move.l	d5,d0
@@ -3312,6 +3362,15 @@ _ma_die_2:
 	LOG2
 	CALLEXEC FreeSignal
 _ma_die_rt:
+	CALLEXEC Forbid
+	clr.l	CFU_MountAgent(a3)
+	moveq.l	#CFUF_TERM,d0
+	and.w	CFU_Flags(a3),d0
+	beq.s	_ma_die_go
+	move.l	CFU_KillSig(a3),d0
+	move.l	CFU_KillTask(a3),a1
+	CALLEXEC Signal
+_ma_die_go:
 	sub.l	a1,a1
 	JMPEXEC	RemTask
 
@@ -3361,7 +3420,8 @@ _mw_haveLib:
 	bsr	_mwReadConfig		;cfd.prefs -> a5 frame
 	ifd	DEBUG
 	move.w	CFG_MountCfg+mc_Flags+2(a5),d0	;global FLAGS -> gate so worker trace shows
-	or.w	d0,CFU_OpenFlags(a3)
+	and.w	#8,d0			;only the serial-debug bit; the other mount
+	or.w	d0,CFU_OpenFlags(a3)	;flags must not leak into the live unit
 	DBGMSG	dbg_mw_cfg_b
 	moveq.l	#0,d0
 	move.b	CFG_Source(a5),d0	;CFGSRC_*
@@ -3583,7 +3643,8 @@ _mlp_try:
 _mlp_none:
 	moveq.l	#-1,d3
 	clr.b	CFG_Source(a5)		;CFGSRC_NONE
-	bra.s	_mlp_out
+	move.b	#1,CFD_PrefsReady(a4)	;no prefs anywhere is also an answer:
+	bra.s	_mlp_out		;later passes must not re-pay the retries
 _mlp_got:
 	move.b	d6,CFG_Source(a5)
 	move.b	#1,CFD_PrefsReady(a4)	;resolved once: later passes do not retry
@@ -3962,6 +4023,8 @@ _cfgdec_e:
 _cfgHex:
 	movem.l	d1-d2,-(sp)
 	moveq.l	#0,d1			;d1 = accumulator
+	moveq.l	#8,d2			;longword = at most 8 digits; stop rather
+					;than silently shift the top nibble out
 	move.b	(a0),d0
 	cmp.b	#'$',d0
 	bne.s	_cfghex_0x
@@ -3995,7 +4058,8 @@ _cfghex_acc:
 	addq.l	#1,a0
 	lsl.l	#4,d1
 	add.l	d0,d1
-	bra.s	_cfghex_l
+	subq.l	#1,d2
+	bne.s	_cfghex_l
 _cfghex_e:
 	move.l	d1,d0
 	movem.l	(sp)+,d1-d2
@@ -4033,6 +4097,10 @@ _cfgctl_cp:
 	bra.s	_cfgctl_put
 _cfgctl_q:
 	cmp.b	#'"',d1			;closing quote
+	beq.s	_cfgctl_end
+	cmp.b	#13,d1			;an unterminated quote must not swallow
+	beq.s	_cfgctl_end		;the following lines
+	cmp.b	#10,d1
 	beq.s	_cfgctl_end
 _cfgctl_put:
 	tst.l	d3
