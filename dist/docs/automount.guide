@@ -54,7 +54,9 @@ The scanning and mounting itself is done by @{fg shine}ptable.library@{fg text} 
 required for all of it. Without that library @{fg shine}compactflash.device@{fg text} still
 works, but as a plain mount-only device: you mount partitions yourself
 through @{fg shine}DEVS:DOSDrivers/@{fg text} . See @{fg shine}ptable.guide@{fg text} (shipped with the
-ptable.library archive) for the library internals.
+ptable.library archive) for the library internals. The expected
+behaviour of the whole feature is catalogued scenario by scenario in
+@{fg shine}automount-review.guide@{fg text} ( @{"  automount-review.guide  " link "automount-review.guide/Main"} ).
 
 ----------------------------------------
 @{"<< Prev" link Main}  @{"Contents" link Main}  @{"Next >>" link Quick_start}

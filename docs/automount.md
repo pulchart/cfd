@@ -2,7 +2,7 @@
 
 Insert a CF card and its partitions mount by themselves; pull it and they go away again. With the driver in a Kickstart ROM you can also boot straight off the card. This guide covers both, and the `ENV:cfd.prefs` file that configures them.
 
-The scanning and mounting itself is done by `ptable.library`, which is required for all of it. Without that library `compactflash.device` still works, but as a plain mount-only device: you mount partitions yourself through `DEVS:DOSDrivers/`. See `ptable.guide` (shipped with the ptable.library archive) for the library internals.
+The scanning and mounting itself is done by `ptable.library`, which is required for all of it. Without that library `compactflash.device` still works, but as a plain mount-only device: you mount partitions yourself through `DEVS:DOSDrivers/`. See `ptable.guide` (shipped with the ptable.library archive) for the library internals. The expected behaviour of the whole feature is catalogued scenario by scenario in `automount-review.guide` ([automount-review.md](automount-review.md)).
 
 ## Quick start
 

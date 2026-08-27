@@ -363,6 +363,7 @@ cfd/Storage/DOSDrivers/CF0.info - Mountlist Workbench icon
 cfd/ENVARC/cfd.prefs            - Example config (copy to ENVARC:cfd.prefs to automount)
 
 cfd/docs/cfd.guide         - Main documentation
+cfd/docs/automount-review.guide - Automount feature review (expected behaviour)
 cfd/docs/changes.guide     - Release notes and original CFD history
 cfd/docs/CFInfo.guide      - CFInfo utility documentation
 cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation
