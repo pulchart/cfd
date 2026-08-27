@@ -136,6 +136,13 @@ On removal, the @{fg shine}UNMOUNT@{fg text} key decides per filesystem:
     the handler. This is the native AmigaOS removable-media behaviour.
   * @{b}@{fg shine}UNMOUNT NONE@{fg text}@{ub} (or any name that is not recognised) keeps every handler.
 
+A partition running on your own mountlist is exempt from all of this.
+When the mount came from a hand @{fg shine}DEVS:DOSDrivers@{fg text} entry, whether it
+claimed the card itself ( @{fg shine}CF0>CFAUX@{fg text} ) or the automount adopted it
+because the names matched, no @{fg shine}UNMOUNT@{fg text} setting ever tears it down: on
+removal it is kept and marked absent like @{fg shine}UNMOUNT NONE@{fg text} , and reinserting
+a card puts it back in service. You mounted it, so only you remove it.
+
 Under @{fg shine}UNMOUNT NONE@{fg text} , or for a filesystem left out of the list, the
 partition stays visible in @{fg shine}lsptres@{fg text} while the card is out, shown absent.
 A fully unmounted partition is removed from the resource and

@@ -48,6 +48,8 @@ On removal, the `UNMOUNT` key decides per filesystem:
 - **`UNMOUNT <fs>`:** only the listed filesystems are unmounted like that. A filesystem not listed is marked absent instead: its DOS node and handler stay in memory, and reinserting the same card reattaches it without re-initialising the handler. This is the native AmigaOS removable-media behaviour.
 - **`UNMOUNT NONE`** (or any name that is not recognised) keeps every handler.
 
+A partition running on your own mountlist is exempt from all of this. When the mount came from a hand `DEVS:DOSDrivers` entry, whether it claimed the card itself (`CF0>CFAUX`) or the automount adopted it because the names matched, no `UNMOUNT` setting ever tears it down: on removal it is kept and marked absent like `UNMOUNT NONE`, and reinserting a card puts it back in service. You mounted it, so only you remove it.
+
 Under `UNMOUNT NONE`, or for a filesystem left out of the list, the partition stays visible in `lsptres` while the card is out, shown absent. A fully unmounted partition is removed from the resource and re-published on the next insert.
 
 A card that is still in use is not unmounted. A filesystem cannot give up a volume something holds a lock on, an open Workbench window on it being the usual case, because the volume node has to stay in the DOS list for that lock to remain valid. It declines, and the partition is kept and marked absent exactly as `UNMOUNT NONE` would leave it, so its handler stays in service. Close the window, or whatever else is holding the volume, and the next removal unmounts it. A full ptable.library build prints the refusal on serial unconditionally; `FLAGS 8` adds the driver's `[MW]`/`[MA]` lines around it.
