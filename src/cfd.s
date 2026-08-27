@@ -3469,7 +3469,9 @@ _mw_dbg_cfgend:
 	DBGDEC
 	DBGNL
 	tst.b	CFG_AutoMount(a5)
-	beq.w	_mw_close		;automount off: published for lsptres, not mounted
+	beq.s	_mw_settled		;automount off: skip the settle; the mount
+					;pass below runs stamp-only (MCUF_STAMPONLY),
+					;publishing stays lsptres-visible, nothing mounts
 ;-- settle: let an in-flight handler mount (a device-dostype DOSDriver that just
 ;   opened us) register its partition before we mount, so MountPartitions reuses
 ;   it (PEB_MOUNTED) instead of starting a second handler on the same partition.
@@ -3574,11 +3576,13 @@ CFG_OvNext	= 546			;byte (override rows used)
 CFG_Source	= 547			;byte CFGSRC_*
 CFG_AmBad	= 548			;byte (1 = AUTOMOUNT value not recognized)
 CFG_Trunc	= 549			;byte (1 = prefs filled the buffer)
+CFG_UnmStatic	= 550			;byte (1 = static mounts follow UNMOUNT, default;
+					;0 = UNMOUNT_STATIC 0, keep hand-mounted nodes)
 CFG_DbgRead	= 552			;long bytes read (-1 = no prefs found)
 CFG_MountCfg	= 556			;MountCfg, mc_Sizeof bytes
-CFG_Overrides	= 580			;(CFG_OVMAX+1) override rows * ovr_Sizeof
-CFG_Controls	= 692			;CFG_NCTL string slots * CFG_CTLSZ
-CFG_SIZEOF	= 1012
+CFG_Overrides	= 584			;(CFG_OVMAX+1) override rows * ovr_Sizeof
+CFG_Controls	= 696			;CFG_NCTL string slots * CFG_CTLSZ
+CFG_SIZEOF	= 1016
 
 ;-- the frame offsets above are hand-written, so let the assembler check the
 ;   blocks still tile exactly. A ptable-side mc_/ovr_ size change then breaks
@@ -3732,12 +3736,14 @@ _mwReadConfig:
 	clr.b	CFG_Source(a5)
 	clr.b	CFG_AmBad(a5)
 	clr.b	CFG_Trunc(a5)
+	move.b	#1,CFG_UnmStatic(a5)	;static mounts follow UNMOUNT by default
 	clr.l	CFG_MountCfg+mc_Flags(a5)
 	clr.l	CFG_MountCfg+mc_Control(a5)
 	clr.l	CFG_MountCfg+mc_Overrides(a5)
 	move.l	#mc_Sizeof,CFG_MountCfg+mc_Size(a5)
 	clr.l	CFG_MountCfg+mc_NodeDosType(a5)
 	clr.l	CFG_MountCfg+mc_NodeHandler(a5)
+	clr.l	CFG_MountCfg+mc_UnmFlags(a5)
 ;-- default UNMOUNT list: every um_table prefix (unmount all supported
 ;   filesystems on removal). An explicit UNMOUNT key rebuilds the list; a key
 ;   with no recognized names leaves it empty (keep handlers). 6 prefixes +
@@ -3781,7 +3787,7 @@ _cfg_term:
 	lea	kw_automount(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
-	beq.s	_cfg_flags
+	beq.s	_cfg_umst
 ;-- accepted values: 0 1 ON OFF YES NO, either case. Anything else keeps the
 ;   default and is reported in the worker trace.
 	move.l	d0,a0
@@ -3806,12 +3812,46 @@ _cfg_term:
 	beq.s	_cfg_am_on
 _cfg_am_bad:
 	move.b	#1,CFG_AmBad(a5)	;unrecognized value -> keep the default
-	bra.s	_cfg_flags
+	bra.s	_cfg_umst
 _cfg_am_off:
 	clr.b	CFG_AutoMount(a5)
-	bra.s	_cfg_flags
+	bra.s	_cfg_umst
 _cfg_am_on:
 	move.b	#1,CFG_AutoMount(a5)
+_cfg_umst:
+;-- UNMOUNT_STATIC (same value grammar as AUTOMOUNT): 0 keeps hand-mounted
+;   (static) nodes when the card is pulled; 1 = default, they follow the
+;   UNMOUNT policy. Unrecognized value keeps the default.
+	lea	CFG_Buf(a5),a0
+	lea	kw_unmount_static(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_flags
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	move.b	(a0),d0
+	cmp.b	#'0',d0
+	beq.s	_cfg_us_off
+	cmp.b	#'1',d0
+	beq.s	_cfg_us_on
+	bsr	_cfgUpper
+	cmp.b	#'N',d0			;NO
+	beq.s	_cfg_us_off
+	cmp.b	#'Y',d0			;YES
+	beq.s	_cfg_us_on
+	cmp.b	#'O',d0			;ON / OFF
+	bne.s	_cfg_flags		;unrecognized -> keep the default
+	move.b	1(a0),d0
+	bsr	_cfgUpper
+	cmp.b	#'F',d0
+	beq.s	_cfg_us_off
+	cmp.b	#'N',d0
+	bne.s	_cfg_flags
+_cfg_us_on:
+	move.b	#1,CFG_UnmStatic(a5)
+	bra.s	_cfg_flags
+_cfg_us_off:
+	clr.b	CFG_UnmStatic(a5)
 _cfg_flags:
 ;-- global FLAGS
 	lea	CFG_Buf(a5),a0
@@ -3893,7 +3933,7 @@ _cfg_unmount:
 	lea	kw_unmount(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
-	beq.s	_cfg_done		;no UNMOUNT key -> keep default (unmount all)
+	beq.s	_cfg_umstatic		;no UNMOUNT key -> keep default (unmount all)
 	lea	CFG_Prefixes(a5),a2	;output cursor
 	lea	um_table(pc),a3		;{name, dostype prefix} rows
 _cfg_um_loop:
@@ -3910,6 +3950,21 @@ _cfg_um_next:
 	bra.s	_cfg_um_loop
 _cfg_um_term:
 	clr.l	(a2)			;terminate prefix list
+_cfg_umstatic:
+;-- fold the parsed policy into MountCfg: MCUF_KEEPSTATIC from
+;   UNMOUNT_STATIC 0 (ptable stamps it as PEB_KEEPSTATIC on every entry
+;   of the mount pass), MCUF_STAMPONLY when automount is off so that
+;   pass still stamps the policy without mounting anything
+	moveq.l	#0,d0
+	tst.b	CFG_UnmStatic(a5)
+	bne.s	_cfg_uf_am
+	bset	#MCUF_KEEPSTATIC,d0
+_cfg_uf_am:
+	tst.b	CFG_AutoMount(a5)
+	bne.s	_cfg_uf_done
+	bset	#MCUF_STAMPONLY,d0
+_cfg_uf_done:
+	move.l	d0,CFG_MountCfg+mc_UnmFlags(a5)
 _cfg_done:
 	movem.l	(sp)+,d0-d7/a0-a4/a6
 	rts
@@ -4168,6 +4223,8 @@ kw_automount:	dc.b	"AUTOMOUNT",0
 kw_flags:	dc.b	"FLAGS",0
 kw_control:	dc.b	"CONTROL",0
 kw_unmount:	dc.b	"UNMOUNT",0
+kw_unmount_static:
+		dc.b	"UNMOUNT_STATIC",0
 kw_flags_dos:	dc.b	"FLAGS_DOS",0
 kw_flags_ffs:	dc.b	"FLAGS_FFS",0
 kw_flags_sfs:	dc.b	"FLAGS_SFS",0
