@@ -121,7 +121,7 @@ On insert:
   * With automount on, partitions that are not mounted yet are mounted.
   * If you mounted a device-dostype DOSDriver by hand (for example @{fg shine}CFAUX@{fg text} ),
     automount pauses on each pass so that handler can claim its own partition
-    first, then reuses it (shown as @{fg shine}CFa0>CFAUX@{fg text} ) and mounts only the others,
+    first, then reuses it (shown as @{fg shine}CF0>CFAUX@{fg text} ) and mounts only the others,
     instead of starting a second handler on the same partition.
 
 On removal, the @{fg shine}UNMOUNT@{fg text} key decides per filesystem:
