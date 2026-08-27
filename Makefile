@@ -389,13 +389,14 @@ tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSP
 GUIDE_OUTPUT_DIR = dist/docs
 GUIDE_CFD        = $(GUIDE_OUTPUT_DIR)/cfd.guide
 GUIDE_AUTOMOUNT  = $(GUIDE_OUTPUT_DIR)/automount.guide
+GUIDE_AMREVIEW   = $(GUIDE_OUTPUT_DIR)/automount-review.guide
 GUIDE_CHANGES    = $(GUIDE_OUTPUT_DIR)/changes.guide
 GUIDE_CFINFO     = $(GUIDE_OUTPUT_DIR)/CFInfo.guide
 GUIDE_SPEED      = $(GUIDE_OUTPUT_DIR)/pcmciaspeed.guide
 GUIDE_CHECK      = $(GUIDE_OUTPUT_DIR)/pcmciacheck.guide
 GUIDE_LSPTRES    = $(GUIDE_OUTPUT_DIR)/lsptres.guide
 
-guide guides: $(GUIDE_CFD) $(GUIDE_AUTOMOUNT) $(GUIDE_CHANGES) $(GUIDE_CFINFO) $(GUIDE_SPEED) $(GUIDE_CHECK) $(GUIDE_LSPTRES)
+guide guides: $(GUIDE_CFD) $(GUIDE_AUTOMOUNT) $(GUIDE_AMREVIEW) $(GUIDE_CHANGES) $(GUIDE_CFINFO) $(GUIDE_SPEED) $(GUIDE_CHECK) $(GUIDE_LSPTRES)
 
 $(GUIDE_CFD): README.md $(MD2GUIDE)
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
@@ -406,6 +407,11 @@ $(GUIDE_AUTOMOUNT): docs/automount.md $(MD2GUIDE)
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
 	$(Q)$(MD2GUIDE) docs/automount.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount guide"
+
+$(GUIDE_AMREVIEW): docs/automount-review.md $(MD2GUIDE)
+	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
+	$(Q)echo "  GUIDE   $@"
+	$(Q)$(MD2GUIDE) docs/automount-review.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount feature review guide"
 
 $(GUIDE_CHANGES): docs/changes.md $(MD2GUIDE)
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
