@@ -3578,6 +3578,8 @@ CFG_AmBad	= 548			;byte (1 = AUTOMOUNT value not recognized)
 CFG_Trunc	= 549			;byte (1 = prefs filled the buffer)
 CFG_UnmStatic	= 550			;byte (1 = static mounts follow UNMOUNT, default;
 					;0 = UNMOUNT_STATIC 0, keep hand-mounted nodes)
+CFG_MntUsed	= 551			;byte (1 = MOUNT_USED: a hand mountlist may claim
+					;an already-served partition; default 0)
 CFG_DbgRead	= 552			;long bytes read (-1 = no prefs found)
 CFG_MountCfg	= 556			;MountCfg, mc_Sizeof bytes
 CFG_Overrides	= 584			;(CFG_OVMAX+1) override rows * ovr_Sizeof
@@ -3737,6 +3739,7 @@ _mwReadConfig:
 	clr.b	CFG_AmBad(a5)
 	clr.b	CFG_Trunc(a5)
 	move.b	#1,CFG_UnmStatic(a5)	;static mounts follow UNMOUNT by default
+	clr.b	CFG_MntUsed(a5)		;served partitions refuse a second mount
 	clr.l	CFG_MountCfg+mc_Flags(a5)
 	clr.l	CFG_MountCfg+mc_Control(a5)
 	clr.l	CFG_MountCfg+mc_Overrides(a5)
@@ -3826,7 +3829,7 @@ _cfg_umst:
 	lea	kw_unmount_static(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
-	beq.s	_cfg_flags
+	beq.s	_cfg_mu
 	move.l	d0,a0
 	bsr	_cfgSkipSp
 	move.b	(a0),d0
@@ -3840,18 +3843,52 @@ _cfg_umst:
 	cmp.b	#'Y',d0			;YES
 	beq.s	_cfg_us_on
 	cmp.b	#'O',d0			;ON / OFF
-	bne.s	_cfg_flags		;unrecognized -> keep the default
+	bne.s	_cfg_mu			;unrecognized -> keep the default
 	move.b	1(a0),d0
 	bsr	_cfgUpper
 	cmp.b	#'F',d0
 	beq.s	_cfg_us_off
 	cmp.b	#'N',d0
-	bne.s	_cfg_flags
+	bne.s	_cfg_mu
 _cfg_us_on:
 	move.b	#1,CFG_UnmStatic(a5)
-	bra.s	_cfg_flags
+	bra.s	_cfg_mu
 _cfg_us_off:
 	clr.b	CFG_UnmStatic(a5)
+_cfg_mu:
+;-- MOUNT_USED (same value grammar): 1 lets a hand mountlist claim a
+;   partition another handler already serves, at the user's own risk;
+;   default 0 keeps the refusal. Stamped like UNMOUNT_STATIC.
+	lea	CFG_Buf(a5),a0
+	lea	kw_mount_used(pc),a1
+	bsr	_cfgStr
+	tst.l	d0
+	beq.s	_cfg_flags
+	move.l	d0,a0
+	bsr	_cfgSkipSp
+	move.b	(a0),d0
+	cmp.b	#'0',d0
+	beq.s	_cfg_mu_off
+	cmp.b	#'1',d0
+	beq.s	_cfg_mu_on
+	bsr	_cfgUpper
+	cmp.b	#'N',d0			;NO
+	beq.s	_cfg_mu_off
+	cmp.b	#'Y',d0			;YES
+	beq.s	_cfg_mu_on
+	cmp.b	#'O',d0			;ON / OFF
+	bne.s	_cfg_flags		;unrecognized -> keep the default
+	move.b	1(a0),d0
+	bsr	_cfgUpper
+	cmp.b	#'F',d0
+	beq.s	_cfg_mu_off
+	cmp.b	#'N',d0
+	bne.s	_cfg_flags
+_cfg_mu_on:
+	move.b	#1,CFG_MntUsed(a5)
+	bra.s	_cfg_flags
+_cfg_mu_off:
+	clr.b	CFG_MntUsed(a5)
 _cfg_flags:
 ;-- global FLAGS
 	lea	CFG_Buf(a5),a0
@@ -3957,8 +3994,12 @@ _cfg_umstatic:
 ;   pass still stamps the policy without mounting anything
 	moveq.l	#0,d0
 	tst.b	CFG_UnmStatic(a5)
-	bne.s	_cfg_uf_am
+	bne.s	_cfg_uf_mu
 	bset	#MCUF_KEEPSTATIC,d0
+_cfg_uf_mu:
+	tst.b	CFG_MntUsed(a5)
+	beq.s	_cfg_uf_am
+	bset	#MCUF_MOUNTUSED,d0
 _cfg_uf_am:
 	tst.b	CFG_AutoMount(a5)
 	bne.s	_cfg_uf_done
@@ -4225,6 +4266,7 @@ kw_control:	dc.b	"CONTROL",0
 kw_unmount:	dc.b	"UNMOUNT",0
 kw_unmount_static:
 		dc.b	"UNMOUNT_STATIC",0
+kw_mount_used:	dc.b	"MOUNT_USED",0
 kw_flags_dos:	dc.b	"FLAGS_DOS",0
 kw_flags_ffs:	dc.b	"FLAGS_FFS",0
 kw_flags_sfs:	dc.b	"FLAGS_SFS",0

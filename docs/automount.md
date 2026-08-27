@@ -50,17 +50,19 @@ On removal, the `UNMOUNT` key decides per filesystem:
 
 A partition can also be served by your own mountlist instead of an automount-built node: either your hand `DEVS:DOSDrivers` handler claimed the card itself (`CF0>CFAUX`), or the automount adopted your node because the names matched. `lsptres` marks these rows in the fifth Flags position: `s` when the mount follows the `UNMOUNT` policy (the default: pull the card and it is torn down with everything else, and the next card is automounted under the synthesized name), `S` when `UNMOUNT_STATIC 0` protects it.
 
-With `UNMOUNT_STATIC 0` the mount is kept on removal and marked absent like `UNMOUNT NONE` (`[PT] static mount kept` on serial), and reinserting a card puts the same handler back in service. You mounted it, so only you remove it. If you do remove it by hand (e.g. `Assign CFAUX: DISMOUNT`), the partition stays claimed in `partition.resource`, so the automount does not take it over until a reboot or a fresh `Mount`. The policy is stamped into the partition entries during the mount pass on insert, which is what `lsptres` shows and what the removal obeys, so a changed `UNMOUNT_STATIC` applies to cards inserted afterwards, not to the very next pull.
+With `UNMOUNT_STATIC 0` the mount is kept on removal and marked absent like `UNMOUNT NONE` (`[PT] static mount kept` on serial), and reinserting a card puts the same handler back in service. You mounted it, so only you remove it. If you do remove it by hand (e.g. `Assign CFAUX: DISMOUNT`), the partition stays claimed in `partition.resource`, so the automount does not take it over until a reboot or a fresh `Mount`.
+
+The other way around, a hand mount over a partition the automount (or any other handler) already serves is refused: the new handler reports `object in use` and the existing mount stays alone on the partition. `MOUNT_USED 1` overrides that deliberately, at your own risk: reading through the second mount mostly works, any write corrupts the volume, and `partition.resource` keeps showing the original mount. The policy is stamped into the partition entries during the mount pass on insert, which is what `lsptres` shows and what the removal obeys, so a changed `UNMOUNT_STATIC` applies to cards inserted afterwards, not to the very next pull.
 
 Under `UNMOUNT NONE`, or for a filesystem left out of the list, the partition stays visible in `lsptres` while the card is out, shown absent. A fully unmounted partition is removed from the resource and re-published on the next insert.
 
 A card that is still in use is not unmounted. A filesystem cannot give up a volume something holds a lock on, an open Workbench window on it being the usual case, because the volume node has to stay in the DOS list for that lock to remain valid. It declines, and the partition is kept and marked absent exactly as `UNMOUNT NONE` would leave it, so its handler stays in service. Close the window, or whatever else is holding the volume, and the next removal unmounts it. A full ptable.library build prints the refusal on serial unconditionally; `FLAGS 8` adds the driver's `[MW]`/`[MA]` lines around it.
 
-Three settings only take effect on the next mount:
+These settings only take effect on the next mount:
 
 - `AUTOMOUNT` gates the mount step, it never unmounts. Changing `1` to `0` leaves volumes that are already mounted alone. To clear them, pull the card or reboot.
 - `FLAGS` and `CONTROL` are read by a handler when it starts. Under `UNMOUNT NONE`, or for a filesystem left out of the `UNMOUNT` list, the handler survives a card swap and keeps the values it started with. List that filesystem in `UNMOUNT` and reinsert the card to apply new ones.
-- `UNMOUNT_STATIC` is stamped into the partition entries during the mount pass on insert; a change applies to cards inserted afterwards. `lsptres` always shows the stamped state (`S`/`s`), which is exactly what the next removal will do.
+- `UNMOUNT_STATIC` and `MOUNT_USED` are stamped into the partition entries during the mount pass on insert; a change applies to cards inserted afterwards. `lsptres` always shows the stamped `UNMOUNT_STATIC` state (`S`/`s`), which is exactly what the next removal will do.
 
 ## Configuration: ENV:cfd.prefs
 
@@ -88,6 +90,7 @@ Format:
 | `CONTROL` | string | none | Mount CONTROL string applied to every mount. At most 31 characters. |
 | `UNMOUNT` | names | all | Filesystems to fully unmount on removal. Any subset of `DOS FFS SFS PFS FAT`; a key with no recognized names (e.g. `UNMOUNT NONE`) keeps every handler. |
 | `UNMOUNT_STATIC` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | on | `0` exempts hand-mounted (`DEVS:DOSDrivers`) partitions from `UNMOUNT`: on removal they are kept and marked absent, the handler stays in service (`S` in `lsptres`). Default `1`: they are unmounted like everything else (`s`). Takes effect on the next insert. |
+| `MOUNT_USED` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | off | `1` lets a hand `DEVS:DOSDrivers` mount claim a partition another handler already serves, at your own risk: two handlers cache one FAT volume, reading mostly works, any write corrupts it. Default `0`: such a mount is refused and reports `object in use`. Takes effect on the next insert. |
 | `FLAGS_<fs>` | decimal | global `FLAGS` | Per-filesystem override of `FLAGS`. |
 | `CONTROL_<fs>` | string | global `CONTROL` | Per-filesystem override of `CONTROL`. |
 | `DOSTYPE_FAT` | hex | detected | Mount MBR/GPT FAT partitions as this DosType instead of the detected one. See [Choosing the FAT filesystem](#choosing-the-fat-filesystem). |
