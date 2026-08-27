@@ -163,7 +163,8 @@ any other handler) already serves is refused: the new handler reports
 @{fg shine}object in use@{fg text} and the existing mount stays alone on the partition.
 @{fg shine}MOUNT_USED 1@{fg text} overrides that deliberately, at your own risk: reading
 through the second mount mostly works, any write corrupts the volume,
-and @{fg shine}partition.resource@{fg text} keeps showing the original mount. The policy is
+and @{fg shine}partition.resource@{fg text} lists the extra mount as its own row next to the
+owner's ( @{fg shine}lsptres@{fg text} shows e.g. @{fg shine}CF0>CFAUX@{fg text} and @{fg shine}CF0>CFA0@{fg text} ). The policy is
 stamped into the partition entries during the mount pass on insert,
 which is what @{fg shine}lsptres@{fg text} shows and what the removal obeys, so a changed
 @{fg shine}UNMOUNT_STATIC@{fg text} applies to cards inserted afterwards, not to the very

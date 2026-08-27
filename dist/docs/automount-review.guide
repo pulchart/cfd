@@ -287,16 +287,56 @@ leftover.
   1. Insert MBR-FAT or GPT-FAT, let the automount mount @{fg shine}CF0@{fg text}.
   2. @{fg shine}Mount CFAUX:@{fg text} (auto-detect DOSDriver on the same device) and @{fg shine}dir CFAUX:@{fg text}.
   3. Pull the card; @{fg shine}dir CFAUX:@{fg text} again.
-  4. Put @{fg shine}MOUNT_USED 1@{fg text} in @{fg shine}ENV:cfd.prefs@{fg text}, reinsert the card, repeat step 2.
+  4. @{fg shine}MOUNT CFAUX: SHUTDOWN@{fg text} , then @{fg shine}ASSIGN CFAUX: DISMOUNT@{fg text} ; put @{fg shine}MOUNT_USED 1@{fg text} in
+     @{fg shine}ENV:cfd.prefs@{fg text} ; reinsert the card.
+  5. Repeat step 2, then @{fg shine}lsptres@{fg text}.
+  6. @{fg shine}MOUNT CFAUX: SHUTDOWN@{fg text}, then @{fg shine}lsptres@{fg text}.
+  7. @{fg shine}ASSIGN CFAUX: DISMOUNT@{fg text} , repeat step 2, then pull the card and @{fg shine}lsptres@{fg text} ;
+     reinsert.
 
-Expected: (2) the second mount fails and accesses report
-@{fg shine}object is in use@{fg text} (error 202); the serial shows no second @{fg shine}[PT] mounted as@{fg text}
-; @{fg shine}lsptres@{fg text} keeps the single @{fg shine}CF0@{fg text} row; the Workbench icons do not fight.
-(3) With the card out the error returns to a plain no-disk. (4) With
-@{fg shine}MOUNT_USED 1@{fg text} the second mount succeeds at your own risk: two handlers
-cache one volume, reading mostly works, any write corrupts it, and
-@{fg shine}partition.resource@{fg text} keeps the original @{fg shine}CF0@{fg text} registration (no
-@{fg shine}[PT] mounted as CFAUX@{fg text} ). Never write in that state.
+Expected: (2) the @{fg shine}Mount@{fg text} command itself succeeds (it only adds the DOS
+node; the handler starts on the first reference), but the claim is
+refused: @{fg shine}dir CFAUX:@{fg text} reports @{fg shine}object is in use@{fg text} (error 202), the serial
+shows no second @{fg shine}[PT] mounted as@{fg text} , @{fg shine}lsptres@{fg text} keeps the single @{fg shine}CF0@{fg text} row, and
+the Workbench icons do not fight. (3) With the card out the error
+returns to a plain no-disk (error 226) and the automount retires @{fg shine}CF0@{fg text}
+under the default policy. (4) The leftover hand node must go before the
+reinsert: with it still in place the automount adopts the @{fg shine}CFAUX@{fg text} handler
+for the whole partition (scenario 4) instead of mounting its own @{fg shine}CF0@{fg text} ,
+and the extra-mount state below never appears. After the clean unmount
+(scenario 11) the reinsert automounts @{fg shine}CF0@{fg text} again. (5) With @{fg shine}MOUNT_USED 1@{fg text}
+the second mount succeeds at your own risk: two handlers cache one
+volume, reading mostly works, any write corrupts it. The extra mount
+appears as its own @{fg shine}lsptres@{fg text} row next to the owner's, serial
+@{fg shine}[PT] mounted as CFAUX@{fg text} :
+
+@{fg highlight}
+  Name         Device        Unit Part Src Pri DosType    Text Flags  MFlg Ctrl
+  ------------ ------------- ---- ---- --- --- ---------- ---- ----- ----- ----------
+  CF0          compactflash.    0    0 GPT   0 0x464154FF FAT. P--M-     0 -d-D+q
+  CF0>CFAUX    compactflash.    0    0 GPT   0 0x464154FF FAT. P--Ms     0
+@{fg text}
+
+The owner's row is never overlaid. Never write in that state. (6) The
+extra handler's clean shutdown removes its own row (
+@{fg shine}[PT] unregistered CF0@{fg text} ); the owner's row stays. @{fg shine}Mount CFAUX:@{fg text} alone would
+now report the device is already mounted: @{fg shine}SHUTDOWN@{fg text} keeps the DOS node
+(scenario 11). (7) After the dismount the extra mount repeats cleanly
+(two rows again); pulling the card with both mounts live retires each
+row on its own, the serial shows two @{fg shine}[PT] unmounted CF0@{fg text} lines under the
+default policy and @{fg shine}lsptres@{fg text} empties:
+
+@{fg highlight}
+  [PT] card removed, media absent
+  [PT] unmounting partitions
+  [PT] unmounted CF0
+  [PT] unmounted CF0
+  
+  Name         Device        Unit Part Src Pri DosType    Text Flags  MFlg Ctrl
+  ------------ ------------- ---- ---- --- --- ---------- ---- ----- ----- ----------
+@{fg text}
+
+The reinsert then automounts a single @{fg shine}CF0@{fg text} (@{fg shine}P--M-@{fg text}) again.
 
 ----------------------------------------
 @{"<< Prev" link 8__Static_mounts_and_UNMOUNT_STATIC}  @{"Contents" link Main}  @{"Next >>" link 10a__Flush_with_the_automount_set_loaded}

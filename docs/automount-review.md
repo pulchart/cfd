@@ -117,9 +117,33 @@ CF0>CFAUX    compactflash.    0    0 GPT   0 0x464154FF FAT. P--Ms     0 -d-D
 1. Insert MBR-FAT or GPT-FAT, let the automount mount `CF0`.
 2. `Mount CFAUX:` (auto-detect DOSDriver on the same device) and `dir CFAUX:`.
 3. Pull the card; `dir CFAUX:` again.
-4. Put `MOUNT_USED 1` in `ENV:cfd.prefs`, reinsert the card, repeat step 2.
+4. `MOUNT CFAUX: SHUTDOWN`, then `ASSIGN CFAUX: DISMOUNT`; put `MOUNT_USED 1` in `ENV:cfd.prefs`; reinsert the card.
+5. Repeat step 2, then `lsptres`.
+6. `MOUNT CFAUX: SHUTDOWN`, then `lsptres`.
+7. `ASSIGN CFAUX: DISMOUNT`, repeat step 2, then pull the card and `lsptres`; reinsert.
 
-Expected: (2) the second mount fails and accesses report `object is in use` (error 202); the serial shows no second `[PT] mounted as`; `lsptres` keeps the single `CF0` row; the Workbench icons do not fight. (3) With the card out the error returns to a plain no-disk. (4) With `MOUNT_USED 1` the second mount succeeds at your own risk: two handlers cache one volume, reading mostly works, any write corrupts it, and `partition.resource` keeps the original `CF0` registration (no `[PT] mounted as CFAUX`). Never write in that state.
+Expected: (2) the `Mount` command itself succeeds (it only adds the DOS node; the handler starts on the first reference), but the claim is refused: `dir CFAUX:` reports `object is in use` (error 202), the serial shows no second `[PT] mounted as`, `lsptres` keeps the single `CF0` row, and the Workbench icons do not fight. (3) With the card out the error returns to a plain no-disk (error 226) and the automount retires `CF0` under the default policy. (4) The leftover hand node must go before the reinsert: with it still in place the automount adopts the `CFAUX` handler for the whole partition (scenario 4) instead of mounting its own `CF0`, and the extra-mount state below never appears. After the clean unmount (scenario 11) the reinsert automounts `CF0` again. (5) With `MOUNT_USED 1` the second mount succeeds at your own risk: two handlers cache one volume, reading mostly works, any write corrupts it. The extra mount appears as its own `lsptres` row next to the owner's, serial `[PT] mounted as CFAUX`:
+
+```
+Name         Device        Unit Part Src Pri DosType    Text Flags  MFlg Ctrl
+------------ ------------- ---- ---- --- --- ---------- ---- ----- ----- ----------
+CF0          compactflash.    0    0 GPT   0 0x464154FF FAT. P--M-     0 -d-D+q
+CF0>CFAUX    compactflash.    0    0 GPT   0 0x464154FF FAT. P--Ms     0
+```
+
+The owner's row is never overlaid. Never write in that state. (6) The extra handler's clean shutdown removes its own row (`[PT] unregistered CF0`); the owner's row stays. `Mount CFAUX:` alone would now report the device is already mounted: `SHUTDOWN` keeps the DOS node (scenario 11). (7) After the dismount the extra mount repeats cleanly (two rows again); pulling the card with both mounts live retires each row on its own, the serial shows two `[PT] unmounted CF0` lines under the default policy and `lsptres` empties:
+
+```
+[PT] card removed, media absent
+[PT] unmounting partitions
+[PT] unmounted CF0
+[PT] unmounted CF0
+
+Name         Device        Unit Part Src Pri DosType    Text Flags  MFlg Ctrl
+------------ ------------- ---- ---- --- --- ---------- ---- ----- ----- ----------
+```
+
+The reinsert then automounts a single `CF0` (`P--M-`) again.
 
 ## 10a. Flush with the automount set loaded
 
