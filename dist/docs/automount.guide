@@ -53,7 +53,8 @@ file that configures them.
 The scanning and mounting itself is done by @{fg shine}ptable.library@{fg text} , which is
 required for all of it. Without that library @{fg shine}compactflash.device@{fg text} still
 works, but as a plain mount-only device: you mount partitions yourself
-through @{fg shine}DEVS:DOSDrivers/@{fg text} . See @{fg shine}ptable.guide@{fg text} for the library internals.
+through @{fg shine}DEVS:DOSDrivers/@{fg text} . See @{fg shine}ptable.guide@{fg text} (shipped with the
+ptable.library archive) for the library internals.
 
 ----------------------------------------
 @{"<< Prev" link Main}  @{"Contents" link Main}  @{"Next >>" link Quick_start}
@@ -97,12 +98,13 @@ config file is only for changing that; an example is shipped as
 @{fg highlight}
   AUTOMOUNT 1
   FLAGS 0
-  UNMOUNT FAT
-  CONTROL_FAT +q
+  CONTROL_FAT -d-D+q
 @{fg text}
 
-That keeps automount on, fully unmounts only FAT volumes when the card
-is pulled, and passes fat95's @{fg shine}+q@{fg text} (quiet) option to FAT mounts.
+That keeps automount on, fully unmounts every supported filesystem when
+the card is pulled (the default, since there is no @{fg shine}UNMOUNT@{fg text} key), and
+passes fat95 @{fg shine}-d-D+q@{fg text} : no extra date stamps as file comments, and the
+quiet option so a pulled card does not raise requesters.
 
 ----------------------------------------
 @{"<< Prev" link compactflash_device_automount_and_configuration}  @{"Contents" link Main}  @{"Next >>" link What_happens_when_you_insert_or_remove_a_card}
@@ -124,17 +126,20 @@ On insert:
 
 On removal, the @{fg shine}UNMOUNT@{fg text} key decides per filesystem:
 
-  * @{b}Default, no @{fg shine}UNMOUNT@{fg text} key:@{ub} every partition is fully unmounted. The handler is
-    stopped, the DOS node removed and the memory freed. Reinserting the card
-    mounts it fresh.
+  * @{b}Default, no @{fg shine}UNMOUNT@{fg text} key:@{ub} every partition of a supported filesystem ( @{fg shine}DOS@{fg text} / @{fg shine}FFS@{fg text}
+    / @{fg shine}SFS@{fg text} / @{fg shine}PFS@{fg text} / @{fg shine}FAT@{fg text} ) is fully unmounted; anything else is kept and marked
+    absent. The handler is stopped, the DOS node removed and the memory freed.
+    Reinserting the card mounts it fresh.
   * @{b}@{fg shine}UNMOUNT <fs>@{fg text} :@{ub} only the listed filesystems are unmounted like that. A
     filesystem not listed is marked absent instead: its DOS node and handler stay
     in memory, and reinserting the same card reattaches it without re-initialising
     the handler. This is the native AmigaOS removable-media behaviour.
   * @{b}@{fg shine}UNMOUNT NONE@{fg text}@{ub} (or any name that is not recognised) keeps every handler.
 
-Either way the partition stays visible in @{fg shine}lsptres@{fg text} while the card is out,
-shown absent, and is re-confirmed or re-published on reinsert.
+Under @{fg shine}UNMOUNT NONE@{fg text} , or for a filesystem left out of the list, the
+partition stays visible in @{fg shine}lsptres@{fg text} while the card is out, shown absent.
+A fully unmounted partition is removed from the resource and
+re-published on the next insert.
 
 A card that is still in use is not unmounted. A filesystem cannot give
 up a volume something holds a lock on, an open Workbench window on it
@@ -142,8 +147,9 @@ being the usual case, because the volume node has to stay in the DOS
 list for that lock to remain valid. It declines, and the partition is
 kept and marked absent exactly as @{fg shine}UNMOUNT NONE@{fg text} would leave it, so its
 handler stays in service. Close the window, or whatever else is holding
-the volume, and the next removal unmounts it. With @{fg shine}FLAGS 8@{fg text} the serial
-trace names the refusal.
+the volume, and the next removal unmounts it. A full ptable.library
+build prints the refusal on serial unconditionally; @{fg shine}FLAGS 8@{fg text} adds the
+driver's @{fg shine}[MW]@{fg text} / @{fg shine}[MA]@{fg text} lines around it.
 
 Two settings only take effect on the next mount:
 
@@ -185,7 +191,10 @@ Format:
 
   * One key per line, the value after whitespace. A missing key keeps its default.
   * Keys are matched case-sensitively as whole words, so @{fg shine}FLAGS@{fg text} does not match
-    inside @{fg shine}FLAGS_DOS@{fg text} .
+    inside @{fg shine}FLAGS_DOS@{fg text} . The search covers the whole file, not just line starts: a
+    key name appearing as a whole word inside another key's value is picked up
+    too, so do not use key names or the @{fg shine}UNMOUNT@{fg text} filesystem names inside unquoted
+    values.
   * @{fg shine};@{fg text} or @{fg shine}#@{fg text} starts a comment: the rest of that line is ignored, so @{fg shine}; FLAGS 0@{fg text} really
     is disabled.
   * The file is read up to 511 bytes.
@@ -193,17 +202,23 @@ Format:
   @{b}Key@{ub}           @{b}Value@{ub}                @{b}Default@{ub}         @{b}Meaning@{ub}               
   ------------  -------------------  --------------  --------------------  
   @{fg shine}AUTOMOUNT@{fg text}     @{fg shine}0@{fg text}/@{fg shine}1@{fg text}, @{fg shine}ON@{fg text}/@{fg shine}OFF@{fg text}, @{fg shine}YES@{fg text}/@{fg shine}NO@{fg text}  on              Mount partitions on   
-                                                     insert. Any other     
-                                                     value is ignored      
-                                                     and the default       
-                                                     applies.              
+                                                     insert. Only the      
+                                                     first letter          
+                                                     decides ( @{fg shine}N@{fg text} / @{fg shine}0@{fg text}       
+                                                     off, @{fg shine}Y@{fg text} / @{fg shine}1@{fg text} on, @{fg shine}O@{fg text} +    
+                                                     @{fg shine}N@{fg text} / @{fg shine}F@{fg text} ), so e.g.      
+                                                     @{fg shine}NEVER@{fg text} reads as off;   
+                                                     anything else is      
+                                                     ignored and the       
+                                                     default applies.      
   @{fg shine}FLAGS@{fg text}         decimal              @{fg shine}0@{fg text}               Mount flags applied   
                                                      to every mount. See   
                                                      the bit table         
                                                      below.                
   @{fg shine}CONTROL@{fg text}       string               none            Mount CONTROL         
                                                      string applied to     
-                                                     every mount.          
+                                                     every mount. At       
+                                                     most 31 characters.   
   @{fg shine}UNMOUNT@{fg text}       names                all             Filesystems to        
                                                      fully unmount on      
                                                      removal. Any subset   
@@ -231,7 +246,8 @@ Format:
                                                      @{fg shine}FileSystem.resource@{fg text}   
                                                      , e.g.                
                                                      @{fg shine}L:CrossDOSFileSystem@{fg text}  
-                                                     .                     
+                                                     . At most 23          
+                                                     characters.           
 
 @{fg shine}FLAGS@{fg text} bits (see also the README "Mount Flags" section):
 
@@ -395,8 +411,8 @@ internal IDE ( @{fg shine}scsi.device@{fg text} ) has started. That init is sequ
 the IDE stalls at boot (no drive connected, for instance) CF autoboot
 never gets its turn either. The boot stub first does a single Gayle read
 to check for a card; an empty slot returns immediately. With a card
-present it tolerates slow cards by polling up to about 1.8 s; a healthy
-card adds no measurable delay.
+present it tolerates slow cards by polling the media state for up to 5
+s; a healthy card adds no measurable delay.
 
 @{fg shine}ptable.library@{fg text} also registers a synthetic expansion board (Vendor ID
 @{fg shine}65535 ($FFFF)@{fg text} , Product ID @{fg shine}1@{fg text} ) so the Early Startup boot menu sees the
@@ -452,10 +468,10 @@ library:
   [PT] cold boot: scanning for partitions
   [PT] RDB partition table
   [PT] + filesystem handler PFS v20.0
-  [PT] - skip  SDH10
-  [PT] + boot  SDH0
-  [PT] + mount SDH1
-  [PT] + mount SDH2
+  [PT] - skip  SDH10 (no-mount) (MAC\0, 32 MB)
+  [PT] + boot  SDH0 (PFS\3, 512 MB)
+  [PT] + mount SDH1 (PFS\3, 1024 MB)
+  [PT] + mount SDH2 (PFS\3, 495 MB)
   [PT] cold boot done, partitions registered: 3
 @{fg text}
 
