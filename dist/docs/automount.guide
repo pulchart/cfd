@@ -50,13 +50,13 @@ they go away again. With the driver in a Kickstart ROM you can also boot
 straight off the card. This guide covers both, and the @{fg shine}ENV:cfd.prefs@{fg text}
 file that configures them.
 
-The scanning and mounting itself is done by @{fg shine}ptable.library@{fg text} , which is
-required for all of it. Without that library @{fg shine}compactflash.device@{fg text} still
-works, but as a plain mount-only device: you mount partitions yourself
-through @{fg shine}DEVS:DOSDrivers/@{fg text} . See @{fg shine}ptable.guide@{fg text} (shipped with the
-ptable.library archive) for the library internals. The expected
-behaviour of the whole feature is catalogued scenario by scenario in
-@{fg shine}automount-review.guide@{fg text} ( @{"  automount-review.guide  " link "automount-review.guide/Main"} ).
+@{fg shine}ptable.library@{fg text} does the scanning and mounting, and is required for all
+of it. Without that library @{fg shine}compactflash.device@{fg text} still works, but as a
+plain mount-only device: you mount partitions yourself through
+@{fg shine}DEVS:DOSDrivers/@{fg text} . See @{fg shine}ptable.guide@{fg text} (shipped with the ptable.library
+archive) for the library internals. The expected behaviour of the whole
+feature is catalogued scenario by scenario in @{fg shine}automount-review.guide@{fg text} ( @{"  automount-review.guide  " link "automount-review.guide/Main"}
+).
 
 ----------------------------------------
 @{"<< Prev" link Main}  @{"Contents" link Main}  @{"Next >>" link Quick_start}
@@ -66,25 +66,29 @@ behaviour of the whole feature is catalogued scenario by scenario in
 @node Quick_start "Quick start"
 @{b}Quick start@{ub}
 
-Three modules are involved, and automount is opt-in by whether you
-include the third:
+Three modules are involved:
 
   * @{fg shine}compactflash.device@{fg text}: the I/O driver.
   * @{fg shine}ptable.library@{fg text} : the partition scanner and automounter (RDB, MBR, GPT, flat
     FAT).
-  * @{fg shine}compactflash.automount@{fg text} : boot and automount bringup. Include it only when you
-    want autoboot or automount.
+  * @{fg shine}compactflash.automount@{fg text} : bringup. It opens the device after DOS, and in a ROM
+    it also carries the cold-boot autoboot stub.
 
-  @{b}Goal@{ub}                  @{b}Modules@{ub}                   @{b}Cold-boot autoboot@{ub}  
-  --------------------  ------------------------  ------------------  
-  ROM autoboot          @{fg shine}compactflash.device@{fg text} +     available           
-                        @{fg shine}compactflash.automount@{fg text} +                      
-                        @{fg shine}ptable.library@{fg text} in                             
-                        Kickstart                                     
-  Resident/on-disk, no  @{fg shine}compactflash.device@{fg text} +     no                  
-  automount             @{fg shine}ptable.library@{fg text} (no                            
-                        automount module)                             
-  On-disk automount     @{fg shine}LoadModule@{fg text} line below     no                  
+Automount needs the device open, because the agent lives in the unit
+task. Anything that opens it will do, a @{fg shine}DEVS:DOSDrivers/CF0@{fg text} mount
+included; @{fg shine}compactflash.automount@{fg text} is how you get it open without a
+mountlist entry, and the only way to get cold-boot autoboot.
+
+  @{b}Goal@{ub}                       @{b}Modules@{ub}                   @{b}Cold-boot autoboot@{ub}  
+  -------------------------  ------------------------  ------------------  
+  ROM autoboot               @{fg shine}compactflash.device@{fg text} +     available           
+                             @{fg shine}compactflash.automount@{fg text} +                      
+                             @{fg shine}ptable.library@{fg text} in                             
+                             Kickstart                                     
+  On-disk, device opened by  @{fg shine}compactflash.device@{fg text} +     no                  
+  a @{fg shine}DOSDrivers@{fg text} mount         @{fg shine}ptable.library@{fg text}                                
+  On-disk, no mountlist      @{fg shine}LoadModule@{fg text} line below     no                  
+  entry                                                                    
 
 For a disk install, put @{fg shine}compactflash.automount@{fg text} and @{fg shine}ptable.library@{fg text} in
 @{fg shine}LIBS:@{fg text} and add this to your @{fg shine}user-startup@{fg text} :

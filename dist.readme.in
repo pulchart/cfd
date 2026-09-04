@@ -14,26 +14,32 @@ COMPONENTS IN THIS RELEASE
 ==========================
 @COMPONENT_VERSIONS@
 
-CHANGES IN @DATE@
-=====================
+WHAT'S NEW (@DATE@)
+=======================
 
-compactflash.device:
+New major version of compactflash.device 2.0 driver:
 
-* Automount: hotplugged cards mount automatically at DOS time (on by
-  default; disable with AUTOMOUNT 0 in the new ENV:cfd.prefs config
-  file). Removing a card unmounts all supported filesystems by default.
-  Boot and automount bringup is split into a separate
-  compactflash.automount module. See automount.guide.
+* Automount: hotplugged cards mount automatically at DOS time, on by
+  default. Can be disabled with AUTOMOUNT 0 in the new ENV:cfd.prefs
+  config file. Removing a card fully unmounts all supported filesystems
+  by default (UNMOUNT <names> restricts it, UNMOUNT NONE keeps the
+  handlers). Boot and automount bringup is split into a separate
+  compactflash.automount module. Cold boot registers the RDB partitions
+  (the autoboot chain); MBR, GPT and flat partitions are mounted by the
+  automount agent once DOS is up, so cfd.prefs applies to them on a
+  ROM-resident system too. See automount.guide for the full reference;
+  automount-review.guide walks the feature scenario by scenario with
+  the expected result of each.
 
-ptable.library:
+New major version of ptable.library 2.0 (bundled):
 
-* Unified partition scanning: one scanner parses RDB, MBR, GPT, and
-  whole-disk FAT and publishes every partition into a shared
-  partition.resource, now used by both compactflash.device and fat95
-  instead of each carrying its own. The new lsptres tool lists the
-  resource. Library: https://github.com/pulchart/amigaos-ptable
+* Unified partition scanning: a shared partition-table library the
+  driver now uses instead of its own parser. It scans RDB, MBR, GPT and
+  flat (whole-disk) partition tables and publishes every partition into
+  a shared partition.resource. The new lsptres tool lists the resource
+  (https://github.com/pulchart/amigaos-ptable).
 
-pcmciacheck:
+Tools 'pcmciacheck 2.0':
 
 * New "-identify" read-stability test: reads the same sector several
   times per mode and reports STABLE, UNSTABLE or STUCK. A card that
@@ -156,8 +162,9 @@ recognise exactly five filesystem names and no others: DOS, FFS, SFS,
 PFS, FAT. Any other name is silently ignored.
 
 FAT partitions still need fat95 loaded so its filesystem code is
-registered. On cold boot the driver tolerates slow cards by polling for
-up to ~1.8s; with a stable card the delay is zero.
+registered. At cold boot an empty slot is detected by a single Gayle
+read and costs nothing; with a card present the boot stub polls up to
+5 s for a slow one.
 
 More details are in automount.guide.
 
@@ -341,7 +348,7 @@ cfd/small/68020/devs/compactflash.device - 68020+, no debug code
 cfd/full/68000/devs/compactflash.device  - 68000+, debug-capable (serial output with Flags=8)
 cfd/small/68000/devs/compactflash.device - 68000+, no debug code
 
-ptable.library (optional) - partition scanner/automounter (RDB/MBR/GPT/FAT):
+ptable.library (required) - partition scanner/automounter (RDB/MBR/GPT/FAT):
 cfd/full/68020/libs/ptable.library       - 68020+, debug-capable (serial output always on at boot)
 cfd/small/68020/libs/ptable.library      - 68020+, no debug code
 cfd/full/68000/libs/ptable.library       - 68000+, debug-capable (serial output always on at boot)
@@ -357,15 +364,18 @@ cfd/small/68000/libs/compactflash.automount - no debug code
 cfd/c/CFInfo      - Card information utility (displays model, size, capabilities)
 cfd/c/pcmciacheck - PCMCIA check utility
 cfd/c/pcmciaspeed - Speed test utility
+cfd/c/lsptres     - partition.resource entry lister (from ptable.library)
 
 cfd/Storage/DOSDrivers/CF0      - Mountlist entry (with flags documentation)
 cfd/Storage/DOSDrivers/CF0.info - Mountlist Workbench icon
 cfd/ENVARC/cfd.prefs            - Example config (copy to ENVARC:cfd.prefs to automount)
 
 cfd/docs/cfd.guide         - Main documentation
+cfd/docs/automount.guide   - Autoboot, automount, and ENV:cfd.prefs configuration
 cfd/docs/automount-review.guide - Automount feature review (expected behaviour)
 cfd/docs/changes.guide     - Release notes and original CFD history
 cfd/docs/CFInfo.guide      - CFInfo utility documentation
+cfd/docs/lsptres.guide     - lsptres utility documentation
 cfd/docs/pcmciacheck.guide - pcmciacheck utility documentation
 cfd/docs/pcmciaspeed.guide - pcmciaspeed utility documentation
 

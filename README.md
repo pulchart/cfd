@@ -36,6 +36,7 @@ See [docs/changes.md](docs/changes.md) for release news and history.
 * Amiga 1200 or 600 (A1200 tested)
 * AmigaOS 2.0+ (tested with 3.2.3)
 * CF-to-PCMCIA adapter or SD-to-CF adapter (see [Hardware Notes](#hardware-notes))
+* `ptable.library` (bundled) in `LIBS:` or in ROM: does all partition scanning and mounting
 * Works with fat95 filesystem for FAT32 support (disk/misc/fat95.lha) or native (FFS, SFS, PFS) filesystems if RDB partition table is used
 
 ## Installation
