@@ -2,21 +2,23 @@
 
 Insert a CF card and its partitions mount by themselves; pull it and they go away again. With the driver in a Kickstart ROM you can also boot straight off the card. This guide covers both, and the `ENV:cfd.prefs` file that configures them.
 
-The scanning and mounting itself is done by `ptable.library`, which is required for all of it. Without that library `compactflash.device` still works, but as a plain mount-only device: you mount partitions yourself through `DEVS:DOSDrivers/`. See `ptable.guide` (shipped with the ptable.library archive) for the library internals. The expected behaviour of the whole feature is catalogued scenario by scenario in `automount-review.guide` ([automount-review.md](automount-review.md)).
+`ptable.library` does the scanning and mounting, and is required for all of it. Without that library `compactflash.device` still works, but as a plain mount-only device: you mount partitions yourself through `DEVS:DOSDrivers/`. See `ptable.guide` (shipped with the ptable.library archive) for the library internals. The expected behaviour of the whole feature is catalogued scenario by scenario in `automount-review.guide` ([automount-review.md](automount-review.md)).
 
 ## Quick start
 
-Three modules are involved, and automount is opt-in by whether you include the third:
+Three modules are involved:
 
 - `compactflash.device`: the I/O driver.
 - `ptable.library`: the partition scanner and automounter (RDB, MBR, GPT, flat FAT).
-- `compactflash.automount`: boot and automount bringup. Include it only when you want autoboot or automount.
+- `compactflash.automount`: bringup. It opens the device after DOS, and in a ROM it also carries the cold-boot autoboot stub.
+
+Automount needs the device open, because the agent lives in the unit task. Anything that opens it will do, a `DEVS:DOSDrivers/CF0` mount included; `compactflash.automount` is how you get it open without a mountlist entry, and the only way to get cold-boot autoboot.
 
 | Goal | Modules | Cold-boot autoboot |
 |---|---|---|
 | ROM autoboot | `compactflash.device` + `compactflash.automount` + `ptable.library` in Kickstart | available |
-| Resident/on-disk, no automount | `compactflash.device` + `ptable.library` (no automount module) | no |
-| On-disk automount | `LoadModule` line below | no |
+| On-disk, device opened by a `DOSDrivers` mount | `compactflash.device` + `ptable.library` | no |
+| On-disk, no mountlist entry | `LoadModule` line below | no |
 
 For a disk install, put `compactflash.automount` and `ptable.library` in `LIBS:` and add this to your `user-startup`:
 
