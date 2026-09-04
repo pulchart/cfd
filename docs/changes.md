@@ -1,4 +1,4 @@
-## 20260827-dev
+## 20260904-dev
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
@@ -12,24 +12,19 @@ _Components in this release_:
 - `lsptres 1.0-dev (27.08.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
-##### CompactFlash Driver
+#### New major version of compactflash.device 2.0 driver
 
-- **Automount.** Hotplugged cards mount automatically at DOS time, on by default; disable with `AUTOMOUNT 0` in the new `ENV:cfd.prefs` config file. Removing a card fully unmounts all supported filesystems by default (`UNMOUNT <names>` restricts it, `UNMOUNT NONE` keeps the handlers). Boot and automount bringup is split into a separate `compactflash.automount` module. Cold boot registers the RDB partitions (the autoboot chain); MBR, GPT and flat partitions are mounted by the automount agent once DOS is up, so `cfd.prefs` applies to them on a ROM-resident system too. See [automount.md](automount.md).
-- **The FAT filesystem is selectable.** `DOSTYPE_FAT 0x4D534400` with `HANDLER_FAT L:CrossDOSFileSystem` in `cfd.prefs` mounts FAT cards with CrossDOS instead of fat95; `HANDLER_FAT L:fat95` alone loads fat95 from disk when it is not resident. See [automount.md](automount.md).
+- **Automount.** Hotplugged cards mount automatically at DOS time, on by default. Can be disabled with `AUTOMOUNT 0` in the new `ENV:cfd.prefs` config file. Removing a card fully unmounts all supported filesystems by default (`UNMOUNT <names>` restricts it, `UNMOUNT NONE` keeps the handlers). Boot and automount bringup is split into a separate `compactflash.automount` module. Cold boot registers the RDB partitions (the autoboot chain); MBR, GPT and flat partitions are mounted by the automount agent once DOS is up, so `cfd.prefs` applies to them on a ROM-resident system too. See [automount.md](automount.md) for the full reference; [automount-review.md](automount-review.md) walks the feature scenario by scenario with the expected result of each.
 
-##### Partition Table library
+#### New major version of ptable.library 2.0 (bundled)
 
-- **Unified partition scanning.** One scanner parses RDB, MBR, GPT, and flat (whole-disk) partition tables and publishes every partition into a shared `partition.resource`, now used by both `compactflash.device` and `fat95` instead of each carrying its own. The new `lsptres` tool lists the resource. See [ptable.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/ptable.md) and [lsptres.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/lsptres.md).
-- **Selectable filesystem for MBR/GPT FAT partitions**, driven by the `DOSTYPE_FAT` and `HANDLER_FAT` keys above. `lsptres` shows the DosType a partition is mounted with.
+- **Unified partition scanning.** A shared partition-table library the driver now uses instead of its own parser. It scans RDB, MBR, GPT and flat (whole-disk) partition tables and publishes every partition into a shared `partition.resource`. The new `lsptres` tool lists the resource. See [ptable.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/ptable.md) and [lsptres.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/lsptres.md).
 
-##### Tools
+#### Tools 'pcmciacheck 2.0'
 
-*pcmciacheck 2.0*
 - **New `-identify` read-stability test.** ([#67](https://github.com/pulchart/cfd/issues/67)) Reads the same sector several times per mode and reports `STABLE`, `UNSTABLE` or `STUCK`. A card that returns different bytes on each read, or the same word over and over, corrupts files, and that is why the driver refuses it with `FAILED (data mismatch)` or `FAILED (repeated pattern)`. Only the mode the driver actually uses decides the verdict. `-r <runs>` sets the number of runs (default 5). Console only, no log file, like `-cis`.
 
 - **A Gayle PCMCIA timing can be given** (`100`, `150`, `250`, `720`): `-s <speed>` for the normal run, `pcmciacheck -identify <speed>` for the stability test. Both accept `all`: `-identify all` prints a verdict matrix so you can see whether a card only misbehaves at the faster timings, and `-s all` repeats the capture at every timing and logs all of them, so the raw data behind such a fault can be attached to a bug report. Restored on exit, and a diagnostic only: the driver programs that register itself.
-
-- **The read and write mode tests follow the driver more accurately**, and `-cis` now reports the real access speed of cards that use the extended encoding. See [pcmciacheck.md](pcmciacheck.md).
 
 ## 20260614
 

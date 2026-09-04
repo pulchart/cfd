@@ -1,13 +1,16 @@
-; compactflash.device config. copy to ENVARC:cfd.prefs (see automount.guide).
+; compactflash.device config. copy to ENVARC:cfd.prefs
 AUTOMOUNT 1
 FLAGS 0
 CONTROL_FAT -d-D+q
-; Mount FAT cards with CrossDOS instead of fat95 (both lines needed):
-; DOSTYPE_FAT 0x4D534400
-; HANDLER_FAT L:CrossDOSFileSystem
-; Hand-mounted (DEVS:DOSDrivers) partitions are unmounted on card removal
-; like everything else. Set 0 to keep their handler mounted instead:
-; UNMOUNT_STATIC 0
-; A hand mount over an already-served partition is refused (object in use).
-; Set 1 to allow it anyway; writes then corrupt the volume, your own risk:
-; MOUNT_USED 1
+
+; Mount FAT cards with CrossDOS instead of fat95:
+;DOSTYPE_FAT 0x4D534400
+;HANDLER_FAT L:CrossDOSFileSystem
+
+; Static mounts (DEVS:DOSDrivers) are unmounted on card removal.
+; Set 0 to keep their handler mounted instead:
+;UNMOUNT_STATIC 0
+
+; A static mount over an already-automounted partition is refused
+; (object in use). Set 1 to allow it anyway.
+;MOUNT_USED 1
