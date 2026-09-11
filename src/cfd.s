@@ -2003,15 +2003,25 @@ _cgc_1:
 	move.l	d1,SCSI_Actual(a2)
 	move.l	d0,a1			;destination
 
-	;Build config data in buffer
-	move.w	#CFD_CONFIG_SIZE,(a1)+	;offset 0-1: structure size (for versioning)
-	move.b	#FILE_VERSION,(a1)+	;offset 2: major version
-	move.b	#FILE_REVISION,(a1)+	;offset 3: minor version
-	move.w	CFU_OpenFlags(a3),(a1)+	;offset 4-5: flags
-	move.w	CFU_MultiSize(a3),(a1)+	;offset 6-7: firmware multi
-	move.w	CFU_MultiSizeRW(a3),(a1)+ ;offset 8-9: actual multi
-	move.b	CFU_ReceiveMode(a3),(a1)+ ;offset 10: read mode
-	move.b	CFU_WriteMode(a3),(a1)+	;offset 11: write mode
+	;Build the struct on the stack, then hand over only the bytes the
+	;caller asked for: a client sized to an older struct_size must not
+	;be written past, and probing with a short buffer has to stay safe.
+	lea	-CFD_CONFIG_SIZE(sp),sp
+	move.l	sp,a0
+	move.w	#CFD_CONFIG_SIZE,(a0)+	;offset 0-1: structure size (for versioning)
+	move.b	#FILE_VERSION,(a0)+	;offset 2: major version
+	move.b	#FILE_REVISION,(a0)+	;offset 3: minor version
+	move.w	CFU_OpenFlags(a3),(a0)+	;offset 4-5: flags
+	move.w	CFU_MultiSize(a3),(a0)+	;offset 6-7: firmware multi
+	move.w	CFU_MultiSizeRW(a3),(a0)+ ;offset 8-9: actual multi
+	move.b	CFU_ReceiveMode(a3),(a0)+ ;offset 10: read mode
+	move.b	CFU_WriteMode(a3),(a0)+	;offset 11: write mode
+	move.l	sp,a0
+_cgc_copy:
+	move.b	(a0)+,(a1)+
+	subq.l	#1,d1
+	bgt.s	_cgc_copy
+	lea	CFD_CONFIG_SIZE(sp),sp
 
 _cgc_end:
 	moveq.l	#0,d0			;success
