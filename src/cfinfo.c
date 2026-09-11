@@ -22,6 +22,9 @@ const char version[] = MAKE_VERSION_STRING("CFInfo");
 #include <proto/exec.h>
 #include <proto/dos.h>
 
+#include <dos/dosextens.h>
+
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -86,6 +89,121 @@ UBYTE *data_buf = NULL;
 UBYTE *scsi_sense = NULL;
 struct SCSICmd *scsi_cmd = NULL;
 UBYTE scsi_cdb[12];
+
+/* --- console pager -------------------------------------------------
+ *
+ * One screenful at a time: any key continues, Q stops the rest of the
+ * report. Paging is on only when input and output are the same console,
+ * and only when that console reports a plausible height; a redirected
+ * or silent stream scrolls as before.
+ */
+#define PAGE_PROMPT "-- more -- (any key, Q quits)"
+
+static BPTR page_in, page_out;
+static int page_rows;           /* usable lines per page, 0 = no paging */
+static int page_left;
+static int page_stop;           /* the reader asked to stop */
+static char page_erase[sizeof(PAGE_PROMPT) + 1];    /* CR, blanks, CR */
+
+/* Ask the console how tall its window is. RAW mode must already be set.
+ * WINDOW STATUS REQUEST is answered by a WINDOW BOUNDS REPORT,
+ * CSI <p1>;<p2>;<p3>;<p4> SP r, whose third field is the height.
+ */
+static int page_query_rows(void)
+{
+    int fields = 0, num = 0, rows = 0, guard = 40;
+    UBYTE c;
+
+    Write(page_out, "\033[ q", 4);
+    while (guard--) {
+        if (!WaitForChar(page_in, 200000)) return 0;   /* console stayed silent */
+        if (Read(page_in, &c, 1) != 1) return 0;
+        if (c == 'r') return (fields >= 3) ? rows : 0; /* too short to trust */
+        if (c == ';') {
+            if (++fields == 3) rows = num;
+            num = 0;
+            continue;
+        }
+        if (c < '0' || c > '9') continue;
+        if (num < 1000) num = num * 10 + (c - '0');    /* absurd: stop adding */
+    }
+    return 0;
+}
+
+static void page_begin(void)
+{
+    struct FileHandle *in, *out;
+    int rows;
+
+    page_rows = page_left = page_stop = 0;
+    page_in = Input();
+    page_out = Output();
+    if (!page_in || !page_out) return;
+    if (!IsInteractive(page_in) || !IsInteractive(page_out)) return;
+
+    /* The query is written to the output and answered on the input, so both
+     * must be the same handler. Equal fh_Type means one console; a redirected
+     * ">SER:" is a different port and gets neither the query nor a pause.
+     */
+    in = (struct FileHandle *)BADDR(page_in);
+    out = (struct FileHandle *)BADDR(page_out);
+    if (in->fh_Type != out->fh_Type) return;
+
+    SetMode(page_in, 1);                /* RAW for the query and every keypress */
+    rows = page_query_rows() - 1;       /* the prompt needs a line of its own */
+    if (rows < 4 || rows > 200) {       /* implausible height, do not guess */
+        SetMode(page_in, 0);
+        return;
+    }
+    page_rows = page_left = rows;
+
+    page_erase[0] = '\r';
+    memset(page_erase + 1, ' ', sizeof(PAGE_PROMPT) - 1);
+    page_erase[sizeof(PAGE_PROMPT)] = '\r';
+}
+
+static void page_end(void)
+{
+    if (!page_rows) return;
+    page_rows = 0;
+    SetMode(page_in, 0);                /* always hand the shell back cooked */
+}
+
+/* Call after writing one line. Returns 0 when the reader asked to stop. */
+static int page_line(void)
+{
+    UBYTE key = '\n';
+
+    if (!page_rows) return 1;
+    if (--page_left > 0) return 1;
+
+    fflush(stdout);                     /* the prompt bypasses stdio */
+    Write(page_out, PAGE_PROMPT, sizeof(PAGE_PROMPT) - 1);
+    if (Read(page_in, &key, 1) != 1) key = '\n';
+    Write(page_out, page_erase, sizeof(page_erase));
+    page_left = page_rows;              /* a fresh page */
+    if ((key & 0xdf) == 'Q') {          /* fold case */
+        page_stop = 1;
+        return 0;
+    }
+    return 1;
+}
+
+/* printf that keeps the page accounting. No format here spans two lines,
+ * so one newline in the format is one line on screen.
+ */
+static void pout(const char *fmt, ...)
+{
+    va_list ap;
+    const char *c;
+
+    if (page_stop) return;
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    for (c = fmt; *c; c++)
+        if (*c == '\n' && !page_line()) return;
+}
 
 /* Extract and clean a string from IDENTIFY data */
 /* Note: On 68k (big-endian), ATA strings are already in correct byte order */
@@ -173,13 +291,13 @@ void PrintSize(ULONG sectors)
     ULONG gb = mb / 1024;
 
     if (gb > 0) {
-        printf("%lu.%lu GB", gb, (mb % 1024) * 10 / 1024);
+        pout("%lu.%lu GB", gb, (mb % 1024) * 10 / 1024);
     } else if (mb > 0) {
-        printf("%lu.%lu MB", mb, (kb % 1024) * 10 / 1024);
+        pout("%lu.%lu MB", mb, (kb % 1024) * 10 / 1024);
     } else {
-        printf("%lu KB", kb);
+        pout("%lu KB", kb);
     }
-    printf(" (%lu sectors)\r\n", sectors);
+    pout(" (%lu sectors)\n", sectors);
 }
 
 /* Print card information from IDENTIFY data */
@@ -199,109 +317,109 @@ void PrintCardInfo(UWORD *id)
     multi = id[ID_MAXMULTI] & 0xFF;
     sectors = GetIDLong(id, ID_LBA_SECTORS);
 
-    printf("\r\n");
-    printf("=== CompactFlash Card Information ===\r\n");
-    printf("\r\n");
-    printf("Model:      %s\r\n", model);
-    printf("Serial:     %s\r\n", serial);
-    printf("Firmware:   %s\r\n", firmware);
-    printf("\r\n");
+    pout("\n");
+    pout("=== CompactFlash Card Information ===\n");
+    pout("\n");
+    pout("Model:      %s\n", model);
+    pout("Serial:     %s\n", serial);
+    pout("Firmware:   %s\n", firmware);
+    pout("\n");
 
-    printf("=== Capacity ===\r\n");
-    printf("Size:       ");
+    pout("=== Capacity ===\n");
+    pout("Size:       ");
     PrintSize(sectors);
-    printf("Geometry:   %u cyl, %u heads, %u sectors/track\r\n",
+    pout("Geometry:   %u cyl, %u heads, %u sectors/track\n",
            id[ID_CYLS], id[ID_HEADS], id[ID_SECTORS]);
-    printf("\r\n");
+    pout("\n");
 
-    printf("=== Capabilities ===\r\n");
-    printf("LBA:        %s\r\n", (caps & 0x0200) ? "Yes" : "No");
-    printf("DMA:        %s\r\n", (caps & 0x0100) ? "Yes" : "No");
+    pout("=== Capabilities ===\n");
+    pout("LBA:        %s\n", (caps & 0x0200) ? "Yes" : "No");
+    pout("DMA:        %s\n", (caps & 0x0100) ? "Yes" : "No");
 
     /* PIO modes */
-    printf("PIO Modes:  0");
-    if (id[ID_PIO_OLD] >= 1) printf(", 1");
-    if (id[ID_PIO_OLD] >= 2) printf(", 2");
-    if (pio_modes & 0x01) printf(", 3");
-    if (pio_modes & 0x02) printf(", 4");
-    printf("\r\n");
+    pout("PIO Modes:  0");
+    if (id[ID_PIO_OLD] >= 1) pout(", 1");
+    if (id[ID_PIO_OLD] >= 2) pout(", 2");
+    if (pio_modes & 0x01) pout(", 3");
+    if (pio_modes & 0x02) pout(", 4");
+    pout("\n");
 
     /* Multi-sector */
     if (multi > 0) {
-        printf("Multi-sect: Max %u sectors/interrupt\r\n", multi);
+        pout("Multi-sect: Max %u sectors/interrupt\n", multi);
     } else {
-        printf("Multi-sect: Not supported\r\n");
+        pout("Multi-sect: Not supported\n");
     }
 
     /* UDMA modes */
     if (id[ID_UDMA_MODES] != 0) {
-        printf("UDMA Modes: ");
-        if (id[ID_UDMA_MODES] & 0x01) printf("0 ");
-        if (id[ID_UDMA_MODES] & 0x02) printf("1 ");
-        if (id[ID_UDMA_MODES] & 0x04) printf("2 ");
-        if (id[ID_UDMA_MODES] & 0x08) printf("3 ");
-        if (id[ID_UDMA_MODES] & 0x10) printf("4 ");
-        if (id[ID_UDMA_MODES] & 0x20) printf("5 ");
-        if (id[ID_UDMA_MODES] & 0x40) printf("6 ");
-        printf("\r\n");
+        pout("UDMA Modes: ");
+        if (id[ID_UDMA_MODES] & 0x01) pout("0 ");
+        if (id[ID_UDMA_MODES] & 0x02) pout("1 ");
+        if (id[ID_UDMA_MODES] & 0x04) pout("2 ");
+        if (id[ID_UDMA_MODES] & 0x08) pout("3 ");
+        if (id[ID_UDMA_MODES] & 0x10) pout("4 ");
+        if (id[ID_UDMA_MODES] & 0x20) pout("5 ");
+        if (id[ID_UDMA_MODES] & 0x40) pout("6 ");
+        pout("\n");
     }
 
-    printf("\r\n");
-    printf("=== Card Type ===\r\n");
-    printf("Removable:  %s\r\n", (config & 0x0080) ? "Yes" : "No");
-    printf("Type:       ");
+    pout("\n");
+    pout("=== Card Type ===\n");
+    pout("Removable:  %s\n", (config & 0x0080) ? "Yes" : "No");
+    pout("Type:       ");
     /* Check for CompactFlash signature (0x848x) */
     if ((config & 0xFFF0) == 0x8480) {
-        printf("CompactFlash\r\n");
+        pout("CompactFlash\n");
     } else if ((config & 0x8000) == 0) {
-        printf("ATA\r\n");
+        pout("ATA\n");
     } else {
-        printf("ATAPI\r\n");
+        pout("ATAPI\n");
     }
 
     /* Command Sets / Features */
-    printf("\r\n");
-    printf("=== Features (SET FEATURES capable) ===\r\n");
+    pout("\n");
+    pout("=== Features (SET FEATURES capable) ===\n");
     if (id[ID_CMD_SET1] || id[ID_CMD_SET2]) {
         UWORD cmd1 = id[ID_CMD_SET1];
         UWORD cmd2 = id[ID_CMD_SET2];
         UWORD en1 = id[ID_CMD_EN1];
         UWORD en2 = id[ID_CMD_EN2];
 
-        printf("                   Supported  Enabled\r\n");
+        pout("                   Supported  Enabled\n");
 
         /* Word 82 bits */
         if (cmd1 & 0x0020)
-            printf("Write Cache:       Yes        %s\r\n", (en1 & 0x0020) ? "Yes" : "No");
+            pout("Write Cache:       Yes        %s\n", (en1 & 0x0020) ? "Yes" : "No");
         if (cmd1 & 0x0040)
-            printf("Read Look-ahead:   Yes        %s\r\n", (en1 & 0x0040) ? "Yes" : "No");
+            pout("Read Look-ahead:   Yes        %s\n", (en1 & 0x0040) ? "Yes" : "No");
         if (cmd1 & 0x0008)
-            printf("Power Management:  Yes        %s\r\n", (en1 & 0x0008) ? "Yes" : "No");
+            pout("Power Management:  Yes        %s\n", (en1 & 0x0008) ? "Yes" : "No");
         if (cmd1 & 0x0004)
-            printf("Security Mode:     Yes        %s\r\n", (en1 & 0x0004) ? "Yes" : "No");
+            pout("Security Mode:     Yes        %s\n", (en1 & 0x0004) ? "Yes" : "No");
         if (cmd1 & 0x0001)
-            printf("SMART:             Yes        %s\r\n", (en1 & 0x0001) ? "Yes" : "No");
+            pout("SMART:             Yes        %s\n", (en1 & 0x0001) ? "Yes" : "No");
 
         /* Word 83 bits */
         if (cmd2 & 0x0400)
-            printf("48-bit LBA:        Yes        %s\r\n", (en2 & 0x0400) ? "Yes" : "No");
+            pout("48-bit LBA:        Yes        %s\n", (en2 & 0x0400) ? "Yes" : "No");
         if (cmd2 & 0x1000)
-            printf("Write FUA:         Yes        %s\r\n", (en2 & 0x1000) ? "Yes" : "No");
+            pout("Write FUA:         Yes        %s\n", (en2 & 0x1000) ? "Yes" : "No");
         if (cmd2 & 0x0020)
-            printf("PUIS:              Yes        %s\r\n", (en2 & 0x0020) ? "Yes" : "No");
+            pout("PUIS:              Yes        %s\n", (en2 & 0x0020) ? "Yes" : "No");
         if (cmd2 & 0x0008)
-            printf("APM:               Yes        %s\r\n", (en2 & 0x0008) ? "Yes" : "No");
+            pout("APM:               Yes        %s\n", (en2 & 0x0008) ? "Yes" : "No");
 
         /* CFA specific */
         if (cmd2 & 0x4000)
-            printf("CFA Features:      Yes\r\n");
+            pout("CFA Features:      Yes\n");
     } else {
-        printf("(not reported by card)\r\n");
+        pout("(not reported by card)\n");
     }
 
     /* CF Advanced True IDE Timing (Word 163) */
-    printf("\r\n");
-    printf("=== CF True IDE Timing (Word 163) ===\r\n");
+    pout("\n");
+    pout("=== CF True IDE Timing (Word 163) ===\n");
     if (id[ID_CFA_IDE] & 0x8000) {
         UWORD ide = id[ID_CFA_IDE];
         UWORD pio_no_iordy = ide & 0x07;
@@ -311,19 +429,19 @@ void PrintCardInfo(UWORD *id)
         /* PIO mode to cycle time lookup */
         static const char *pio_ns[] = {"600", "383", "240", "180", "120", "100", "80", "?"};
 
-        printf("PIO (no IORDY): max=%u (%sns cycle)\r\n",
+        pout("PIO (no IORDY): max=%u (%sns cycle)\n",
                (unsigned)pio_no_iordy, pio_ns[pio_no_iordy]);
-        printf("PIO (IORDY):    max=%u (%sns cycle)\r\n",
+        pout("PIO (IORDY):    max=%u (%sns cycle)\n",
                (unsigned)pio_iordy, pio_ns[pio_iordy]);
         if (mdma_max > 0)
-            printf("Multiword DMA:  max=%u\r\n", (unsigned)mdma_max);
+            pout("Multiword DMA:  max=%u\n", (unsigned)mdma_max);
     } else {
-        printf("(not reported by card)\r\n");
+        pout("(not reported by card)\n");
     }
 
     /* CF Advanced PCMCIA Timing (Word 164) */
-    printf("\r\n");
-    printf("=== CF PCMCIA Timing (Word 164) ===\r\n");
+    pout("\n");
+    pout("=== CF PCMCIA Timing (Word 164) ===\n");
     if (id[ID_CFA_TIMING] & 0x8000) {
         UWORD timing = id[ID_CFA_TIMING];
         UWORD mem_max = timing & 0x07;
@@ -334,19 +452,19 @@ void PrintCardInfo(UWORD *id)
         /* Timing mode to nanoseconds lookup (modes 6-7 are vendor-specific) */
         static const char *mode_ns[] = {"600", "250", "150", "100", "80", "50", "?", "?"};
 
-        printf("Memory Mode:  max=%u (%sns), current=%u (%sns)\r\n",
+        pout("Memory Mode:  max=%u (%sns), current=%u (%sns)\n",
                (unsigned)mem_max, mode_ns[mem_max], 
                (unsigned)mem_cur, mode_ns[mem_cur]);
-        printf("I/O Mode:     max=%u (%sns), current=%u (%sns)\r\n",
+        pout("I/O Mode:     max=%u (%sns), current=%u (%sns)\n",
                (unsigned)io_max, mode_ns[io_max],
                (unsigned)io_cur, mode_ns[io_cur]);
     } else {
-        printf("(not reported by card)\r\n");
+        pout("(not reported by card)\n");
     }
 
     /* Gayle timing register - actual hardware setting */
-    printf("\r\n");
-    printf("=== Gayle Timing (hardware) ===\r\n");
+    pout("\n");
+    pout("=== Gayle Timing (hardware) ===\n");
     {
         volatile UBYTE *gayle = (volatile UBYTE *)0x00DAB000;
         UBYTE reg_val = *gayle;
@@ -361,30 +479,30 @@ void PrintCardInfo(UWORD *id)
             case 3: gayle_ns = "720"; break;
             default: gayle_ns = "?"; break;
         }
-        printf("Memory Speed: %sns\r\n", gayle_ns);
+        pout("Memory Speed: %sns\n", gayle_ns);
     }
 }
 
 /* Print driver configuration */
 void PrintDriverConfig(struct CFDConfig *cfg)
 {
-    printf("\r\n");
-    printf("=== Driver Configuration ===\r\n");
-    printf("Driver Ver:   %u.%u\r\n", cfg->version_major, cfg->version_minor);
-    printf("Mount Flags:  %u (", cfg->open_flags);
+    pout("\n");
+    pout("=== Driver Configuration ===\n");
+    pout("Driver Ver:   %u.%u\n", cfg->version_major, cfg->version_minor);
+    pout("Mount Flags:  %u (", cfg->open_flags);
     if (cfg->open_flags == 0) {
-        printf("none");
+        pout("none");
     } else {
         int first = 1;
-        if (cfg->open_flags & 1)  { printf("%scfd_first", first ? "" : ", "); first = 0; }
-        if (cfg->open_flags & 2)  { printf("%sskip_sig", first ? "" : ", "); first = 0; }
-        if (cfg->open_flags & 4)  { printf("%scompat", first ? "" : ", "); first = 0; }
-        if (cfg->open_flags & 8)  { printf("%sserial_debug", first ? "" : ", "); first = 0; }
-        if (cfg->open_flags & 16) { printf("%sforce_multi", first ? "" : ", "); first = 0; }
-        if (cfg->open_flags & 32) { printf("%sno_autodetect", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 1)  { pout("%scfd_first", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 2)  { pout("%sskip_sig", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 4)  { pout("%scompat", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 8)  { pout("%sserial_debug", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 16) { pout("%sforce_multi", first ? "" : ", "); first = 0; }
+        if (cfg->open_flags & 32) { pout("%sno_autodetect", first ? "" : ", "); first = 0; }
     }
-    printf(")\r\n");
-    printf("Multi-sect:   FW=%u, Used=%u\r\n", cfg->multi_size, cfg->multi_size_rw);
+    pout(")\n");
+    pout("Multi-sect:   FW=%u, Used=%u\n", cfg->multi_size, cfg->multi_size_rw);
 
     /* Transfer modes - combined R/W display */
     {
@@ -409,12 +527,13 @@ void PrintDriverConfig(struct CFDConfig *cfg)
             default: sprintf(write_buf, "mode %u", cfg->write_mode);
                      write_mode = write_buf; break;
         }
-        printf("R/W Mode:     %s/%s\r\n", read_mode, write_mode);
+        pout("R/W Mode:     %s/%s\n", read_mode, write_mode);
     }
 }
 
 void Cleanup(void)
 {
+    page_end();
     if (io) {
         if (io->io_Device) {
             CloseDevice((struct IORequest *)io);
@@ -431,7 +550,9 @@ int main(int argc, char **argv)
 {
     int unit = 0;
 
-    printf("CFInfo " STR(VERSION) " - CompactFlash Card Information\r\n");
+    page_begin();
+
+    pout("CFInfo " STR(VERSION) " - CompactFlash Card Information\n");
 
     /* Parse arguments */
     if (argc > 1) {
@@ -441,13 +562,14 @@ int main(int argc, char **argv)
     /* Allocate resources */
     mp = CreateMsgPort();
     if (!mp) {
-        printf("Error: Cannot create message port\r\n");
+        pout("Error: Cannot create message port\n");
+        Cleanup();                      /* the console must not stay RAW */
         return 10;
     }
 
     io = (struct IOStdReq *)CreateIORequest(mp, sizeof(struct IOStdReq));
     if (!io) {
-        printf("Error: Cannot create IO request\r\n");
+        pout("Error: Cannot create IO request\n");
         Cleanup();
         return 10;
     }
@@ -457,32 +579,32 @@ int main(int argc, char **argv)
     scsi_cmd = AllocMem(sizeof(struct SCSICmd), MEMF_PUBLIC | MEMF_CLEAR);
 
     if (!data_buf || !scsi_sense || !scsi_cmd) {
-        printf("Error: Cannot allocate memory\r\n");
+        pout("Error: Cannot allocate memory\n");
         Cleanup();
         return 10;
     }
 
     /* Open device */
     if (OpenDevice(DEVICE_NAME, unit, (struct IORequest *)io, 0) != 0) {
-        printf("Error: Cannot open %s unit %d\r\n", DEVICE_NAME, unit);
-        printf("       (Is a CF card inserted?)\r\n");
+        pout("Error: Cannot open %s unit %d\n", DEVICE_NAME, unit);
+        pout("       (Is a CF card inserted?)\n");
         Cleanup();
         return 5;
     }
 
-    printf("Device:     %s unit %d\r\n", DEVICE_NAME, unit);
+    pout("Device:     %s unit %d\n", DEVICE_NAME, unit);
 
     /* Test unit ready */
     if (!DoTestUnitReady()) {
-        printf("Error: Card not ready\r\n");
+        pout("Error: Card not ready\n");
         Cleanup();
         return 5;
     }
 
     /* Get IDENTIFY data via ATA passthrough (v1.36+) */
     if (!DoATAIdentify()) {
-        printf("Error: IDENTIFY command failed\r\n");
-        printf("       (Requires compactflash.device v1.36+)\r\n");
+        pout("Error: IDENTIFY command failed\n");
+        pout("       (Requires compactflash.device v1.36+)\n");
         Cleanup();
         return 5;
     }

@@ -5,11 +5,11 @@ _Components in this release_:
 
 - `compactflash.device 2.0-dev (11.09.2026)` _(new)_
 - `compactflash.automount 2.0-dev (27.08.2026)` _(new)_
-- `ptable.library 2.0-dev (11.09.2026)` _(new)_
-- `CFInfo 1.37 (11.01.2026)`
+- `ptable.library 2.0-dev (27.08.2026)` _(new)_
+- `CFInfo 1.38 (11.09.2026)` _(new)_
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.0 (06.08.2026)` _(new)_
-- `lsptres 1.0-dev (11.09.2026)` _(new)_
+- `lsptres 1.0-dev (27.08.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
 #### New major version of compactflash.device 2.0 driver
@@ -20,7 +20,14 @@ _Components in this release_:
 
 - **Unified partition scanning.** A shared partition-table library the driver now uses instead of its own parser. It scans RDB, MBR, GPT and flat (whole-disk) partition tables and publishes every partition into a shared `partition.resource`. The new `lsptres` tool lists the resource. See [ptable.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/ptable.md) and [lsptres.md](https://github.com/pulchart/amigaos-ptable/blob/HEAD/docs/lsptres.md).
 
-#### Tools 'pcmciacheck 2.0'
+#### Tools
+
+##### 'CFInfo 1.38'
+
+- The report prints one screenful at a time; any key continues, `Q` stops.
+- Output lines end in `LF` alone.
+
+##### 'pcmciacheck 2.0'
 
 - **New `-identify` read-stability test.** ([#67](https://github.com/pulchart/cfd/issues/67)) Reads the same sector several times per mode and reports `STABLE`, `UNSTABLE` or `STUCK`. A card that returns different bytes on each read, or the same word over and over, corrupts files, and that is why the driver refuses it with `FAILED (data mismatch)` or `FAILED (repeated pattern)`. Only the mode the driver actually uses decides the verdict. `-r <runs>` sets the number of runs (default 5). Console only, no log file, like `-cis`.
 

@@ -39,6 +39,12 @@ New major version of ptable.library 2.0 (bundled):
   a shared partition.resource. The new lsptres tool lists the resource
   (https://github.com/pulchart/amigaos-ptable).
 
+Tools 'CFInfo 1.38':
+
+* The report prints one screenful at a time; any key continues, Q
+  stops.
+* Output lines end in LF alone.
+
 Tools 'pcmciacheck 2.0':
 
 * New "-identify" read-stability test: reads the same sector several
