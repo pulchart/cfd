@@ -1,9 +1,9 @@
-## 20260904-dev
+## 20260911-dev
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.0-dev (27.08.2026)` _(new)_
+- `compactflash.device 2.0-dev (11.09.2026)` _(new)_
 - `compactflash.automount 2.0-dev (27.08.2026)` _(new)_
 - `ptable.library 2.0-dev (27.08.2026)` _(new)_
 - `CFInfo 1.37 (11.01.2026)`
