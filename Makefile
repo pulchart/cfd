@@ -7,18 +7,18 @@
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev, -rc1, ...). Empty suffix for a final release.
 RELEASE_DATE = 20260911
-VERSION_SUFFIX = -dev
+VERSION_SUFFIX =
 
 # compactflash.device version
 CFD_MAJOR = 2
 CFD_MINOR = 0
-CFD_VERSION_SUFFIX = -dev
+CFD_VERSION_SUFFIX =
 CFD_DATE = 11.09.2026
 
 # compactflash.automount version (optional boot/automount module)
 AUTOMOUNT_MAJOR = 2
 AUTOMOUNT_MINOR = 0
-AUTOMOUNT_VERSION_SUFFIX = -dev
+AUTOMOUNT_VERSION_SUFFIX =
 AUTOMOUNT_DATE = 27.08.2026
 
 # Tool-specific versions
