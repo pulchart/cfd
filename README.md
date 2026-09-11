@@ -45,10 +45,10 @@ The archive ships two flavours (`full` / `small`) and two CPU tiers (`68020+` / 
 
 | Flavour | CPU Tier | File | Size |
 |---------|------|------|------|
-| full | 68020+ | full/68020/devs/compactflash.device | ~11.2 KB |
-| small | 68020+ | small/68020/devs/compactflash.device | ~7.9 KB |
-| full | 68000+ | full/68000/devs/compactflash.device | ~11.3 KB |
-| small | 68000+ | small/68000/devs/compactflash.device | ~8.0 KB |
+| full | 68020+ | full/68020/devs/compactflash.device | ~14.3 KB |
+| small | 68020+ | small/68020/devs/compactflash.device | ~10.6 KB |
+| full | 68000+ | full/68000/devs/compactflash.device | ~14.5 KB |
+| small | 68000+ | small/68000/devs/compactflash.device | ~10.7 KB |
 
 Companion libraries live next to the device in the same flavour/CPU tree under `<flavour>/<cpu>/libs/`: `ptable.library` (partition scan/mount) and the optional `compactflash.automount` (boot/automount bringup, only needed for autoboot or automount).
 
