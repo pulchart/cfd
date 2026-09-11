@@ -16,9 +16,12 @@ CFInfo          ; Show info for unit 0
 CFInfo 1        ; Show info for unit 1
 ```
 
+The report prints one screenful at a time; any key continues, `Q` stops. Output
+redirected to a file or another stream scrolls without pausing.
+
 Example Output:
 ```
-CFInfo 1.37 - CompactFlash Card Information
+CFInfo 1.38 - CompactFlash Card Information
 Device:     compactflash.device unit 0
 
 === CompactFlash Card Information ===
