@@ -721,7 +721,7 @@ CFU_KillTask	= 956			;task to signal on kill
 CFU_CacheFlags	= 960			;saved cache flags
 
 ;--- Multi-sector R/W ---
-CFU_MultiSizeRW	= 964			;bytes per transfer (sectors * 512)
+CFU_MultiSizeRW	= 964			;sectors per transfer, 256 or the firmware count
 				;set from card or override (Flags=16)
 
 ;--- Runtime-bound I/O handlers (see _BindIOHandlers header for dispatch flow) ---
@@ -5392,18 +5392,18 @@ INIT_SCSI_RW macro
 ;
 ; Input:
 ;   d0 = starting block number (LBA)
-;   d1 = byte count to read
+;   d1 = sector count to read
 ;   a1 = destination buffer pointer
 ;   a3 = CFU pointer
 ;
 ; Output:
-;   d0 = bytes actually read (0 on error)
+;   d0 = sectors actually read (0 on error)
 ;
 ; Register usage:
 ;   d2 = current block number
-;   d3 = bytes remaining
-;   d4 = bytes per transfer chunk
-;   d5 = total bytes (for return value)
+;   d3 = sectors remaining
+;   d4 = sectors per transfer chunk
+;   d5 = total sectors (for return value)
 ;   d6 = sectors per interrupt
 ;   d7 = MOVEM loop counter
 ;   a2 = buffer pointer
@@ -6033,18 +6033,18 @@ wb_handler_tab:
 ;
 ; Input:
 ;   d0 = starting block number (LBA)
-;   d1 = byte count to write
+;   d1 = sector count to write
 ;   a0 = source buffer pointer, or -1 for erase (zero-fill)
 ;   a3 = CFU pointer
 ;
 ; Output:
-;   d0 = bytes actually written (0 on error)
+;   d0 = sectors actually written (0 on error)
 ;
 ; Register usage:
 ;   d2 = current block number
-;   d3 = bytes remaining
-;   d4 = bytes per transfer chunk
-;   d5 = total bytes (for return value)
+;   d3 = sectors remaining
+;   d4 = sectors per transfer chunk
+;   d5 = total sectors (for return value)
 ;   d6 = sectors per interrupt
 ;   d7 = MOVEM loop counter
 ;   a2 = buffer pointer
