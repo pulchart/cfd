@@ -5361,6 +5361,32 @@ _gid_end:
 	movem.l	(sp)+,d2-d6/a2
 	rts
 
+	ifd	ATAPI
+; In: a2 = buffer, d2 = LBA, d4 = block count, a3 = unit.
+; Out: a0 = SCSI structure for _Packet. Clobbers d0/a1.
+INIT_SCSI_RW macro
+	lea	CFU_SCSIStruct(a3),a0
+	move.l	a2,(a0)+		;SCSI_Data
+	move.l	d4,d0
+	lsl.l	#8,d0
+	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
+	move.l	d0,(a0)+		;SCSI_Length
+	clr.l	(a0)+			;SCSI_Actual
+	lea	CFU_Packet(a3),a1
+	move.l	a1,(a0)+		;SCSI_Command
+	moveq.l	#10,d0
+	swap	d0
+	move.l	d0,(a0)+		;SCSI_CmdLength, _CmdActual
+	move.w	#\1<<8,(a0)	;SCSI_Flags, _Status
+	move.w	#\2<<8,(a1)+
+	move.l	d2,(a1)+
+	move.l	d4,d0
+	lsl.l	#8,d0
+	move.l	d0,(a1)
+	lea	CFU_SCSIStruct(a3),a0
+	endm
+	endc
+
 ;--- read Blocks -------------------------------------------
 ; Read sectors from CF card using PIO
 ;
@@ -5541,25 +5567,7 @@ _rb_scsi:
 
 	move.l	d3,d4
 _rb_s1:
-	lea	CFU_SCSIStruct(a3),a0
-	move.l	a2,(a0)+		;SCSI_Data
-	move.l	d4,d0
-	lsl.l	#8,d0
-	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
-	move.l	d0,(a0)+		;SCSI_Length
-	clr.l	(a0)+			;SCSI_Actual
-	lea	CFU_Packet(a3),a1
-	move.l	a1,(a0)+		;SCSI_Command
-	moveq.l	#10,d0
-	swap	d0
-	move.l	d0,(a0)+		;SCSI_CmdLength, _CmdActual
-	move.w	#SCSIF_READ<<8,(a0)	;SCSI_Flags, _Status
-	move.w	#READ10<<8,(a1)+
-	move.l	d2,(a1)+
-	move.l	d4,d0
-	lsl.l	#8,d0
-	move.l	d0,(a1)
-	lea	CFU_SCSIStruct(a3),a0
+	INIT_SCSI_RW SCSIF_READ,READ10
 	bsr	_Packet
 	tst.b	d0
 	bne.s	_rb_serror
@@ -6241,25 +6249,7 @@ _wb_scsi:
 
 	move.l	d3,d4
 _wb_s1:
-	lea	CFU_SCSIStruct(a3),a0
-	move.l	a2,(a0)+		;SCSI_Data
-	move.l	d4,d0
-	lsl.l	#8,d0
-	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
-	move.l	d0,(a0)+		;SCSI_Length
-	clr.l	(a0)+			;SCSI_Actual
-	lea	CFU_Packet(a3),a1
-	move.l	a1,(a0)+		;SCSI_Command
-	moveq.l	#10,d0
-	swap	d0
-	move.l	d0,(a0)+		;SCSI_CmdLength, _CmdActual
-	move.w	#SCSIF_WRITE<<8,(a0)	;SCSI_Flags, _Status
-	move.w	#WRITE10<<8,(a1)+
-	move.l	d2,(a1)+
-	move.l	d4,d0
-	lsl.l	#8,d0
-	move.l	d0,(a1)
-	lea	CFU_SCSIStruct(a3),a0
+	INIT_SCSI_RW SCSIF_WRITE,WRITE10
 	bsr	_Packet
 	tst.b	d0
 	bne.s	_wb_serror
