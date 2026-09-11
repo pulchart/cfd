@@ -2011,7 +2011,9 @@ _aid_end:
 ; A caller may declare less than struct_size: it then receives that many
 ; bytes, SCSI_Actual reports what was delivered, and nothing is written
 ; past the buffer. Two bytes are enough to read struct_size and size a
-; second request.
+; second request. A zero length or a null pointer is a no-op that still
+; reports success: nothing is written, and SCSI_Actual keeps whatever the
+; caller left there.
 ;
 ; Clients should:
 ;   1. Request a large buffer (e.g., 64 bytes)
@@ -5405,7 +5407,7 @@ _gid_end:
 
 	ifd	ATAPI
 ; In: a2 = buffer, d2 = LBA, d4 = block count, a3 = unit.
-; Out: a0 = SCSI structure for _Packet. Clobbers d0/a1.
+; Out: a0 = SCSI structure for _Packet. Clobbers d0/d1/a1.
 INIT_SCSI_RW macro
 	lea	CFU_SCSIStruct(a3),a0
 	move.l	a2,(a0)+		;SCSI_Data
@@ -5439,7 +5441,8 @@ INIT_SCSI_RW macro
 ;   a3 = CFU pointer
 ;
 ; Output:
-;   d0 = sectors actually read (0 on error)
+;   d0 = sectors actually read, which after an error is what completed
+;        before it; the code is in CFU_IOErr
 ;
 ; Register usage:
 ;   d2 = current block number
@@ -6082,7 +6085,8 @@ wb_handler_tab:
 ;   a3 = CFU pointer
 ;
 ; Output:
-;   d0 = sectors actually written (0 on error)
+;   d0 = sectors actually written, which after an error is what completed
+;        before it; the code is in CFU_IOErr
 ;
 ; Register usage:
 ;   d2 = current block number
