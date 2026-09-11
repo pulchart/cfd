@@ -1689,7 +1689,30 @@ _r_odd:
 ;_Clear:
 
 ;--- SCSI direct -------------------------------------------
-
+; HD_SCSICMD: run one SCSI command line against this unit. Public, and
+; the only way in for the vendor command CFD_GETCONFIG.
+;
+; Input:
+;   a2 = &IORequest, IO_Data = &SCSICmd (required, else IOERR_BADLENGTH)
+;   a3 = CFU pointer
+;   SCSI_CmdLength must be >= 6 and must equal the length _sc_tab
+;   records for that opcode; SCSI_Command must be non-NULL
+;
+; Output:
+;   d0 = IO_Error: 0, IOERR_BADLENGTH for a malformed request, or a code
+;        derived from the drive's status
+;   SCSI_Status  = 0, or $02 (CHECK CONDITION) for an opcode this driver
+;        does not emulate and for a command-length mismatch
+;   SCSI_CmdActual = the CDB length that was accepted
+;   SCSI_SenseActual, SCSI_SenseData filled only when SCSIF_AUTOSENSE is
+;        set in SCSI_Flags
+;   IO_Actual is cleared on every path; the per-command byte count is
+;        reported in SCSI_Actual by the handler itself
+;
+; With the ATAPI handler compiled in and the unit in ATAPI mode
+; (CFU_PLength > 0) the whole SCSICmd goes to the drive via _Packet and
+; none of the emulation below runs.
+;
 _ScsiCmd:
 	move.l	a2,-(sp)
 	moveq.l	#IOERR_BADLENGTH,d0
@@ -1766,6 +1789,10 @@ _sc_atapi:
 	bra.s	_sc_end
 	endc
 
+; Commands this driver emulates, one entry per opcode:
+;   dc.w (CDB length)<<8 + opcode, handler - _sc_tab
+; terminated by a zero word. The length is checked, not assumed, so an
+; opcode sent with the wrong CDB length is refused like an unknown one.
 _sc_tab:
 	dc.w	10<<8+READ10, _Read10-_sc_tab
 	dc.w	10<<8+WRITE10, _Write10-_sc_tab
@@ -1980,6 +2007,11 @@ _aid_end:
 ;     Offset 11:   CFU_WriteMode (write transfer mode)
 ;     --- v1.37 structure ends here (12 bytes) ---
 ;     Future versions may add more fields after offset 12
+;
+; A caller may declare less than struct_size: it then receives that many
+; bytes, SCSI_Actual reports what was delivered, and nothing is written
+; past the buffer. Two bytes are enough to read struct_size and size a
+; second request.
 ;
 ; Clients should:
 ;   1. Request a large buffer (e.g., 64 bytes)
