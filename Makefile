@@ -439,19 +439,19 @@ $(GUIDE_LSPTRES): $(PTABLE_VERSION_FILE)
 	$(Q)cp $(PTABLE)/dist/docs/lsptres.guide $@
 	$(Q)echo "  PTABLE  $@"
 
-$(TARGET_CFINFO): $(SOURCE_CFINFO)
+$(TARGET_CFINFO): $(SOURCE_CFINFO) Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_CFINFO)"
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_CFINFO)) bytes, md5:$$(md5sum $(TARGET_CFINFO) | cut -c1-8)"
 
-$(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED)
+$(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED) Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIASPEED)"
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIASPEED_VERSION)"' -DDATE='"$(PCMCIASPEED_DATE)"' -o $(TARGET_PCMCIASPEED) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIASPEED)) bytes, md5:$$(md5sum $(TARGET_PCMCIASPEED) | cut -c1-8)"
 
-$(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK)
+$(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK) Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIACHECK)"
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $<
