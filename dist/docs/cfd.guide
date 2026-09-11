@@ -26,7 +26,7 @@
     @{"ATAPI status" link ATAPI_status}
     @{"IO path dispatch" link IO_path_dispatch}
         @{"Before (through v1.40)" link Before__through_v1_40_}
-        @{"After (v1.41-dev)" link After__v1_41_dev_}
+        @{"After (v1.41)" link After__v1_41_}
         @{"What that removes from the hot path" link What_that_removes_from_the_hot_path}
         @{"What triggers a rebind" link What_triggers_a_rebind}
     @{"Speed Test Results" link Speed_Test_Results}
@@ -54,7 +54,7 @@
 @{b}Index@{ub}
 
 @{b}A@{ub}
-  @{"After (v1.41-dev)" link After__v1_41_dev_}
+  @{"After (v1.41)" link After__v1_41_}
   @{"ATAPI status" link ATAPI_status}
   @{"Autoboot / Automount" link Autoboot___Automount}
 @{b}B@{ub}
@@ -439,7 +439,7 @@ RDB-partitioned card). The @{fg shine}[CFD] boot:@{fg text} lines come from
 
 Card identification (hot-plug):
 @{fg highlight}
-  [CFD] compactflash.device 2.0-dev (10.07.2026) [68020]
+  [CFD] compactflash.device 2.0 (11.09.2026) [68020]
   [CFD] Card inserted
   [CFD] Identifying card...
   [CFD] Reset
@@ -873,7 +873,7 @@ after proper testing and CIS gate refactoring.
 @{b}IO path dispatch@{ub}
 @{i}Subsections:@{ui}
   @{"  Before (through v1.40)  " link Before__through_v1_40_}
-  @{"  After (v1.41-dev)  " link After__v1_41_dev_}
+  @{"  After (v1.41)  " link After__v1_41_}
   @{"  What that removes from the hot path  " link What_that_removes_from_the_hot_path}
   @{"  What triggers a rebind  " link What_triggers_a_rebind}
 
@@ -950,12 +950,12 @@ time; the per-block path just jumps to the selected worker.
 @{fg text}
 
 ----------------------------------------
-@{"<< Prev" link IO_path_dispatch}  @{"Contents" link Main}  @{"Next >>" link After__v1_41_dev_}
+@{"<< Prev" link IO_path_dispatch}  @{"Contents" link Main}  @{"Next >>" link After__v1_41_}
 
 @endnode
 
-@node After__v1_41_dev_ "After (v1.41-dev)"
-@{i}After (v1.41-dev)@{ui}
+@node After__v1_41_ "After (v1.41)"
+@{i}After (v1.41)@{ui}
 
 @{b}Once at mode change:@{ub}
 
@@ -1058,7 +1058,7 @@ time; the per-block path just jumps to the selected worker.
     @{fg shine}ifnd COPYBURST / else@{fg text} wrapping produced.
 
 ----------------------------------------
-@{"<< Prev" link After__v1_41_dev_}  @{"Contents" link Main}  @{"Next >>" link What_triggers_a_rebind}
+@{"<< Prev" link After__v1_41_}  @{"Contents" link Main}  @{"Next >>" link What_triggers_a_rebind}
 
 @endnode
 

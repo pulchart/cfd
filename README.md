@@ -186,7 +186,7 @@ Cold boot (ROM-resident `compactflash.automount` + `ptable.library`, RDB-partiti
 
 Card identification (hot-plug):
 ```
-[CFD] compactflash.device 2.0-dev (10.07.2026) [68020]
+[CFD] compactflash.device 2.0 (11.09.2026) [68020]
 [CFD] Card inserted
 [CFD] Identifying card...
 [CFD] Reset
@@ -453,7 +453,7 @@ flowchart TD
     Tbl --> Workers["pi_mode1 / pi_mode2 / pi_mode3 / pi_mode4"]
 ```
 
-### After (v1.41-dev)
+### After (v1.41)
 
 **Once at mode change:**
 
