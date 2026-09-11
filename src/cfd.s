@@ -5573,9 +5573,14 @@ _rb_s1:
 	bne.s	_rb_serror
 
 	move.l	CFU_SCSIStruct+SCSI_Actual(a3),d0
+	move.l	d0,d1
+	and.l	#$1ff,d1
+	bne.s	_rb_serror		;partial sector: accounting would drift
 	add.l	d0,a2
 	lsr.l	#8,d0
-	lsr.l	#1,d0
+	lsr.l	#1,d0			;bytes -> sectors
+	beq.s	_rb_serror		;no progress would loop for ever
+	add.l	d0,d2			;next chunk starts after this one
 	sub.l	d0,d3
 	bgt.s	_rb_scsi
 	bra.w	_rb_ready
@@ -6255,9 +6260,14 @@ _wb_s1:
 	bne.s	_wb_serror
 
 	move.l	CFU_SCSIStruct+SCSI_Actual(a3),d0
+	move.l	d0,d1
+	and.l	#$1ff,d1
+	bne.s	_wb_serror		;partial sector: accounting would drift
 	add.l	d0,a2
 	lsr.l	#8,d0
-	lsr.l	#1,d0
+	lsr.l	#1,d0			;bytes -> sectors
+	beq.s	_wb_serror		;no progress would loop for ever
+	add.l	d0,d2			;next chunk starts after this one
 	sub.l	d0,d3
 	bgt.s	_wb_scsi
 	bra.w	_wb_ready
