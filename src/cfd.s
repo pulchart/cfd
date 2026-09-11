@@ -5446,7 +5446,7 @@ INIT_SCSI_RW macro
 ;   d3 = sectors remaining
 ;   d4 = sectors per transfer chunk
 ;   d5 = total sectors (for return value)
-;   d6 = sectors per interrupt
+;   d6 = sectors per interrupt (IDE) / sector cap per chunk (ATAPI)
 ;   d7 = MOVEM loop counter
 ;   a2 = buffer pointer
 ;
@@ -5466,7 +5466,7 @@ _ReadBlocks:
 
 	ifd	ATAPI
 	tst.w	CFU_PLength(a3)
-	bgt.w	_rb_scsi
+	bgt.w	_rb_satapi
 	endc
 
 	bsr	_IDEStart
@@ -5601,18 +5601,20 @@ _rb_c1:
 	bra.w	_rb_0
 
 	ifd	ATAPI
-_rb_scsi:
+_rb_satapi:
 	move.l	CFU_BlockSize(a3),d1
 	beq.w	_rb_serror		;no block size: nothing can be sized
 	move.l	#$7fffffff,d0
 	UDIVMOD32			;most sectors whose byte count stays positive
 	tst.l	d0
 	beq.w	_rb_serror		;one sector already overflows a request
+	move.l	d0,d6			;the block size cannot change under the loop
+_rb_scsi:
 	moveq.l	#0,d4
 	not.w	d4			;CDB count field is 16 bits
-	cmp.l	d0,d4
+	cmp.l	d6,d4
 	bls.s	_rb_cap
-	move.l	d0,d4			;overflow limit is the tighter one
+	move.l	d6,d4			;overflow limit is the tighter one
 _rb_cap:
 	cmp.l	d4,d3
 	bcc.s	_rb_s1
@@ -6087,7 +6089,7 @@ wb_handler_tab:
 ;   d3 = sectors remaining
 ;   d4 = sectors per transfer chunk
 ;   d5 = total sectors (for return value)
-;   d6 = sectors per interrupt
+;   d6 = sectors per interrupt (IDE) / sector cap per chunk (ATAPI)
 ;   d7 = MOVEM loop counter
 ;   a2 = buffer pointer
 ;
@@ -6110,7 +6112,7 @@ _WriteBlocks:
 
 	ifd	ATAPI
 	tst.w	CFU_PLength(a3)
-	bgt.w	_wb_scsi
+	bgt.w	_wb_satapi
 	endc
 
 	bsr	_IDEStart
@@ -6296,7 +6298,7 @@ _wb_break:
 	bra.w	_wb_try
 
 	ifd	ATAPI
-_wb_scsi:
+_wb_satapi:
 	move.l	a2,d1
 	add.l	#1,d1
 	beq.w	_wb_eerror		;erase is IDE only
@@ -6307,11 +6309,13 @@ _wb_scsi:
 	UDIVMOD32			;most sectors whose byte count stays positive
 	tst.l	d0
 	beq.w	_wb_serror		;one sector already overflows a request
+	move.l	d0,d6			;the block size cannot change under the loop
+_wb_scsi:
 	moveq.l	#0,d4
 	not.w	d4			;CDB count field is 16 bits
-	cmp.l	d0,d4
+	cmp.l	d6,d4
 	bls.s	_wb_cap
-	move.l	d0,d4			;overflow limit is the tighter one
+	move.l	d6,d4			;overflow limit is the tighter one
 _wb_cap:
 	cmp.l	d4,d3
 	bcc.s	_wb_s1
