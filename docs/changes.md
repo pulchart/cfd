@@ -1,15 +1,15 @@
-## 20260911-dev
+## 20260911
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.0-dev (11.09.2026)` _(new)_
-- `compactflash.automount 2.0-dev (27.08.2026)` _(new)_
-- `ptable.library 2.0-dev (27.08.2026)` _(new)_
+- `compactflash.device 2.0 (11.09.2026)` _(new)_
+- `compactflash.automount 2.0 (27.08.2026)` _(new)_
+- `ptable.library 2.0 (11.09.2026)` _(new)_
 - `CFInfo 1.38 (11.09.2026)` _(new)_
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.0 (06.08.2026)` _(new)_
-- `lsptres 1.0-dev (27.08.2026)` _(new)_
+- `lsptres 1.0 (11.09.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
 #### New major version of compactflash.device 2.0 driver
