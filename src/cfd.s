@@ -5368,8 +5368,8 @@ INIT_SCSI_RW macro
 	lea	CFU_SCSIStruct(a3),a0
 	move.l	a2,(a0)+		;SCSI_Data
 	move.l	d4,d0
-	lsl.l	#8,d0
-	add.l	d0,d0			;*2 via add.l (faster than lsl.l #1)
+	move.l	CFU_BlockSize(a3),d1
+	UMUL32				;sectors * block size, not a fixed 512
 	move.l	d0,(a0)+		;SCSI_Length
 	clr.l	(a0)+			;SCSI_Actual
 	lea	CFU_Packet(a3),a1
@@ -5560,8 +5560,18 @@ _rb_c1:
 
 	ifd	ATAPI
 _rb_scsi:
+	move.l	CFU_BlockSize(a3),d1
+	beq.w	_rb_serror		;no block size: nothing can be sized
+	move.l	#$7fffffff,d0
+	UDIVMOD32			;most sectors whose byte count stays positive
+	tst.l	d0
+	beq.w	_rb_serror		;one sector already overflows a request
 	moveq.l	#0,d4
-	not.w	d4
+	not.w	d4			;CDB count field is 16 bits
+	cmp.l	d0,d4
+	bls.s	_rb_cap
+	move.l	d0,d4			;overflow limit is the tighter one
+_rb_cap:
 	cmp.l	d4,d3
 	bcc.s	_rb_s1
 
@@ -5573,16 +5583,18 @@ _rb_s1:
 	bne.s	_rb_serror
 
 	move.l	CFU_SCSIStruct+SCSI_Actual(a3),d0
-	move.l	d0,d1
-	and.l	#$1ff,d1
+	move.l	d0,d4			;bytes moved, for the buffer
+	move.l	CFU_BlockSize(a3),d1
+	beq.s	_rb_serror		;no block size: cannot account, and divu would trap
+	UDIVMOD32			;d0 = sectors, d1 = bytes left over
+	tst.l	d1
 	bne.s	_rb_serror		;partial sector: accounting would drift
-	add.l	d0,a2
-	lsr.l	#8,d0
-	lsr.l	#1,d0			;bytes -> sectors
+	tst.l	d0
 	beq.s	_rb_serror		;no progress would loop for ever
+	add.l	d4,a2
 	add.l	d0,d2			;next chunk starts after this one
 	sub.l	d0,d3
-	bgt.s	_rb_scsi
+	bgt.w	_rb_scsi
 	bra.w	_rb_ready
 
 _rb_serror:
@@ -6247,8 +6259,18 @@ _wb_scsi:
 	add.l	#1,d1
 	beq.w	_wb_eerror		;erase is IDE only
 
+	move.l	CFU_BlockSize(a3),d1
+	beq.w	_wb_serror		;no block size: nothing can be sized
+	move.l	#$7fffffff,d0
+	UDIVMOD32			;most sectors whose byte count stays positive
+	tst.l	d0
+	beq.w	_wb_serror		;one sector already overflows a request
 	moveq.l	#0,d4
-	not.w	d4
+	not.w	d4			;CDB count field is 16 bits
+	cmp.l	d0,d4
+	bls.s	_wb_cap
+	move.l	d0,d4			;overflow limit is the tighter one
+_wb_cap:
 	cmp.l	d4,d3
 	bcc.s	_wb_s1
 
@@ -6260,16 +6282,18 @@ _wb_s1:
 	bne.s	_wb_serror
 
 	move.l	CFU_SCSIStruct+SCSI_Actual(a3),d0
-	move.l	d0,d1
-	and.l	#$1ff,d1
+	move.l	d0,d4			;bytes moved, for the buffer
+	move.l	CFU_BlockSize(a3),d1
+	beq.s	_wb_serror		;no block size: cannot account, and divu would trap
+	UDIVMOD32			;d0 = sectors, d1 = bytes left over
+	tst.l	d1
 	bne.s	_wb_serror		;partial sector: accounting would drift
-	add.l	d0,a2
-	lsr.l	#8,d0
-	lsr.l	#1,d0			;bytes -> sectors
+	tst.l	d0
 	beq.s	_wb_serror		;no progress would loop for ever
+	add.l	d4,a2
 	add.l	d0,d2			;next chunk starts after this one
 	sub.l	d0,d3
-	bgt.s	_wb_scsi
+	bgt.w	_wb_scsi
 	bra.w	_wb_ready
 
 _wb_serror:
