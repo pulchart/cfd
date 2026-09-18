@@ -146,7 +146,7 @@ VBCC_HOME = /opt/vbcc
 VASM = $(VASM_HOME)/bin/vasmm68k_mot
 VBCC = $(VBCC_HOME)/bin/vc
 LHA = lha
-EXPECTED_VASM_VERSION = 2.0e
+EXPECTED_VASM_VERSION = 2.0f
 MD2GUIDE = tools/md2guide.py
 
 # Flags
