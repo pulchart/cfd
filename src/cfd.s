@@ -3663,27 +3663,27 @@ _mlp_try:
 	move.l	a0,d1			;name "cfd.prefs" (bare, no ENV:)
 	lea	CFG_Buf(a5),a0
 	move.l	a0,d2			;buffer
-	move.l	#CFG_BUFSZ-1,d3
+	move.l	#CFG_BUFSZ,d3		;511 payload plus the NUL GetVar appends
 	move.l	#GVF_GLOBAL_ONLY!GVF_BINARY_VAR,d4
 	jsr	DosGetVar(a6)
 	move.l	d0,d3
 	moveq.l	#CFGSRC_ENV,d6
 	tst.l	d3
-	bgt.s	_mlp_got
+	bge.s	_mlp_got
 ;-- 2. ENVARC:cfd.prefs
 	lea	s_envarc_prefs(pc),a0
 	bsr	_mwLoadFile
 	move.l	d0,d3
 	moveq.l	#CFGSRC_ENVARC,d6
 	tst.l	d3
-	bgt.s	_mlp_got
+	bge.s	_mlp_got
 ;-- 3. the same file before Startup-Sequence assigns ENVARC:
 	lea	s_env_archive(pc),a0
 	bsr	_mwLoadFile
 	move.l	d0,d3
 	moveq.l	#CFGSRC_ARCHIVE,d6
 	tst.l	d3
-	bgt.s	_mlp_got
+	bge.s	_mlp_got
 ;-- no source yet: retry on the first pass with a card present
 	tst.b	CFD_PrefsReady(a4)
 	bne.s	_mlp_none

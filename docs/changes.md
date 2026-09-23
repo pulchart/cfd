@@ -1,9 +1,9 @@
-## 20260912-dev
+## 20260924-dev
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.0 (11.09.2026)`
+- `compactflash.device 2.1-dev (24.09.2026)` _(new)_
 - `compactflash.automount 2.0 (27.08.2026)`
 - `ptable.library 2.0 (11.09.2026)`
 - `CFInfo 1.38 (11.09.2026)`
@@ -12,7 +12,9 @@ _Components in this release_:
 - `lsptres 1.0 (11.09.2026)`
 <!-- COMPONENTS:END -->
 
-TBD
+##### 'compactflash.device 2.1-dev'
+- An empty `ENV:cfd.prefs` gives the built-in defaults; before, the saved copy in `ENVARC:` was used instead.
+- `cfd.prefs` is read up to the documented 511 bytes; one byte less was read before.
 
 ## 20260911
 
