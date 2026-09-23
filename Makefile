@@ -592,6 +592,19 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 	done
 
 
+PYTHON ?= python3
+TEST_SUITES = ata_contracts config_loader rom_hunks
+.PHONY: test check-test-deps test-list-update
+check-test-deps:
+	$(Q)CFD_VASM="$(VASM)" $(PYTHON) tests/deps.py
+test: check-test-deps
+	$(Q)set -e; for suite in $(TEST_SUITES); do \
+		echo "TEST $$suite"; CFD_VASM="$(VASM)" $(PYTHON) tests/$$suite.py; \
+	done
+test-list-update:
+	$(Q)$(PYTHON) tests/list_tests.py
+	$(Q)echo "Updated: tests/INVENTORY.md"
+
 # Clean build artifacts
 clean:
 	rm -f $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES) $(VERSION_INC) $(VERSION_STAMP) $(AUTOMOUNT_VERSION_INC)

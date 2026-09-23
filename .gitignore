@@ -1,6 +1,7 @@
 NDK
 *.o
 *.py[co]
+.venv/
 *.lha
 *.readme
 .version-stamp
