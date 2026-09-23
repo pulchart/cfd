@@ -5,15 +5,15 @@
 #   help - show detailed usage output
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
-# (-dev, -rc1, ...). Empty suffix for a final release.
-RELEASE_DATE = 20260912
+# (-dev). Empty suffix for a final release.
+RELEASE_DATE = 20260924
 VERSION_SUFFIX = -dev
 
 # compactflash.device version
 CFD_MAJOR = 2
-CFD_MINOR = 0
-CFD_VERSION_SUFFIX =
-CFD_DATE = 11.09.2026
+CFD_MINOR = 1
+CFD_VERSION_SUFFIX = -dev
+CFD_DATE = 24.09.2026
 
 # compactflash.automount version (optional boot/automount module)
 AUTOMOUNT_MAJOR = 2
