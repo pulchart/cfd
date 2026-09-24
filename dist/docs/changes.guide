@@ -58,11 +58,11 @@
 
   * @{fg shine}compactflash.device 2.0 (11.09.2026)@{fg text}
   * @{fg shine}compactflash.automount 2.0 (27.08.2026)@{fg text}
-  * @{fg shine}ptable.library 2.0 (11.09.2026)@{fg text} @{i}(new)@{ui}
+  * @{fg shine}ptable.library 2.0 (11.09.2026)@{fg text}
   * @{fg shine}CFInfo 1.38 (11.09.2026)@{fg text}
   * @{fg shine}pcmciaspeed 1.36 (02.01.2026)@{fg text}
   * @{fg shine}pcmciacheck 2.0 (06.08.2026)@{fg text}
-  * @{fg shine}lsptres 1.0 (11.09.2026)@{fg text} @{i}(new)@{ui}
+  * @{fg shine}lsptres 1.0 (11.09.2026)@{fg text}
 
 TBD
 
