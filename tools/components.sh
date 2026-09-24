@@ -39,7 +39,8 @@ for entry in "$@"; do
 	od=$(old_val "${prefix}_DATE")
 
 	new=
-	{ [ -z "$prev" ] || [ "$ver ($date)" != "$ov ($od)" ]; } && new=1
+	[ -n "$prev" ] && [ -n "$oldmk" ] &&
+		[ "$ver ($date)" != "$ov ($od)" ] && new=1
 
 	if [ "$fmt" = md ]; then
 		line="- \`$name $ver ($date)\`${new:+ _(new)_}"

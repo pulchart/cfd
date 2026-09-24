@@ -5,11 +5,11 @@ _Components in this release_:
 
 - `compactflash.device 2.0 (11.09.2026)`
 - `compactflash.automount 2.0 (27.08.2026)`
-- `ptable.library 2.0 (11.09.2026)` _(new)_
+- `ptable.library 2.0 (11.09.2026)`
 - `CFInfo 1.38 (11.09.2026)`
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.0 (06.08.2026)`
-- `lsptres 1.0 (11.09.2026)` _(new)_
+- `lsptres 1.0 (11.09.2026)`
 <!-- COMPONENTS:END -->
 
 TBD
