@@ -23,9 +23,9 @@ AUTOMOUNT_DATE = 27.08.2026
 
 # Tool-specific versions
 CFINFO_MAJOR = 1
-CFINFO_MINOR = 38
-CFINFO_VERSION_SUFFIX =
-CFINFO_DATE = 11.09.2026
+CFINFO_MINOR = 39
+CFINFO_VERSION_SUFFIX = -dev
+CFINFO_DATE = 29.09.2026
 
 PCMCIASPEED_MAJOR = 1
 PCMCIASPEED_MINOR = 36
@@ -231,6 +231,7 @@ DEBUG_full  = -DDEBUG=1
 DEBUG_small =
 
 # Files: Tools
+SOURCE_PAGE = $(PTABLE_SRC)/page.c
 SOURCE_CFINFO = $(SRCDIR)/cfinfo.c
 TARGET_CFINFO = $(OUTDIR_C)/CFInfo
 SOURCE_PCMCIASPEED = $(SRCDIR)/pcmciaspeed.c
@@ -439,10 +440,10 @@ $(GUIDE_LSPTRES): $(PTABLE_VERSION_FILE)
 	$(Q)cp $(PTABLE)/dist/docs/lsptres.guide $@
 	$(Q)echo "  PTABLE  $@"
 
-$(TARGET_CFINFO): $(SOURCE_CFINFO) Makefile
+$(TARGET_CFINFO): $(SOURCE_CFINFO) $(SOURCE_PAGE) $(PTABLE_SRC)/page.h Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_CFINFO)"
-	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $<
+	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -I$(PTABLE_SRC) -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $(SOURCE_CFINFO) $(SOURCE_PAGE)
 	$(Q)echo "          $$(stat -c%s $(TARGET_CFINFO)) bytes, md5:$$(md5sum $(TARGET_CFINFO) | cut -c1-8)"
 
 $(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED) Makefile
@@ -451,10 +452,10 @@ $(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED) Makefile
 	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIASPEED_VERSION)"' -DDATE='"$(PCMCIASPEED_DATE)"' -o $(TARGET_PCMCIASPEED) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIASPEED)) bytes, md5:$$(md5sum $(TARGET_PCMCIASPEED) | cut -c1-8)"
 
-$(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK) Makefile
+$(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK) $(SOURCE_PAGE) $(PTABLE_SRC)/page.h Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIACHECK)"
-	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $<
+	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -I$(PTABLE_SRC) -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $(SOURCE_PCMCIACHECK) $(SOURCE_PAGE)
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIACHECK)) bytes, md5:$$(md5sum $(TARGET_PCMCIACHECK) | cut -c1-8)"
 
 # lsptres: copied from the submodule build (dist/c/lsptres), not compiled here.
