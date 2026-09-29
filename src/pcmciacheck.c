@@ -15,12 +15,14 @@
 #include <exec/io.h>
 #include <devices/timer.h>
 #include <dos/dos.h>
+#include <dos/dosextens.h>
 
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/timer.h>
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1425,6 +1427,121 @@ int SaveLog(const char *filename)
     return 1;
 }
 
+/* --- console pager -------------------------------------------------
+ *
+ * One screenful at a time: any key continues, Q stops the rest of the
+ * report. Paging is on only when input and output are the same console,
+ * and only when that console reports a plausible height; a redirected
+ * or silent stream scrolls as before.
+ */
+#define PAGE_PROMPT "-- more -- (any key, Q quits)"
+
+static BPTR page_in, page_out;
+static int page_rows;           /* usable lines per page, 0 = no paging */
+static int page_left;
+static int page_stop;           /* the reader asked to stop */
+static char page_erase[sizeof(PAGE_PROMPT) + 1];    /* CR, blanks, CR */
+
+/* Ask the console how tall its window is. RAW mode must already be set.
+ * WINDOW STATUS REQUEST is answered by a WINDOW BOUNDS REPORT,
+ * CSI <p1>;<p2>;<p3>;<p4> SP r, whose third field is the height.
+ */
+static int page_query_rows(void)
+{
+    int fields = 0, num = 0, rows = 0, guard = 40;
+    UBYTE c;
+
+    Write(page_out, "\033[ q", 4);
+    while (guard--) {
+        if (!WaitForChar(page_in, 200000)) return 0;   /* console stayed silent */
+        if (Read(page_in, &c, 1) != 1) return 0;
+        if (c == 'r') return (fields >= 3) ? rows : 0; /* too short to trust */
+        if (c == ';') {
+            if (++fields == 3) rows = num;
+            num = 0;
+            continue;
+        }
+        if (c < '0' || c > '9') continue;
+        if (num < 1000) num = num * 10 + (c - '0');    /* absurd: stop adding */
+    }
+    return 0;
+}
+
+static void page_begin(void)
+{
+    struct FileHandle *in, *out;
+    int rows;
+
+    page_rows = page_left = page_stop = 0;
+    page_in = Input();
+    page_out = Output();
+    if (!page_in || !page_out) return;
+    if (!IsInteractive(page_in) || !IsInteractive(page_out)) return;
+
+    /* The query is written to the output and answered on the input, so both
+     * must be the same handler. Equal fh_Type means one console; a redirected
+     * ">SER:" is a different port and gets neither the query nor a pause.
+     */
+    in = (struct FileHandle *)BADDR(page_in);
+    out = (struct FileHandle *)BADDR(page_out);
+    if (in->fh_Type != out->fh_Type) return;
+
+    SetMode(page_in, 1);                /* RAW for the query and every keypress */
+    rows = page_query_rows() - 1;       /* the prompt needs a line of its own */
+    if (rows < 4 || rows > 200) {       /* implausible height, do not guess */
+        SetMode(page_in, 0);
+        return;
+    }
+    page_rows = page_left = rows;
+
+    page_erase[0] = '\r';
+    memset(page_erase + 1, ' ', sizeof(PAGE_PROMPT) - 1);
+    page_erase[sizeof(PAGE_PROMPT)] = '\r';
+}
+
+static void page_end(void)
+{
+    if (!page_rows) return;
+    page_rows = 0;
+    SetMode(page_in, 0);                /* always hand the shell back cooked */
+}
+
+/* Call after writing one line. Returns 0 when the reader asked to stop. */
+static int page_line(void)
+{
+    UBYTE key = '\n';
+
+    if (!page_rows) return 1;
+    if (--page_left > 0) return 1;
+
+    fflush(stdout);                     /* the prompt bypasses stdio */
+    Write(page_out, PAGE_PROMPT, sizeof(PAGE_PROMPT) - 1);
+    if (Read(page_in, &key, 1) != 1) key = '\n';
+    Write(page_out, page_erase, sizeof(page_erase));
+    page_left = page_rows;              /* a fresh page */
+    if ((key & 0xdf) == 'Q') {          /* fold case */
+        page_stop = 1;
+        return 0;
+    }
+    return 1;
+}
+
+/* printf that keeps the page accounting. No format here spans two lines,
+ * so one newline in the format is one line on screen.
+ */
+static void pout(const char *fmt, ...)
+{
+    va_list ap;
+    const char *c;
+
+    if (page_stop) return;
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    for (c = fmt; *c; c++)
+        if (*c == '\n' && !page_line()) return;
+}
+
 /*
  * CIS tuple-name lookup for human-readable output.
  */
@@ -1563,13 +1680,35 @@ static ULONG DecodeDeviceSize(UBYTE sz)
 }
 
 /*
- * Read one CIS byte at logical offset n.
- * PCMCIA cards in 8-bit attribute access put CIS bytes at every other
- * byte address; the odd bytes are aliased / undefined. Walk by 2.
+ * CIS bytes as read once by CisLoad; every decoder reads from here, so the
+ * configuration summary and the dump describe the same bytes.
  */
+#define CIS_BYTES 512
+static UBYTE cis_buf[CIS_BYTES];
+
 static UBYTE CisByte(int offset)
 {
-    return PCMCIA_ATTR[offset * 2];
+    return (offset >= 0 && offset < CIS_BYTES) ? cis_buf[offset] : 0xFF;
+}
+
+/*
+ * Read the CIS at the given Gayle timing bits and restore the register.
+ * PCMCIA cards in 8-bit attribute access put CIS bytes at every other
+ * byte address; the odd bytes are aliased / undefined. Forbid keeps the
+ * driver off the bus and the timing register while the timing is changed.
+ */
+static void CisLoad(UBYTE speed_bits, UBYTE *buf)
+{
+    UBYTE saved;
+    int i;
+
+    Forbid();
+    saved = *GAYLE_CONFIG;
+    *GAYLE_CONFIG = (saved & 0xF3) | speed_bits;
+    for (i = 0; i < CIS_BYTES; ++i)
+        buf[i] = PCMCIA_ATTR[i * 2];
+    *GAYLE_CONFIG = saved;
+    Permit();
 }
 
 /*
@@ -1632,7 +1771,7 @@ static void DecodeDeviceInfo(int data_off, int avail)
     t = CisByte(off++);
     speed = t & 0x07;
 
-    printf("    type=0x%X (%s), wps=%d, speed=0x%X (%s)\r\n",
+    pout("    type=0x%X (%s), wps=%d, speed=0x%X (%s)\r\n",
            (t >> 4) & 0xF, DeviceTypeName((t >> 4) & 0xF),
            (t & 0x08) ? 1 : 0,
            speed, DeviceSpeedName(speed));
@@ -1649,9 +1788,9 @@ static void DecodeDeviceInfo(int data_off, int avail)
 
             ns = DecodeExtSpeed(e);
             if (ns) {
-                printf("    ext-speed=0x%02X (%lu ns)\r\n", (int)e, ns);
+                pout("    ext-speed=0x%02X (%lu ns)\r\n", (int)e, ns);
             } else {
-                printf("    ext-speed=0x%02X (reserved encoding)\r\n", (int)e);
+                pout("    ext-speed=0x%02X (reserved encoding)\r\n", (int)e);
             }
 
             if (!(e & 0x80)) break;
@@ -1663,7 +1802,7 @@ static void DecodeDeviceInfo(int data_off, int avail)
         ULONG nb = DecodeDeviceSize(sz);
         ULONG units = ((sz >> 3) & 0x1F) + 1UL;
         UBYTE ucode = sz & 0x07;
-        printf("    size=0x%08lX (%lu B), size_code=0x%02X  "
+        pout("    size=0x%08lX (%lu B), size_code=0x%02X  "
                "(units=%lu, unit=0x%X=%s)\r\n",
                nb, nb, (int)sz, units, (int)ucode, unit_name[ucode]);
     }
@@ -1695,7 +1834,7 @@ static void DecodeDeviceOC(int data_off, UBYTE link)
         UBYTE oc = CisByte(off++);
         used++;
 
-        printf("    other-cond=0x%02X (Vcc=%s, mwait=%d)\r\n",
+        pout("    other-cond=0x%02X (Vcc=%s, mwait=%d)\r\n",
                (int)oc, vcc_name[oc & 0x03], (oc & 0x04) ? 1 : 0);
 
         if (!(oc & 0x80)) break;
@@ -1709,9 +1848,9 @@ static void DecodeFuncID(int data_off, UBYTE link)
     UBYTE id;
     if (link < 1) return;
     id = CisByte(data_off);
-    printf("    function=0x%02X (%s)\r\n", id, FuncIDName(id));
+    pout("    function=0x%02X (%s)\r\n", id, FuncIDName(id));
     if (link >= 2)
-        printf("    sysinit=0x%02X\r\n", CisByte(data_off + 1));
+        pout("    sysinit=0x%02X\r\n", CisByte(data_off + 1));
 }
 
 static void DecodeFuncE(int data_off, UBYTE link)
@@ -1719,19 +1858,19 @@ static void DecodeFuncE(int data_off, UBYTE link)
     UBYTE type, iface;
     const char *iname;
     if (link < 1) {
-        printf("    (no data)\r\n");
+        pout("    (no data)\r\n");
         return;
     }
     type = CisByte(data_off);
-    printf("    extension_type=0x%02X", type);
+    pout("    extension_type=0x%02X", type);
     if (type == 1 && link >= 2) {
         iface = CisByte(data_off + 1);
         iname = "?";
         if (iface == 0) iname = "(undefined)";
         else if (iface == 1) iname = "IDE";
-        printf(" (Disk Interface), interface=0x%02X (%s)", iface, iname);
+        pout(" (Disk Interface), interface=0x%02X (%s)", iface, iname);
     }
-    printf("\r\n");
+    pout("\r\n");
 }
 
 static void DecodeVers1(int data_off, UBYTE link)
@@ -1739,12 +1878,12 @@ static void DecodeVers1(int data_off, UBYTE link)
     int i, line, in_str;
     UBYTE c;
     if (link < 2) return;
-    printf("    major=%d, minor=%d\r\n",
+    pout("    major=%d, minor=%d\r\n",
            (int)CisByte(data_off), (int)CisByte(data_off + 1));
     line = 0;
     i = 2;
     while (i < link) {
-        printf("    string[%d]: \"", line++);
+        pout("    string[%d]: \"", line++);
         in_str = 1;
         while (i < link && in_str) {
             c = CisByte(data_off + i++);
@@ -1753,10 +1892,10 @@ static void DecodeVers1(int data_off, UBYTE link)
             } else if (c >= 32 && c < 127) {
                 putchar(c);
             } else {
-                printf("\\x%02X", c);
+                pout("\\x%02X", c);
             }
         }
-        printf("\"\r\n");
+        pout("\"\r\n");
         if (i < link && CisByte(data_off + i - 1) == 0xFF) break;
     }
 }
@@ -1767,34 +1906,272 @@ static void DecodeManfID(int data_off, UBYTE link)
     if (link < 4) return;
     mfg  = CisByte(data_off) | (CisByte(data_off + 1) << 8);
     prod = CisByte(data_off + 2) | (CisByte(data_off + 3) << 8);
-    printf("    manufacturer=0x%04X, product=0x%04X\r\n", mfg, prod);
+    pout("    manufacturer=0x%04X, product=0x%04X\r\n", mfg, prod);
 }
 
 static void HexDumpTuple(int data_off, UBYTE link)
 {
     int i;
     if (link == 0) return;
-    printf("    data:");
+    pout("    data:");
     for (i = 0; i < link && i < 32; i++) {
-        if (i > 0 && (i % 16) == 0) printf("\r\n         ");
-        printf(" %02X", CisByte(data_off + i));
+        if (i > 0 && (i % 16) == 0) pout("\r\n         ");
+        pout(" %02X", CisByte(data_off + i));
     }
-    if (link > 32) printf(" ...");
-    printf("\r\n");
+    if (link > 32) pout(" ...");
+    pout("\r\n");
+}
+
+/* --------------------------------------------------------------------
+ * CIS configuration: the option register and every configuration entry
+ * the card offers, read from the tuple layouts.
+ */
+#define ATAPI_CISMAX   512
+#define ATAPI_MAXENT   8        /* entries reported; cards offer two or three */
+#define ATAPI_MAXRANGE 4
+
+/* One CISTPL_CFTABLE_ENTRY as the card describes it. Reported whole: which
+ * entry a foreign card offers is exactly what we cannot guess from here. */
+struct AtapiEntry {
+    UBYTE index;                /* configuration index, for the COR write */
+    UBYTE is_default;           /* TPCE_INDX bit 6 */
+    UBYTE io8, io16;            /* TPCE_IO bits 5 and 6 */
+    UBYTE nranges;
+    UBYTE iface_io;             /* interface type 1 */
+    UBYTE has_io;               /* the entry carries its own TPCE_IO */
+    UWORD addr[ATAPI_MAXRANGE];
+    UWORD regs[ATAPI_MAXRANGE]; /* register count, the length byte plus one */
+    int   irq;                  /* -1 when the entry describes none */
+};
+
+struct AtapiScan {
+    int   cfg_last;             /* TPCC_LAST, highest index the card offers */
+    int   cfg_mask;             /* TPCC_RMSK, which registers the card has */
+    UWORD cfg_base;
+    struct AtapiEntry ent[ATAPI_MAXENT];
+    int   nent;
+    int   parsed;               /* the chain reached a proper END */
+};
+
+static int AtapiTake(int *cur, int limit, int *val)
+{
+    if (*cur >= limit) return 0;
+    *val = CisByte((*cur)++);
+    return 1;
+}
+
+/* The two-bit size codes stand for 0, 1, 2 and 4 bytes. */
+static int AtapiSize(int code)
+{
+    return code == 3 ? 4 : code;
+}
+
+static int AtapiValue(int *cur, int limit, int bytes, ULONG *out)
+{
+    int i, v;
+    ULONG acc = 0;
+    for (i = 0; i < bytes; ++i) {
+        if (!AtapiTake(cur, limit, &v)) return 0;
+        acc |= ((ULONG)v) << (8 * i);      /* least significant byte first */
+    }
+    *out = acc;
+    return 1;
+}
+
+static int AtapiSkipVal(int *cur, int limit)
+{
+    int b;
+    do {
+        if (!AtapiTake(cur, limit, &b)) return 0;
+    } while (b & 0x80);
+    return 1;
+}
+
+static int AtapiSkipPower(int *cur, int limit)
+{
+    int sel, i;
+    if (!AtapiTake(cur, limit, &sel)) return 0;
+    for (i = 0; i < 8; ++i) {
+        if (!(sel & (1 << i))) continue;
+        if (!AtapiSkipVal(cur, limit)) return 0;
+    }
+    return 1;
+}
+
+static int AtapiSkipTiming(int *cur, int limit)
+{
+    int td;
+    if (!AtapiTake(cur, limit, &td)) return 0;
+    if ((td & 3) != 3 && !AtapiSkipVal(cur, limit)) return 0;
+    if (((td >> 2) & 7) != 7 && !AtapiSkipVal(cur, limit)) return 0;
+    if (((td >> 5) & 7) != 7 && !AtapiSkipVal(cur, limit)) return 0;
+    return 1;
+}
+
+/* 1 = the entry parsed, whether or not it described wiring we drive. */
+/* Read one entry into *e as the card wrote it, without judging it. Returns 0
+ * only when the tuple runs off its own end, which stops the whole chain. */
+static int AtapiEntry(int data, int next, int cfg_last, int *iface_state,
+                      struct AtapiEntry *e)
+{
+    int cur = data, indx, iface, fs, io, rd, nranges, asize, lsize, k;
+    ULONG addr, len;
+
+    e->index = 0; e->is_default = 0; e->io8 = 0; e->io16 = 0;
+    e->nranges = 0; e->iface_io = 0; e->has_io = 0; e->irq = -1;
+
+    if (!AtapiTake(&cur, next, &indx)) return 0;
+    e->index = (UBYTE)(indx & 0x3F);
+    e->is_default = (UBYTE)((indx & 0x40) != 0);
+    if ((indx & 0x3F) > cfg_last) return 1;      /* an index the card denies */
+    iface = e->is_default ? 0 : *iface_state;
+    if (indx & 0x80) {
+        if (!AtapiTake(&cur, next, &iface)) return 0;
+        iface &= 0x0F;
+    }
+    /* Missing TPCE_IF inherits DEFAULT; a new default resets to memory. */
+    if (e->is_default) *iface_state = iface;
+    if (iface != 1) return 1;                    /* only the I/O interface */
+    e->iface_io = 1;
+    if (!AtapiTake(&cur, next, &fs)) return 0;
+    for (k = 0; k < (fs & 3); ++k)
+        if (!AtapiSkipPower(&cur, next)) return 0;
+    if ((fs & 4) && !AtapiSkipTiming(&cur, next)) return 0;
+    if (!(fs & 8)) return 1;                    /* describes no I/O space */
+    if (!AtapiTake(&cur, next, &io)) return 0;
+    e->has_io = 1;
+    e->io8 = (UBYTE)((io & 0x20) != 0);
+    e->io16 = (UBYTE)((io & 0x40) != 0);
+    if (!(io & 0x80)) return 1;                 /* no ranges to report */
+    if (!AtapiTake(&cur, next, &rd)) return 0;
+    nranges = (rd & 0x0F) + 1;
+    asize = AtapiSize((rd >> 4) & 3);
+    lsize = AtapiSize((rd >> 6) & 3);
+    for (k = 0; k < nranges; ++k) {
+        if (!AtapiValue(&cur, next, asize, &addr)) return 0;
+        if (!AtapiValue(&cur, next, lsize, &len)) return 0;
+        if (k < ATAPI_MAXRANGE) {
+            e->addr[k] = (UWORD)addr;
+            e->regs[k] = (UWORD)(len + 1);
+            e->nranges = (UBYTE)(k + 1);
+        }
+    }
+    if (fs & 0x10) {                            /* TPCE_IR follows the ranges */
+        int ir;
+        if (!AtapiTake(&cur, next, &ir)) return 0;
+        e->irq = ir & 0x0F;
+    }
+    return 1;
+}
+
+static void AtapiScanRaw(struct AtapiScan *s)
+{
+    int pos = 0, code, link, data, next, iface_state = -1;
+
+    s->cfg_last = -1;
+    s->cfg_mask = 0;
+    s->cfg_base = 0;
+    s->nent = 0;
+    s->parsed = 0;
+
+    while (pos < ATAPI_CISMAX) {
+        code = CisByte(pos);
+        if (code == 0xFF) { s->parsed = 1; return; }
+        if (code == 0x00) return;               /* attribute memory not up */
+        if (pos + 1 >= ATAPI_CISMAX) return;
+        link = CisByte(pos + 1);
+        if (link == 0xFF) return;
+        data = pos + 2;
+        next = data + link;
+        if (next > ATAPI_CISMAX) return;
+
+        if (code == CISTPL_CONFIG && s->cfg_base == 0) {
+            int cur, rasz, rmsz, mask;
+            ULONG base;
+            if (link < 4) return;
+            rasz = CisByte(data) & 3;
+            rmsz = (CisByte(data) >> 2) & 0x0F;
+            if (rasz + rmsz + 4 > link) return;  /* shorter than it declares */
+            s->cfg_last = CisByte(data + 1);
+            cur = data + 2;
+            if (!AtapiValue(&cur, next, rasz + 1, &base)) return;
+            if (base > 0xFFFF) return;
+            mask = CisByte(cur);
+            s->cfg_mask = mask;
+            if (!(mask & 1)) return;             /* no option register to write */
+            s->cfg_base = (UWORD)base;
+        } else if (code == CISTPL_CFTABLE_ENTRY && s->cfg_base != 0) {
+            struct AtapiEntry e;
+            if (!AtapiEntry(data, next, s->cfg_last, &iface_state, &e)) return;
+            if (s->nent < ATAPI_MAXENT) s->ent[s->nent++] = e;
+        }
+        pos = next;
+    }
+}
+
+/* Addresses out of a chain that did not parse are guesses, same as in the
+ * driver. */
+static void AtapiScanCIS(struct AtapiScan *s)
+{
+    AtapiScanRaw(s);
+    if (s->parsed) return;
+    s->cfg_base = 0;
+}
+
+/* What the card offers, entry by entry. */
+static void AtapiReportEntries(const struct AtapiScan *s)
+{
+    int i, k;
+
+    if (!s->cfg_base) {
+        pout("CIS config: none, the card declares no option register\r\n");
+        return;
+    }
+    pout("CIS config: COR 0x%03X, highest index %d, register mask 0x%02X\r\n",
+         (unsigned)s->cfg_base, s->cfg_last, (unsigned)s->cfg_mask);
+    if (!s->nent) {
+        pout("  no configuration entry after it\r\n");
+        return;
+    }
+    for (i = 0; i < s->nent; ++i) {
+        const struct AtapiEntry *e = &s->ent[i];
+        pout("   entry %-2d %-9s %-7s", (int)e->index,
+             e->is_default ? "(default)" : "",
+             e->iface_io ? "I/O" : "not I/O");
+        if (e->iface_io && !e->has_io)
+            pout("%s", e->is_default ? "no I/O space" : "as default");
+        else if (e->iface_io)
+            pout("%-7s", e->io8 ? (e->io16 ? "8+16bit" : "8bit")
+                                : (e->io16 ? "16bit" : "?"));
+        for (k = 0; k < e->nranges; ++k)
+            pout(" 0x%03X+%d", (unsigned)e->addr[k], (int)e->regs[k]);
+        if (e->irq >= 0) pout("  IRQ %d", e->irq);
+        pout("\r\n");
+    }
+}
+
+static void ReportConfig(void)
+{
+    struct AtapiScan s;
+
+    AtapiScanCIS(&s);
+    pout("\r\n");
+    if (!s.parsed) {
+        pout("CIS config: does not parse\r\n");
+        return;
+    }
+    AtapiReportEntries(&s);
 }
 
 /*
- * Walk the PCMCIA attribute-memory CIS and print each tuple in
+ * Read the PCMCIA attribute-memory CIS once and print each tuple in
  * human-readable form. Direct memory read at 0x00A00000, no
- * card.resource interaction, no OwnCard, no arbitration with
- * compactflash.device or other handlers. Safe to run on cards that
+ * card.resource interaction, no OwnCard. Safe to run on cards that
  * make the regular driver path hang.
  *
- * speed_ns: 0 leaves Gayle PCMCIA timing untouched; 100/150/250/720
- * temporarily overrides $DAB000 bits 2-3 for the duration of the scan
- * (restored on return). Useful for diagnosing cards whose CIS reads
- * are unstable at the default speed - rerun -cis with each value and
- * compare results.
+ * speed_ns: 0 reads at 720ns, the slowest Gayle timing, as card.resource
+ * slows down for its own tuple reads; 100/150/250/720 reads at that
+ * timing instead. The register is restored right after the read.
  *
  * Tuple stride: each CIS byte is at attribute_base + n*2 (PCMCIA 8-bit
  * attribute access aliases odd bytes). Walk terminates on CISTPL_END
@@ -1805,38 +2182,34 @@ int DumpCIS(int speed_ns)
     int pos = 0;
     int count = 0;
     UBYTE code, link;
-    UBYTE saved_cfg = 0;
-    int changed = 0;
+    UBYTE want;
 
     if (!CardPresent()) {
-        printf("No card inserted (GAYLE CCDET clear).\r\n");
+        pout("No card inserted (GAYLE CCDET clear).\r\n");
         return 5;
     }
 
-    if (speed_ns != 0) {
-        UBYTE want = GayleSpeedBits(speed_ns);
-        if (want == 0xFF) {
-            printf("Invalid Gayle PCMCIA speed %d (use 100, 150, 250, or 720)\r\n",
-                   speed_ns);
-            return 5;
-        }
-        saved_cfg = *GAYLE_CONFIG;
-        *GAYLE_CONFIG = (saved_cfg & 0xF3) | want;
-        changed = 1;
+    want = GayleSpeedBits(speed_ns ? speed_ns : 720);
+    if (want == 0xFF) {
+        pout("Invalid Gayle PCMCIA speed %d (use 100, 150, 250, or 720)\r\n",
+               speed_ns);
+        return 5;
     }
+    CisLoad(want, cis_buf);
 
-    printf("CIS dump (direct read from PCMCIA attribute memory at 0x%08lX):\r\n",
+    page_begin();
+    pout("CIS read at Gayle PCMCIA timing %s%s\r\n",
+           GayleSpeedLabel(want), speed_ns ? " (override)" : "");
+    ReportConfig();             /* the summary first, the tuples below */
+    pout("\r\nCIS dump (read from PCMCIA attribute memory at 0x%08lX):\r\n",
            (ULONG)PCMCIA_ATTR);
-    printf("Gayle PCMCIA timing: %s%s\r\n",
-           GayleSpeedLabel(*GAYLE_CONFIG),
-           changed ? " (override)" : " (current)");
-    printf("\r\n");
+    pout("\r\n");
 
     while (pos < 512 && count < 32) {
         code = CisByte(pos);
 
         if (code == CISTPL_END) {
-            printf("0x%03X: 0x%02X %s\r\n", pos, code, TupleName(code));
+            pout("0x%03X: 0x%02X %s\r\n", pos, code, TupleName(code));
             goto done;
         }
         if (code == CISTPL_NULL) {
@@ -1845,7 +2218,7 @@ int DumpCIS(int speed_ns)
         }
 
         link = CisByte(pos + 1);
-        printf("0x%03X: 0x%02X %s (length=%d)\r\n",
+        pout("0x%03X: 0x%02X %s (length=%d)\r\n",
                pos, (int)code, TupleName(code), (int)link);
 
         switch (code) {
@@ -1877,13 +2250,11 @@ int DumpCIS(int speed_ns)
         count++;
     }
 
-    printf("\r\n(end of dump - %s)\r\n",
+    pout("\r\n(end of dump - %s)\r\n",
            count >= 32 ? "tuple limit reached" : "buffer limit reached");
 
 done:
-    if (changed) {
-        *GAYLE_CONFIG = saved_cfg;
-    }
+    page_end();
     return 0;
 }
 
@@ -1969,14 +2340,14 @@ int main(int argc, char **argv)
         printf("               -r sets the runs per mode (%d..%d, default %d).\r\n",
                STAB_RUNS_MIN, STAB_RUNS_MAX, STAB_RUNS_DEFAULT);
         printf("\r\n");
-        printf("  -cis [speed] Dump PCMCIA CIS tuples from attribute memory and exit.\r\n");
+        printf("  -cis [speed] Dump PCMCIA CIS tuples and configuration entries, then exit.\r\n");
         printf("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\r\n");
         printf("               memory timing for the scan (default: current setting).\r\n");
         return 5;
     }
 
     /* -cis: standalone CIS dump, no logfile, no transfer-mode tests */
-    if (strcmp(argv[1], "-cis") == 0) {
+    if (strcmp(argv[1], "-cis") == 0 || strcmp(argv[1], "--cis") == 0) {
         int speed = 0;
         if (argc > 2) {
             if (strcmp(argv[2], "100") == 0) speed = 100;
@@ -2193,4 +2564,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
