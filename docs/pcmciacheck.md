@@ -41,10 +41,16 @@ Options:
 - **`-cis [speed]`**: Dump the PCMCIA Card Information Structure (CIS) tuples from
   attribute memory and exit. Read-only, does not use `card.resource` or
   `compactflash.device`, so it can be used to inspect cards that hang the
-  regular driver path. The optional `speed` is `100`, `150`, `250` or `720`
-  and overrides the Gayle PCMCIA memory timing for the duration of the scan
-  only; the previous setting is restored on exit. Without it the current
-  setting is used.
+  regular driver path. The CIS is read at 720ns, the slowest Gayle PCMCIA
+  timing, as `card.resource` does for its own tuple reads; the optional
+  `speed` (`100`, `150`, `250` or `720`) reads at that timing instead. The
+  register is restored right after the read. `--cis` is accepted as well.
+
+  The dump starts with the card's configuration: the option register (COR)
+  and every configuration entry, with its index, interface, I/O ranges and
+  IRQ. It pages a screenful at a time on an interactive console, the same as
+  CFInfo: any key continues, Q stops. Redirected to a file it scrolls without
+  pausing, e.g. `pcmciacheck -cis >RAM:cis.txt`.
 
 Examples:
 
@@ -113,10 +119,11 @@ reported separately before the device info:
 
 ## Checking CIS read stability
 
-CIS is static data in the card's attribute memory, so running
-`pcmciacheck -cis` several times in succession (without removing or
-re-inserting the card) should produce **byte-for-byte identical
-output every time**. If consecutive runs disagree, the PCMCIA
+CIS is static data in the card's attribute memory, so every read should
+return the same bytes, so running `pcmciacheck -cis` several times in
+succession (without removing or re-inserting the card) should produce
+**byte-for-byte identical output every time**. If consecutive runs
+disagree, the PCMCIA
 attribute-memory read path is producing random bit-flips, and the
 driver's CIS gate may reject the card on a corrupted run even though
 its I/O path is unaffected.
