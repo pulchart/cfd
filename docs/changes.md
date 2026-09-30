@@ -1,6 +1,21 @@
-## 20260930
+## 20261001-dev
 
 <!-- COMPONENTS:BEGIN -->
+_Components in this release_:
+
+- `compactflash.device 2.1 (30.09.2026)`
+- `compactflash.automount 2.0 (27.08.2026)`
+- `ptable.library 2.1 (30.09.2026)` _(new)_
+- `CFInfo 1.39 (30.09.2026)`
+- `pcmciaspeed 1.36 (02.01.2026)`
+- `pcmciacheck 2.1 (30.09.2026)`
+- `lsptres 1.1 (30.09.2026)` _(new)_
+<!-- COMPONENTS:END -->
+
+TBD
+
+## 20260930
+
 _Components in this release_:
 
 - `compactflash.device 2.1 (30.09.2026)` _(new)_
@@ -10,7 +25,6 @@ _Components in this release_:
 - `pcmciaspeed 1.36 (02.01.2026)`
 - `pcmciacheck 2.1 (30.09.2026)` _(new)_
 - `lsptres 1.1 (30.09.2026)` _(new)_
-<!-- COMPONENTS:END -->
 
 ##### 'compactflash.device 2.1'
 - An empty `ENV:cfd.prefs` gives the built-in defaults; before, the saved copy in `ENVARC:` was used instead.
