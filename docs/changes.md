@@ -1,25 +1,25 @@
-## 20260929-dev
+## 20260930
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.1-dev (24.09.2026)` _(new)_
+- `compactflash.device 2.1 (30.09.2026)` _(new)_
 - `compactflash.automount 2.0 (27.08.2026)`
-- `ptable.library 2.0 (11.09.2026)`
-- `CFInfo 1.39-dev (29.09.2026)` _(new)_
+- `ptable.library 2.1 (30.09.2026)` _(new)_
+- `CFInfo 1.39 (30.09.2026)` _(new)_
 - `pcmciaspeed 1.36 (02.01.2026)`
-- `pcmciacheck 2.1-dev (29.09.2026)` _(new)_
-- `lsptres 1.0 (11.09.2026)`
+- `pcmciacheck 2.1 (30.09.2026)` _(new)_
+- `lsptres 1.1 (30.09.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
-##### 'compactflash.device 2.1-dev'
+##### 'compactflash.device 2.1'
 - An empty `ENV:cfd.prefs` gives the built-in defaults; before, the saved copy in `ENVARC:` was used instead.
 - `cfd.prefs` is read up to the documented 511 bytes; one byte less was read before.
 
-##### 'CFInfo 1.39-dev'
+##### 'CFInfo 1.39'
 - The `-- more --` prompt is shown in italic, reversed.
 
-##### 'pcmciacheck 2.1-dev'
+##### 'pcmciacheck 2.1'
 - `pcmciacheck -cis` also lists the card's configuration entries, reads the CIS at 720ns unless a timing is given, and pages a screenful at a time on a console.
 
 ## 20260911
