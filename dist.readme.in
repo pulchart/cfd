@@ -1,12 +1,12 @@
-Short:        CompactFlash PCMCIA driver for A600/1200
+Short:        PCMCIA CompactFlash driver A600/1200
 Uploader:     jaroslav.pulchart@gmail.com (Jaroslav Pulchart)
 Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by Torsten Jager and Paul Carter
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v20260911.lha
-Kurz:         CompactFlash PCMCIA Treiber fuer A600/1200
+Replaces:     driver/media/cfd.v20260930.lha
+Kurz:         PCMCIA CompactFlash-Treiber A600/1200
 
 PCMCIA CompactFlash driver and supporting tools for Amiga 600/1200. Fork of driver/media/CFD133.lha.
 
@@ -17,22 +17,7 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-Driver 'compactflash.device 2.1':
-
-* An empty ENV:cfd.prefs gives the built-in defaults; before, the saved
-  copy in ENVARC: was used instead.
-* cfd.prefs is read up to the documented 511 bytes; one byte less was read
-  before.
-
-Tool 'CFInfo 1.39':
-
-* The -- more -- prompt is shown in italic, reversed.
-
-Tool 'pcmciacheck 2.1':
-
-* pcmciacheck -cis also lists the card's configuration entries, reads the
-  CIS at 720ns unless a timing is given, and pages a screenful at a time on
-  a console.
+TBD
 
 FEATURES
 ========
