@@ -6,8 +6,8 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev). Empty suffix for a final release.
-RELEASE_DATE = 20260930
-VERSION_SUFFIX =
+RELEASE_DATE = 20261001
+VERSION_SUFFIX = -dev
 
 # compactflash.device version
 CFD_MAJOR = 2
