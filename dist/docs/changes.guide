@@ -62,7 +62,7 @@
   * @{fg shine}compactflash.automount 2.0 (27.08.2026)@{fg text}
   * @{fg shine}ptable.library 2.1 (30.09.2026)@{fg text} @{i}(new)@{ui}
   * @{fg shine}CFInfo 1.40 (03.10.2026)@{fg text} @{i}(new)@{ui}
-  * @{fg shine}pcmciaspeed 1.36 (02.01.2026)@{fg text}
+  * @{fg shine}pcmciaspeed 1.37 (03.10.2026)@{fg text} @{i}(new)@{ui}
   * @{fg shine}pcmciacheck 2.2 (03.10.2026)@{fg text} @{i}(new)@{ui}
   * @{fg shine}lsptres 1.1 (30.09.2026)@{fg text} @{i}(new)@{ui}
 
@@ -76,6 +76,10 @@
   * @{fg shine}-cis@{fg text} lists every I/O range of a configuration entry, not only the first four.
   * @{fg shine}-cis@{fg text} lists the configuration entries before one that does not parse, instead
     of none.
+  * Output lines end in LF alone.
+
+@{b}'pcmciaspeed 1.37'@{ub}
+  * Output lines end in LF alone.
 
 ----------------------------------------
 @{"<< Prev" link Main}  @{"Contents" link Main}  @{"Next >>" link 20260930}
