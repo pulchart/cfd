@@ -10,7 +10,7 @@ from pathlib import Path
 from amitools.binfmt.BinFmt import BinFmt
 from amitools.binfmt.Relocate import Relocate
 from amitools.vamos.machine import Machine
-from toolchain import ROOT, VASM
+from toolchain import PTABLE_SRC, ROOT, VASM
 
 BASE, UNIT, DEV, REQ, BUF, EXEC, CALLBACK, STACK = (
     0x10000, 0x40000, 0x42000, 0x44000, 0x50000, 0x70000, 0x71000, 0x90000)
@@ -20,7 +20,7 @@ def build(directory, cpu, full):
     out, listing = directory / 'cfd', directory / 'cfd.lst'
     flags = (['-D__68020__=1'] if cpu == '68020' else []) + (['-DDEBUG=1'] if full else [])
     subprocess.run([VASM, '-quiet', '-Fhunkexe', '-m'+cpu, *flags,
-                    '-I', 'extern/ptable/src', '-L', str(listing), '-o', str(out),
+                    '-I', str(PTABLE_SRC), '-L', str(listing), '-o', str(out),
                     'src/cfd.s'], cwd=ROOT, check=True)
     eq = {name: int(value, 16) for name, value in re.findall(
         r'^([A-Za-z_][\w]*)\s+E:([0-9A-Fa-f]{8})\s*$', listing.read_text(), re.MULTILINE)}

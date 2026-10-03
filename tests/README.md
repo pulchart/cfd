@@ -14,7 +14,7 @@ python -m pip install -r tests/requirements.txt
 make test
 ```
 
-`make check-test-deps` diagnoses dependencies. Set `VASM_HOME` or `make VASM=/path/to/vasmm68k_mot`. The pinned Python forks conflict with upstream `amitools`/`machine68k`; use a clean environment.
+`make check-test-deps` diagnoses dependencies. Set `VASM_HOME` or `make VASM=/path/to/vasmm68k_mot`. `make test PTABLE=/path/to/ptable` tests against another ptable checkout instead of `extern/ptable`. The pinned Python forks conflict with upstream `amitools`/`machine68k`; use a clean environment.
 
 Sources assemble into temporary files; release binaries remain untouched.
 

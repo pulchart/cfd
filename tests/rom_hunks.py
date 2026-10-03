@@ -11,20 +11,19 @@ Run: python3 tests/rom_hunks.py
 import subprocess,sys,tempfile
 from pathlib import Path
 from amitools.binfmt.BinFmt import BinFmt
-from toolchain import ROOT, VASM
-PTABLE=ROOT/'extern/ptable/src'
+from toolchain import PTABLE_SRC, ROOT, VASM
 
 # source, extra defines: the flavours the Kickstart build takes
 MODULES=[('src/cfd.s', ('-m'+cpu, *(['-D__68020__=1'] if cpu=='68020' else []), *(['-DDEBUG=1'] if full else [])))
          for cpu in ('68000','68020') for full in (False,True)]
 MODULES += [('src/cfd_automount.s',('-m68000',)),
-            ('extern/ptable/src/ptable_lib.s',('-m68000',)),
-            ('extern/ptable/src/ptable_lib.s',('-m68020','-D__68020__=1'))]
+            (str(PTABLE_SRC/'ptable_lib.s'),('-m68000',)),
+            (str(PTABLE_SRC/'ptable_lib.s'),('-m68020','-D__68020__=1'))]
 
 def hunks(tmp,source,flags):
     out=tmp/(Path(source).stem+'-'+'-'.join(f.lstrip('-') for f in flags))
     subprocess.run([VASM,'-quiet','-Fhunkexe','-nosym',*flags,
-                    '-I',str(PTABLE),'-I',str(ROOT/'src'),'-o',str(out),source],
+                    '-I',str(PTABLE_SRC),'-I',str(ROOT/'src'),'-o',str(out),source],
                    cwd=ROOT,check=True)
     image=BinFmt().load_image(str(out))
     return [(s.get_type_name(),s.size) for s in image.get_segments()]
