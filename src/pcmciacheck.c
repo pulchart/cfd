@@ -1776,7 +1776,7 @@ static void DecodeVers1(int data_off, UBYTE link)
             if (c == 0 || c == 0xFF) {
                 in_str = 0;
             } else if (c >= 32 && c < 127) {
-                putchar(c);
+                pout("%c", c);
             } else {
                 pout("\\x%02X", c);
             }

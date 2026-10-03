@@ -1,4 +1,4 @@
-## 20261001-dev
+## 20261003-dev
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
@@ -6,13 +6,17 @@ _Components in this release_:
 - `compactflash.device 2.1 (30.09.2026)`
 - `compactflash.automount 2.0 (27.08.2026)`
 - `ptable.library 2.1 (30.09.2026)` _(new)_
-- `CFInfo 1.39 (30.09.2026)`
+- `CFInfo 1.40 (03.10.2026)` _(new)_
 - `pcmciaspeed 1.36 (02.01.2026)`
-- `pcmciacheck 2.1 (30.09.2026)`
+- `pcmciacheck 2.2 (03.10.2026)` _(new)_
 - `lsptres 1.1 (30.09.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
-TBD
+##### 'CFInfo 1.40'
+- Improved paging: in a narrow window, long lines no longer scroll the listing away before it pauses.
+
+##### 'pcmciacheck 2.2'
+- Improved paging: in a narrow window, long lines no longer scroll the listing away before it pauses.
 
 ## 20260930
 
