@@ -3,7 +3,7 @@ import importlib.metadata as md
 import shutil
 import subprocess
 import sys
-from toolchain import ROOT, VASM
+from toolchain import PTABLE_SRC, ROOT, VASM
 
 
 def main():
@@ -34,8 +34,8 @@ def main():
     except (OSError, subprocess.SubprocessError, IndexError):
         print('vasm missing; set VASM_HOME or put vasmm68k_mot on PATH')
         bad = True
-    if not (ROOT / 'extern/ptable/src/ptable_pub.i').is_file():
-        print('ptable missing; run git submodule update --init')
+    if not (PTABLE_SRC / 'ptable_pub.i').is_file():
+        print(f'ptable missing at {PTABLE_SRC.parent}; run git submodule update --init or set PTABLE')
         bad = True
     return int(bad)
 

@@ -597,10 +597,10 @@ PYTHON ?= python3
 TEST_SUITES = ata_contracts config_loader rom_hunks
 .PHONY: test check-test-deps test-list-update
 check-test-deps:
-	$(Q)CFD_VASM="$(VASM)" $(PYTHON) tests/deps.py
+	$(Q)CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/deps.py
 test: check-test-deps
 	$(Q)set -e; for suite in $(TEST_SUITES); do \
-		echo "TEST $$suite"; CFD_VASM="$(VASM)" $(PYTHON) tests/$$suite.py; \
+		echo "TEST $$suite"; CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/$$suite.py; \
 	done
 test-list-update:
 	$(Q)$(PYTHON) tests/list_tests.py

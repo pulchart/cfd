@@ -16,7 +16,7 @@ from pathlib import Path
 from amitools.binfmt.BinFmt import BinFmt
 from amitools.binfmt.Relocate import Relocate
 from amitools.vamos.machine import Machine
-from toolchain import ROOT, VASM
+from toolchain import PTABLE_SRC, ROOT, VASM
 BASE,UNIT,DEV,CFG,EXEC,DOSB,STACK=0x10000,0x100000,0x140000,0x200000,0x280000,0x2c0000,0x300000
 LVO_OPENLIB,LVO_CLOSELIB=552,414
 LVO_OPEN,LVO_CLOSE,LVO_READ,LVO_DELAY,LVO_GETVAR=30,36,42,198,906
@@ -27,7 +27,7 @@ ENVARC,ARCHIVE='ENVARC:cfd.prefs','SYS:Prefs/Env-Archive/cfd.prefs'
 def build(tmp):
     obj=tmp/'cfd'; lst=tmp/'cfd.lst'
     subprocess.run([VASM,'-quiet','-Fhunkexe','-m68000','-DDEBUG=1',
-                    '-I','extern/ptable/src','-L',str(lst),'-o',str(obj),'src/cfd.s'],
+                    '-I',str(PTABLE_SRC),'-L',str(lst),'-o',str(obj),'src/cfd.s'],
                    cwd=ROOT,check=True)
     eq={}
     for line in lst.read_text(errors='replace').splitlines():
