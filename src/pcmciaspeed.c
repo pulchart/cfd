@@ -58,7 +58,7 @@ int OpenTimer(void)
     if (OpenDevice("timer.device", UNIT_ECLOCK, (struct IORequest *)TimerReq, 0)) {
         DeleteIORequest((struct IORequest *)TimerReq);
         DeleteMsgPort(TimerPort);
-        printf("Could not open timer.device\r\n");
+        printf("Could not open timer.device\n");
         return 0;
     }
 
@@ -158,7 +158,7 @@ void TestPCMCIA(const char *name, volatile UBYTE *base_addr)
     *gayle = orig_gayle;
 
     /* Print results as table row */
-    printf("%-14s %5lu   %5lu   %5lu   %5lu\r\n",
+    printf("%-14s %5lu   %5lu   %5lu   %5lu\n",
            name,
            (unsigned long)times[0],
            (unsigned long)times[1],
@@ -176,12 +176,12 @@ void TestChipRAM(void)
 
     chip = AllocMem(256, MEMF_CHIP);
     if (!chip) {
-        printf("Could not allocate Chip RAM\r\n");
+        printf("Could not allocate Chip RAM\n");
         return;
     }
 
     time_ns = MeasureAccess((volatile UBYTE *)chip);
-    printf("Chip RAM: %lu ns\r\n", (unsigned long)time_ns);
+    printf("Chip RAM: %lu ns\n", (unsigned long)time_ns);
 
     FreeMem(chip, 256);
 }
@@ -192,17 +192,17 @@ int main(void)
         return 10;
     }
 
-    printf("PCMCIA Memory Access Timing Benchmark\r\n");
-    printf("=====================================\r\n\r\n");
+    printf("PCMCIA Memory Access Timing Benchmark\n");
+    printf("=====================================\n\n");
 
     /* Measure Chip RAM baseline */
     TestChipRAM();
-    printf("\r\n");
+    printf("\n");
 
     /* Print table header with Gayle modes */
-    printf("               Gayle timing (access time in ns)\r\n");
-    printf("Memory Type    250ns   150ns   100ns   720ns\r\n");
-    printf("-------------- ------  ------  ------  ------\r\n");
+    printf("               Gayle timing (access time in ns)\n");
+    printf("Memory Type    250ns   150ns   100ns   720ns\n");
+    printf("-------------- ------  ------  ------  ------\n");
 
     /* Test PCMCIA at different address ranges:
      * - Common Memory ($600000): Main data area, used for disk I/O
@@ -214,10 +214,10 @@ int main(void)
     TestPCMCIA("Attrib $A00k", (volatile UBYTE *)PCMCIA_ATTR);
     TestPCMCIA("Attrib $A01k", (volatile UBYTE *)(PCMCIA_ATTR + 0x1000));
 
-    printf("\r\nNotes:\r\n");
-    printf("- Common Memory: Used for data transfer (disk I/O)\r\n");
-    printf("- Attrib Memory: Card configuration (CIS tuples)\r\n");
-    printf("- Even/Odd: Tests byte alignment effects\r\n");
+    printf("\nNotes:\n");
+    printf("- Common Memory: Used for data transfer (disk I/O)\n");
+    printf("- Attrib Memory: Card configuration (CIS tuples)\n");
+    printf("- Even/Odd: Tests byte alignment effects\n");
 
     CloseTimer();
     return 0;

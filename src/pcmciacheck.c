@@ -214,7 +214,7 @@ void LogPatternTest(void)
     *LogPtr++ = (modes >> 8) & 0xFF;
     *LogPtr++ = modes & 0xFF;
 
-    printf("  Pattern test modes: 0x%04X\r\n", modes);
+    printf("  Pattern test modes: 0x%04X\n", modes);
 }
 
 /*
@@ -610,7 +610,7 @@ int TestReadModes(int *working_mode)
 
         ok = IdentifyRead(mode, LogPtr, &drq_after);
         if (!ok) {
-            printf(" NO DATA (timeout or DRQ never set)\r\n");
+            printf(" NO DATA (timeout or DRQ never set)\n");
             LogPtr = chunk_start;
             WriteChunkHeader(chunk_id, 0);
             continue;
@@ -654,7 +654,7 @@ int TestReadModes(int *working_mode)
             printf(" - WARNING: multi-sector issue detected");
         }
 
-        printf("\r\n");
+        printf("\n");
     }
 
     if (*working_mode < 0) {
@@ -882,7 +882,7 @@ int TestReadStability(int runs)
     if (runs < STAB_RUNS_MIN) runs = STAB_RUNS_MIN;
     if (runs > STAB_RUNS_MAX) runs = STAB_RUNS_MAX;
 
-    printf("Testing IDENTIFY read stability (%d runs per mode)...\r\n", runs);
+    printf("Testing IDENTIFY read stability (%d runs per mode)...\n", runs);
 
     for (mode = 0; mode < 5; mode++) {
         StabResult *r = &res;
@@ -902,11 +902,11 @@ int TestReadStability(int runs)
 
         switch (verdict) {
         case STAB_NODATA:
-            printf("NO DATA\r\n");
+            printf("NO DATA\n");
             break;
 
         case STAB_ZERO:
-            printf("NOT USABLE (all zeros, nothing was read)\r\n");
+            printf("NOT USABLE (all zeros, nothing was read)\n");
             break;
 
         case STAB_STUCK:
@@ -916,40 +916,40 @@ int TestReadStability(int runs)
              * it reports the word before the byte swap. The swapped
              * value is the one that looks like ATA data to a reader.
              */
-            printf("STUCK     repeated pattern 0x%04X (ATA 0x%04X), %d repeated word(s)\r\n",
+            printf("STUCK     repeated pattern 0x%04X (ATA 0x%04X), %d repeated word(s)\n",
                    r->stuck_value,
                    (UWORD)((r->stuck_value << 8) | (r->stuck_value >> 8)),
                    (int)r->repeats);
             break;
 
         case STAB_STABLE:
-            printf("STABLE    %d/%d identical, xor %04X, %d repeated word(s)\r\n",
+            printf("STABLE    %d/%d identical, xor %04X, %d repeated word(s)\n",
                    r->identical, runs, r->cks[0], (int)r->repeats);
             break;
 
         default:
-            printf("UNSTABLE\r\n");
-            printf("     %d/%d read, %d/%d identical, %d distinct checksum(s)\r\n",
+            printf("UNSTABLE\n");
+            printf("     %d/%d read, %d/%d identical, %d distinct checksum(s)\n",
                    r->read_ok, runs, r->identical, r->read_ok, r->distinct);
             if (r->first_diff >= 0) {
-                printf("     first difference at word %d, up to %d of %d words differ\r\n",
+                printf("     first difference at word %d, up to %d of %d words differ\n",
                        r->first_diff, r->worst_differ, IDENTIFY_BYTES / 2);
             }
-            printf("     %d repeated word(s) in the reference block\r\n",
+            printf("     %d repeated word(s) in the reference block\n",
                    (int)r->repeats);
             printf("     xor:");
             for (i = 0; i < runs; i++) {
                 if (r->run_ok[i]) printf(" %04X", r->cks[i]);
                 else              printf(" ----");
             }
-            printf("\r\n");
+            printf("\n");
             break;
         }
 
     }
 
     if (used_mode < 0) {
-        printf("  No mode delivered a block.\r\n");
+        printf("  No mode delivered a block.\n");
         return 1;
     }
 
@@ -959,23 +959,23 @@ int TestReadStability(int runs)
      * last, so a failure in a later mode is never reached once an
      * earlier one works, and must not be reported as a bad card.
      */
-    printf("  Driver uses mode %d: %s\r\n", used_mode,
+    printf("  Driver uses mode %d: %s\n", used_mode,
            used_verdict == STAB_STABLE ? "stable" : "NOT stable");
 
     if (used_verdict == STAB_STABLE) {
         if (bad_modes) {
-            printf("  %d other mode(s) are not usable here, which does not\r\n",
+            printf("  %d other mode(s) are not usable here, which does not\n",
                    bad_modes);
-            printf("  affect the card: the driver never falls back to them.\r\n");
+            printf("  affect the card: the driver never falls back to them.\n");
         }
     } else if (used_verdict == STAB_STUCK) {
-        printf("  The card is not readable in this setup; the driver\r\n");
-        printf("  rejects it with \"FAILED (repeated pattern)\".\r\n");
+        printf("  The card is not readable in this setup; the driver\n");
+        printf("  rejects it with \"FAILED (repeated pattern)\".\n");
     } else if (used_verdict == STAB_UNSTABLE) {
-        printf("  The card's data path is not bit-stable in this setup;\r\n");
-        printf("  the driver rejects it with \"FAILED (data mismatch)\".\r\n");
+        printf("  The card's data path is not bit-stable in this setup;\n");
+        printf("  the driver rejects it with \"FAILED (data mismatch)\".\n");
     } else {
-        printf("  That mode returned no usable data.\r\n");
+        printf("  That mode returned no usable data.\n");
     }
 
     return used_verdict == STAB_STABLE ? 0 : 1;
@@ -1011,7 +1011,7 @@ int SweepReadStability(int runs)
     if (runs < STAB_RUNS_MIN) runs = STAB_RUNS_MIN;
     if (runs > STAB_RUNS_MAX) runs = STAB_RUNS_MAX;
 
-    printf("Testing IDENTIFY read stability at each Gayle timing (%d runs per mode)...\r\n",
+    printf("Testing IDENTIFY read stability at each Gayle timing (%d runs per mode)...\n",
            runs);
 
     /*
@@ -1025,7 +1025,7 @@ int SweepReadStability(int runs)
         if (speed + 1 < GAYLE_SPEED_COUNT) printf("  %-6s", name);
         else                               printf("  %s", name);
     }
-    printf("\r\n");
+    printf("\n");
 
     /*
      * Loop modes inside speeds, so the timing is programmed once per
@@ -1074,10 +1074,10 @@ int SweepReadStability(int runs)
                     printf("  %s", v);
             }
             if (mode == used_mode) printf("  <- driver uses this");
-            printf("\r\n");
+            printf("\n");
         }
 
-        printf("  Gayle timing restored to %s\r\n", GayleCurrentLabel());
+        printf("  Gayle timing restored to %s\n", GayleCurrentLabel());
 
         /*
          * Only the driver's own mode decides whether the card is usable,
@@ -1088,7 +1088,7 @@ int SweepReadStability(int runs)
             int bad = 0;
 
             if (used_mode < 0) {
-                printf("  No mode delivered a block at any timing.\r\n");
+                printf("  No mode delivered a block at any timing.\n");
                 return 1;
             }
 
@@ -1098,14 +1098,14 @@ int SweepReadStability(int runs)
             }
 
             if (bad == 0) {
-                printf("  Mode %d is stable at every timing.\r\n", used_mode);
+                printf("  Mode %d is stable at every timing.\n", used_mode);
                 return 0;
             }
 
             if (good == 0) {
-                printf("  Mode %d is stable at no timing, so the timing is not\r\n",
+                printf("  Mode %d is stable at no timing, so the timing is not\n",
                        used_mode);
-                printf("  what is wrong with this card.\r\n");
+                printf("  what is wrong with this card.\n");
                 return 1;
             }
 
@@ -1115,9 +1115,9 @@ int SweepReadStability(int runs)
                     printf(" %s", GayleSpeedName(GayleSpeeds[speed]));
                 }
             }
-            printf("\r\n");
-            printf("  The card cannot follow the faster settings. Note the\r\n");
-            printf("  driver programs the timing itself, this cannot pin it.\r\n");
+            printf("\n");
+            printf("  The card cannot follow the faster settings. Note the\n");
+            printf("  driver programs the timing itself, this cannot pin it.\n");
             return 1;
         }
     }
@@ -1161,7 +1161,7 @@ int TestWriteModes(int read_mode)
     UBYTE *chunk_start;
     int sector;
 
-    printf("  Initializing write patterns...\r\n");
+    printf("  Initializing write patterns...\n");
     InitWritePatterns();
 
     /* Write test - write 4 sectors with different modes */
@@ -1178,11 +1178,11 @@ int TestWriteModes(int read_mode)
 
         status = WaitReady(5000);
         if (status < 0 || !CardPresent()) {
-            printf(" TIMEOUT\r\n");
+            printf(" TIMEOUT\n");
             continue;
         }
         if (!(status & STATUS_DRDY)) {
-            printf(" NOT READY\r\n");
+            printf(" NOT READY\n");
             continue;
         }
 
@@ -1191,7 +1191,7 @@ int TestWriteModes(int read_mode)
         /* Wait for DRQ */
         status = WaitReady(5000);
         if (status < 0) {
-            printf(" NO DRQ\r\n");
+            printf(" NO DRQ\n");
             continue;
         }
 
@@ -1214,7 +1214,7 @@ int TestWriteModes(int read_mode)
                 }
             }
         }
-        printf(" %lu bytes\r\n", (unsigned long)bytes_written[mode]);
+        printf(" %lu bytes\n", (unsigned long)bytes_written[mode]);
     }
 
     /* Test mode 4 (memory mapped) write */
@@ -1251,7 +1251,7 @@ int TestWriteModes(int read_mode)
         }
 
         if (status < 0) {
-            printf(" TIMEOUT\r\n");
+            printf(" TIMEOUT\n");
         } else {
             *MMAP_COMMAND = ATA_WRITE;
 
@@ -1290,7 +1290,7 @@ int TestWriteModes(int read_mode)
                     }
                 }
             }
-            printf(" %lu bytes\r\n", (unsigned long)bytes_written[4]);
+            printf(" %lu bytes\n", (unsigned long)bytes_written[4]);
         }
 
         /* Restore I/O mode config */
@@ -1298,7 +1298,7 @@ int TestWriteModes(int read_mode)
         DelayMS(1);
     }
 
-    printf("  Writing test summary...\r\n");
+    printf("  Writing test summary...\n");
     /* Write wcln chunk - bytes written per mode */
     WriteChunkHeader("wcln", 20);  /* 5 modes x 4 bytes */
     for (mode = 0; mode < 5; mode++) {
@@ -1309,7 +1309,7 @@ int TestWriteModes(int read_mode)
     }
 
     /* Read back and verify - wcda chunk */
-    printf("  Reading back 4 sectors for verification...\r\n");
+    printf("  Reading back 4 sectors for verification...\n");
     chunk_start = LogPtr;
     LogPtr += 8;  /* Reserve for header */
 
@@ -1323,7 +1323,7 @@ int TestWriteModes(int read_mode)
 
     status = WaitReady(5000);
     if (status < 0) {
-        printf("  TIMEOUT\r\n");
+        printf("  TIMEOUT\n");
     } else {
         /* Read all sectors with multi-sector protection */
         int chunks_read = 0;
@@ -1359,12 +1359,12 @@ int TestWriteModes(int read_mode)
             if (half == 1) {
                 sectors_read++;
                 if (bytes_written[wmode] != 512) {
-                    printf("    Sector %d read... not verified (write wrote %lu bytes)\r\n",
+                    printf("    Sector %d read... not verified (write wrote %lu bytes)\n",
                            sectors_read, (unsigned long)bytes_written[wmode]);
                 } else if (sector_bad == 0) {
-                    printf("    Sector %d read... OK, data matches\r\n", sectors_read);
+                    printf("    Sector %d read... OK, data matches\n", sectors_read);
                 } else {
-                    printf("    Sector %d read... MISMATCH, %d of 512 bytes differ\r\n",
+                    printf("    Sector %d read... MISMATCH, %d of 512 bytes differ\n",
                            sectors_read, sector_bad);
                 }
                 sector_bad = 0;
@@ -1376,10 +1376,10 @@ int TestWriteModes(int read_mode)
 
         /* Check for multi-sector read issue */
         if (chunks_read == 8 && (status & STATUS_DRQ)) {
-            printf("  WARNING: Multi-sector read issue detected (DRQ still set after 4 sectors)\r\n");
+            printf("  WARNING: Multi-sector read issue detected (DRQ still set after 4 sectors)\n");
         }
 
-        printf("  Verification completed (%d sectors, %d chunks)\r\n", sectors_read, chunks_read);
+        printf("  Verification completed (%d sectors, %d chunks)\n", sectors_read, chunks_read);
     }
 
     /* Write wcda chunk header */
@@ -1412,7 +1412,7 @@ int SaveLog(const char *filename)
 
     fh = Open((STRPTR)filename, MODE_NEWFILE);
     if (!fh) {
-        printf("Cannot open log file: %s\r\n", filename);
+        printf("Cannot open log file: %s\n", filename);
         return 0;
     }
 
@@ -1420,11 +1420,11 @@ int SaveLog(const char *filename)
     Close(fh);
 
     if (written != (LogPtr - LogBuffer)) {
-        printf("Write error\r\n");
+        printf("Write error\n");
         return 0;
     }
 
-    printf("Log saved: %s (%lu bytes)\r\n", filename, (unsigned long)(LogPtr - LogBuffer));
+    printf("Log saved: %s (%lu bytes)\n", filename, (unsigned long)(LogPtr - LogBuffer));
     return 1;
 }
 
@@ -1657,7 +1657,7 @@ static void DecodeDeviceInfo(int data_off, int avail)
     t = CisByte(off++);
     speed = t & 0x07;
 
-    pout("    type=0x%X (%s), wps=%d, speed=0x%X (%s)\r\n",
+    pout("    type=0x%X (%s), wps=%d, speed=0x%X (%s)\n",
            (t >> 4) & 0xF, DeviceTypeName((t >> 4) & 0xF),
            (t & 0x08) ? 1 : 0,
            speed, DeviceSpeedName(speed));
@@ -1674,9 +1674,9 @@ static void DecodeDeviceInfo(int data_off, int avail)
 
             ns = DecodeExtSpeed(e);
             if (ns) {
-                pout("    ext-speed=0x%02X (%lu ns)\r\n", (int)e, ns);
+                pout("    ext-speed=0x%02X (%lu ns)\n", (int)e, ns);
             } else {
-                pout("    ext-speed=0x%02X (reserved encoding)\r\n", (int)e);
+                pout("    ext-speed=0x%02X (reserved encoding)\n", (int)e);
             }
 
             if (!(e & 0x80)) break;
@@ -1689,7 +1689,7 @@ static void DecodeDeviceInfo(int data_off, int avail)
         ULONG units = ((sz >> 3) & 0x1F) + 1UL;
         UBYTE ucode = sz & 0x07;
         pout("    size=0x%08lX (%lu B), size_code=0x%02X  "
-               "(units=%lu, unit=0x%X=%s)\r\n",
+               "(units=%lu, unit=0x%X=%s)\n",
                nb, nb, (int)sz, units, (int)ucode, unit_name[ucode]);
     }
 }
@@ -1720,7 +1720,7 @@ static void DecodeDeviceOC(int data_off, UBYTE link)
         UBYTE oc = CisByte(off++);
         used++;
 
-        pout("    other-cond=0x%02X (Vcc=%s, mwait=%d)\r\n",
+        pout("    other-cond=0x%02X (Vcc=%s, mwait=%d)\n",
                (int)oc, vcc_name[oc & 0x03], (oc & 0x04) ? 1 : 0);
 
         if (!(oc & 0x80)) break;
@@ -1734,9 +1734,9 @@ static void DecodeFuncID(int data_off, UBYTE link)
     UBYTE id;
     if (link < 1) return;
     id = CisByte(data_off);
-    pout("    function=0x%02X (%s)\r\n", id, FuncIDName(id));
+    pout("    function=0x%02X (%s)\n", id, FuncIDName(id));
     if (link >= 2)
-        pout("    sysinit=0x%02X\r\n", CisByte(data_off + 1));
+        pout("    sysinit=0x%02X\n", CisByte(data_off + 1));
 }
 
 static void DecodeFuncE(int data_off, UBYTE link)
@@ -1744,7 +1744,7 @@ static void DecodeFuncE(int data_off, UBYTE link)
     UBYTE type, iface;
     const char *iname;
     if (link < 1) {
-        pout("    (no data)\r\n");
+        pout("    (no data)\n");
         return;
     }
     type = CisByte(data_off);
@@ -1756,7 +1756,7 @@ static void DecodeFuncE(int data_off, UBYTE link)
         else if (iface == 1) iname = "IDE";
         pout(" (Disk Interface), interface=0x%02X (%s)", iface, iname);
     }
-    pout("\r\n");
+    pout("\n");
 }
 
 static void DecodeVers1(int data_off, UBYTE link)
@@ -1764,7 +1764,7 @@ static void DecodeVers1(int data_off, UBYTE link)
     int i, line, in_str;
     UBYTE c;
     if (link < 2) return;
-    pout("    major=%d, minor=%d\r\n",
+    pout("    major=%d, minor=%d\n",
            (int)CisByte(data_off), (int)CisByte(data_off + 1));
     line = 0;
     i = 2;
@@ -1781,7 +1781,7 @@ static void DecodeVers1(int data_off, UBYTE link)
                 pout("\\x%02X", c);
             }
         }
-        pout("\"\r\n");
+        pout("\"\n");
         if (i < link && CisByte(data_off + i - 1) == 0xFF) break;
     }
 }
@@ -1792,7 +1792,7 @@ static void DecodeManfID(int data_off, UBYTE link)
     if (link < 4) return;
     mfg  = CisByte(data_off) | (CisByte(data_off + 1) << 8);
     prod = CisByte(data_off + 2) | (CisByte(data_off + 3) << 8);
-    pout("    manufacturer=0x%04X, product=0x%04X\r\n", mfg, prod);
+    pout("    manufacturer=0x%04X, product=0x%04X\n", mfg, prod);
 }
 
 static void HexDumpTuple(int data_off, UBYTE link)
@@ -1801,11 +1801,11 @@ static void HexDumpTuple(int data_off, UBYTE link)
     if (link == 0) return;
     pout("    data:");
     for (i = 0; i < link && i < 32; i++) {
-        if (i > 0 && (i % 16) == 0) pout("\r\n         ");
+        if (i > 0 && (i % 16) == 0) pout("\n         ");
         pout(" %02X", CisByte(data_off + i));
     }
     if (link > 32) pout(" ...");
-    pout("\r\n");
+    pout("\n");
 }
 
 /* --------------------------------------------------------------------
@@ -2015,13 +2015,13 @@ static void AtapiReportEntries(const struct AtapiScan *s)
     int i, k;
 
     if (!s->cfg_base) {
-        pout("CIS config: none, the card declares no option register\r\n");
+        pout("CIS config: none, the card declares no option register\n");
         return;
     }
-    pout("CIS config: COR 0x%03X, highest index %d, register mask 0x%02X\r\n",
+    pout("CIS config: COR 0x%03X, highest index %d, register mask 0x%02X\n",
          (unsigned)s->cfg_base, s->cfg_last, (unsigned)s->cfg_mask);
     if (!s->nent) {
-        pout("  no configuration entry after it\r\n");
+        pout("  no configuration entry after it\n");
         return;
     }
     for (i = 0; i < s->nent; ++i) {
@@ -2037,7 +2037,7 @@ static void AtapiReportEntries(const struct AtapiScan *s)
         for (k = 0; k < e->nranges; ++k)
             pout(" 0x%03X+%d", (unsigned)e->addr[k], (int)e->regs[k]);
         if (e->irq >= 0) pout("  IRQ %d", e->irq);
-        pout("\r\n");
+        pout("\n");
     }
 }
 
@@ -2046,13 +2046,13 @@ static void ReportConfig(void)
     struct AtapiScan s;
 
     AtapiScanCIS(&s);
-    pout("\r\n");
+    pout("\n");
     if (!s.parsed && !s.bad_entry) {
-        pout("CIS config: does not parse\r\n");
+        pout("CIS config: does not parse\n");
         return;
     }
     AtapiReportEntries(&s);
-    if (s.bad_entry) pout("  the next entry does not parse; CIS read stops there\r\n");
+    if (s.bad_entry) pout("  the next entry does not parse; CIS read stops there\n");
 }
 
 /*
@@ -2077,31 +2077,31 @@ int DumpCIS(int speed_ns)
     UBYTE want;
 
     if (!CardPresent()) {
-        pout("No card inserted (GAYLE CCDET clear).\r\n");
+        pout("No card inserted (GAYLE CCDET clear).\n");
         return 5;
     }
 
     want = GayleSpeedBits(speed_ns ? speed_ns : 720);
     if (want == 0xFF) {
-        pout("Invalid Gayle PCMCIA speed %d (use 100, 150, 250, or 720)\r\n",
+        pout("Invalid Gayle PCMCIA speed %d (use 100, 150, 250, or 720)\n",
                speed_ns);
         return 5;
     }
     CisLoad(want, cis_buf);
 
     page_begin();
-    pout("CIS read at Gayle PCMCIA timing %s%s\r\n",
+    pout("CIS read at Gayle PCMCIA timing %s%s\n",
            GayleSpeedLabel(want), speed_ns ? " (override)" : "");
     ReportConfig();             /* the summary first, the tuples below */
-    pout("\r\nCIS dump (read from PCMCIA attribute memory at 0x%08lX):\r\n",
+    pout("\nCIS dump (read from PCMCIA attribute memory at 0x%08lX):\n",
            (ULONG)PCMCIA_ATTR);
-    pout("\r\n");
+    pout("\n");
 
     while (pos < 512 && count < 32) {
         code = CisByte(pos);
 
         if (code == CISTPL_END) {
-            pout("0x%03X: 0x%02X %s\r\n", pos, code, TupleName(code));
+            pout("0x%03X: 0x%02X %s\n", pos, code, TupleName(code));
             goto done;
         }
         if (code == CISTPL_NULL) {
@@ -2110,7 +2110,7 @@ int DumpCIS(int speed_ns)
         }
 
         link = CisByte(pos + 1);
-        pout("0x%03X: 0x%02X %s (length=%d)\r\n",
+        pout("0x%03X: 0x%02X %s (length=%d)\n",
                pos, (int)code, TupleName(code), (int)link);
 
         switch (code) {
@@ -2142,7 +2142,7 @@ int DumpCIS(int speed_ns)
         count++;
     }
 
-    pout("\r\n(end of dump - %s)\r\n",
+    pout("\n(end of dump - %s)\n",
            count >= 32 ? "tuple limit reached" : "buffer limit reached");
 
 done:
@@ -2169,21 +2169,21 @@ int IdentifyStability(int speed, int sweep, int runs)
     int rc;
 
     if (!OpenTimer()) {
-        printf("Cannot open timer.device\r\n");
+        printf("Cannot open timer.device\n");
         return 10;
     }
 
     if (!CardPresent()) {
-        printf("No card inserted.\r\n");
+        printf("No card inserted.\n");
         CloseTimer();
         return 5;
     }
 
-    printf("pcmciacheck " STR(VERSION) " - IDENTIFY read stability\r\n");
+    printf("pcmciacheck " STR(VERSION) " - IDENTIFY read stability\n");
 
     gayle_saved = GayleSetSpeed(speed);
     if (!sweep) {
-        printf("Gayle PCMCIA timing: %s%s\r\n", GayleCurrentLabel(),
+        printf("Gayle PCMCIA timing: %s%s\n", GayleCurrentLabel(),
                speed ? " (override)" : " (current)");
     }
 
@@ -2211,30 +2211,30 @@ int main(int argc, char **argv)
     int i;
 
     if (argc < 2) {
-        printf("pcmciacheck " STR(VERSION) " - PCMCIA/CF Hardware Test Tool\r\n");
-        printf("Usage: pcmciacheck [-w] [-s <speed>] <logfile>\r\n");
-        printf("       pcmciacheck -identify [speed] [-r <runs>]\r\n");
-        printf("       pcmciacheck -cis [speed]\r\n");
-        printf("\r\n");
-        printf("Tests different data access modes and creates diagnostic log.\r\n");
-        printf("  -w           Enable write testing (WARNING: may overwrite data on sectors 1-5)\r\n");
-        printf("  -s <speed>   Gayle PCMCIA timing for the run: 100|150|250|720, or\r\n");
-        printf("               'all' to repeat the capture at each of them and log\r\n");
-        printf("               every timing. Not combinable with -w. Restored on exit.\r\n");
-        printf("               Diagnostic only, the driver programs this register\r\n");
-        printf("               itself via card.resource.\r\n");
-        printf("\r\n");
-        printf("  -identify [speed] [-r <runs>]\r\n");
-        printf("               Read IDENTIFY several times per mode and compare, the\r\n");
-        printf("               check the driver makes before accepting a card. Console\r\n");
-        printf("               only, no log file. Optional speed = 100|150|250|720, or\r\n");
-        printf("               'all' to test at each of them and print a matrix.\r\n");
-        printf("               -r sets the runs per mode (%d..%d, default %d).\r\n",
+        printf("pcmciacheck " STR(VERSION) " - PCMCIA/CF Hardware Test Tool\n");
+        printf("Usage: pcmciacheck [-w] [-s <speed>] <logfile>\n");
+        printf("       pcmciacheck -identify [speed] [-r <runs>]\n");
+        printf("       pcmciacheck -cis [speed]\n");
+        printf("\n");
+        printf("Tests different data access modes and creates diagnostic log.\n");
+        printf("  -w           Enable write testing (WARNING: may overwrite data on sectors 1-5)\n");
+        printf("  -s <speed>   Gayle PCMCIA timing for the run: 100|150|250|720, or\n");
+        printf("               'all' to repeat the capture at each of them and log\n");
+        printf("               every timing. Not combinable with -w. Restored on exit.\n");
+        printf("               Diagnostic only, the driver programs this register\n");
+        printf("               itself via card.resource.\n");
+        printf("\n");
+        printf("  -identify [speed] [-r <runs>]\n");
+        printf("               Read IDENTIFY several times per mode and compare, the\n");
+        printf("               check the driver makes before accepting a card. Console\n");
+        printf("               only, no log file. Optional speed = 100|150|250|720, or\n");
+        printf("               'all' to test at each of them and print a matrix.\n");
+        printf("               -r sets the runs per mode (%d..%d, default %d).\n",
                STAB_RUNS_MIN, STAB_RUNS_MAX, STAB_RUNS_DEFAULT);
-        printf("\r\n");
-        printf("  -cis [speed] Dump PCMCIA CIS tuples and configuration entries, then exit.\r\n");
-        printf("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\r\n");
-        printf("               memory timing for the scan (default: 720).\r\n");
+        printf("\n");
+        printf("  -cis [speed] Dump PCMCIA CIS tuples and configuration entries, then exit.\n");
+        printf("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\n");
+        printf("               memory timing for the scan (default: 720).\n");
         return 5;
     }
 
@@ -2247,7 +2247,7 @@ int main(int argc, char **argv)
             else if (strcmp(argv[2], "250") == 0) speed = 250;
             else if (strcmp(argv[2], "720") == 0) speed = 720;
             else {
-                printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250, or 720)\r\n",
+                printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250, or 720)\n",
                        argv[2]);
                 return 5;
             }
@@ -2264,12 +2264,12 @@ int main(int argc, char **argv)
         for (i = 2; i < argc; i++) {
             if (strcmp(argv[i], "-r") == 0) {
                 if (i + 1 >= argc) {
-                    printf("Error: -r needs a run count\r\n");
+                    printf("Error: -r needs a run count\n");
                     return 5;
                 }
                 runs = atoi(argv[++i]);
                 if (runs < STAB_RUNS_MIN || runs > STAB_RUNS_MAX) {
-                    printf("Invalid run count '%s' (use %d..%d)\r\n",
+                    printf("Invalid run count '%s' (use %d..%d)\n",
                            argv[i], STAB_RUNS_MIN, STAB_RUNS_MAX);
                     return 5;
                 }
@@ -2282,7 +2282,7 @@ int main(int argc, char **argv)
                     if (GayleSpeeds[j] == speed) break;
                 }
                 if (j == GAYLE_SPEED_COUNT) {
-                    printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250, 720 or all)\r\n",
+                    printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250, 720 or all)\n",
                            argv[i]);
                     return 5;
                 }
@@ -2298,7 +2298,7 @@ int main(int argc, char **argv)
             enable_write_test = 1;
         } else if (strcmp(argv[i], "-s") == 0) {
             if (i + 1 >= argc) {
-                printf("Error: -s needs a speed\r\n");
+                printf("Error: -s needs a speed\n");
                 return 5;
             }
             i++;
@@ -2311,7 +2311,7 @@ int main(int argc, char **argv)
                     if (GayleSpeeds[j] == gayle_speed) break;
                 }
                 if (j == GAYLE_SPEED_COUNT) {
-                    printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250 or 720)\r\n",
+                    printf("Invalid Gayle PCMCIA speed '%s' (use 100, 150, 250 or 720)\n",
                            argv[i]);
                     return 5;
                 }
@@ -2322,10 +2322,10 @@ int main(int argc, char **argv)
     }
 
     if (logfile == NULL) {
-        printf("Error: No logfile specified\r\n");
-        printf("Usage: pcmciacheck [-w] [-s <speed>] <logfile>\r\n");
-        printf("       pcmciacheck -identify [speed] [-r <runs>]\r\n");
-        printf("       pcmciacheck -cis [speed]\r\n");
+        printf("Error: No logfile specified\n");
+        printf("Usage: pcmciacheck [-w] [-s <speed>] <logfile>\n");
+        printf("       pcmciacheck -identify [speed] [-r <runs>]\n");
+        printf("       pcmciacheck -cis [speed]\n");
         return 5;
     }
 
@@ -2335,19 +2335,19 @@ int main(int argc, char **argv)
      * verification result ambiguous.
      */
     if (enable_write_test && gayle_sweep) {
-        printf("-w cannot be combined with -s all: the write test would rewrite\r\n");
-        printf("sectors 1-5 at each timing. Run them separately.\r\n");
+        printf("-w cannot be combined with -s all: the write test would rewrite\n");
+        printf("sectors 1-5 at each timing. Run them separately.\n");
         return 5;
     }
 
     if (!OpenTimer()) {
-        printf("Cannot open timer.device\r\n");
+        printf("Cannot open timer.device\n");
         return 10;
     }
 
     /* Check for card */
     if (!CardPresent()) {
-        printf("No card inserted.\r\n");
+        printf("No card inserted.\n");
         CloseTimer();
         return 5;
     }
@@ -2355,14 +2355,14 @@ int main(int argc, char **argv)
     /* Allocate log buffer */
     LogBuffer = AllocMem(LOG_SIZE, MEMF_PUBLIC | MEMF_CLEAR);
     if (!LogBuffer) {
-        printf("Cannot allocate memory\r\n");
+        printf("Cannot allocate memory\n");
         CloseTimer();
         return 10;
     }
 
     LogPtr = LogBuffer;
 
-    printf("pcmciacheck " STR(VERSION) " - Testing card...\r\n");
+    printf("pcmciacheck " STR(VERSION) " - Testing card...\n");
 
     /*
      * Gayle PCMCIA timing. Pinned for the whole run when -s <speed> was
@@ -2370,7 +2370,7 @@ int main(int argc, char **argv)
      * and restores it itself.
      */
     gayle_saved = GayleSetSpeed(gayle_speed);
-    printf("Gayle PCMCIA timing: %s%s\r\n", GayleCurrentLabel(),
+    printf("Gayle PCMCIA timing: %s%s\n", GayleCurrentLabel(),
            gayle_speed ? " (override)" : " (current)");
 
     /* Write IFF header */
@@ -2403,7 +2403,7 @@ int main(int argc, char **argv)
             this_speed = GayleSpeeds[i];
             GayleSetSpeed(this_speed);
             DelayMS(1);
-            printf("\r\nGayle PCMCIA timing: %s (override)\r\n",
+            printf("\nGayle PCMCIA timing: %s (override)\n",
                    GayleCurrentLabel());
         }
 
@@ -2415,9 +2415,9 @@ int main(int argc, char **argv)
         PutLogWord((UWORD)GayleCurrentSpeed());
         PutLogWord((UWORD)(this_speed ? 1 : 0));
 
-        printf("Testing read modes...\r\n");
+        printf("Testing read modes...\n");
         if (TestReadModes(&working_read_mode)) {
-            printf("  Working read mode: %d\r\n", working_read_mode);
+            printf("  Working read mode: %d\n", working_read_mode);
         } else {
             /*
              * Nothing plausible came back in any mode. Saying "working
@@ -2425,32 +2425,32 @@ int main(int argc, char **argv)
              * carried forward so the remaining tests have something to
              * use.
              */
-            printf("  Working read mode: none, no mode returned plausible data\r\n");
-            printf("  (using mode %d for the remaining tests)\r\n", working_read_mode);
+            printf("  Working read mode: none, no mode returned plausible data\n");
+            printf("  (using mode %d for the remaining tests)\n", working_read_mode);
         }
 
-        printf("Testing transfer mode patterns (cfd.s style)...\r\n");
+        printf("Testing transfer mode patterns (cfd.s style)...\n");
         LogPatternTest();
     }
 
     if (enable_write_test) {
-        printf("Testing write modes...\r\n");
+        printf("Testing write modes...\n");
         TestWriteModes(working_read_mode);
-        printf("Write testing completed.\r\n");
+        printf("Write testing completed.\n");
     } else {
-        printf("Write testing disabled (use -w to enable)\r\n");
+        printf("Write testing disabled (use -w to enable)\n");
     }
 
     /* Restore card config and Gayle timing */
-    printf("Restoring card configuration...\r\n");
+    printf("Restoring card configuration...\n");
     *PCMCIA_CONFIG = orig_config;
     GayleRestore(gayle_saved);
 
     /* Save log */
-    printf("Saving log file...\r\n");
+    printf("Saving log file...\n");
     SaveLog(logfile);
 
-    printf("Test completed successfully.\r\n");
+    printf("Test completed successfully.\n");
     FreeMem(LogBuffer, LOG_SIZE);
     CloseTimer();
 
