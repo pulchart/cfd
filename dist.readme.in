@@ -22,6 +22,7 @@ WHAT'S NEW (@DATE@)
 * pcmciacheck -cis lists every I/O range of a configuration entry, not
   only the first four, and the entries before one that does not parse.
 * pcmciacheck, pcmciaspeed: output lines end in LF alone.
+* pcmciacheck: the help pauses at each screenful, like the reports.
 
 FEATURES
 ========

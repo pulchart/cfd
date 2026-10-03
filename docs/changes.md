@@ -19,6 +19,7 @@ _Components in this release_:
 - Improved paging: in a narrow window, long lines no longer scroll the listing away before it pauses.
 - `-cis` lists every I/O range of a configuration entry, not only the first four.
 - `-cis` lists the configuration entries before one that does not parse, instead of none.
+- The help pauses at each screenful, like the reports.
 - Output lines end in LF alone.
 
 ##### 'pcmciaspeed 1.37'

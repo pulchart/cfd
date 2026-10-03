@@ -76,6 +76,7 @@
   * @{fg shine}-cis@{fg text} lists every I/O range of a configuration entry, not only the first four.
   * @{fg shine}-cis@{fg text} lists the configuration entries before one that does not parse, instead
     of none.
+  * The help pauses at each screenful, like the reports.
   * Output lines end in LF alone.
 
 @{b}'pcmciaspeed 1.37'@{ub}

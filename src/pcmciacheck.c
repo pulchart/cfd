@@ -2211,30 +2211,32 @@ int main(int argc, char **argv)
     int i;
 
     if (argc < 2) {
-        printf("pcmciacheck " STR(VERSION) " - PCMCIA/CF Hardware Test Tool\n");
-        printf("Usage: pcmciacheck [-w] [-s <speed>] <logfile>\n");
-        printf("       pcmciacheck -identify [speed] [-r <runs>]\n");
-        printf("       pcmciacheck -cis [speed]\n");
-        printf("\n");
-        printf("Tests different data access modes and creates diagnostic log.\n");
-        printf("  -w           Enable write testing (WARNING: may overwrite data on sectors 1-5)\n");
-        printf("  -s <speed>   Gayle PCMCIA timing for the run: 100|150|250|720, or\n");
-        printf("               'all' to repeat the capture at each of them and log\n");
-        printf("               every timing. Not combinable with -w. Restored on exit.\n");
-        printf("               Diagnostic only, the driver programs this register\n");
-        printf("               itself via card.resource.\n");
-        printf("\n");
-        printf("  -identify [speed] [-r <runs>]\n");
-        printf("               Read IDENTIFY several times per mode and compare, the\n");
-        printf("               check the driver makes before accepting a card. Console\n");
-        printf("               only, no log file. Optional speed = 100|150|250|720, or\n");
-        printf("               'all' to test at each of them and print a matrix.\n");
-        printf("               -r sets the runs per mode (%d..%d, default %d).\n",
-               STAB_RUNS_MIN, STAB_RUNS_MAX, STAB_RUNS_DEFAULT);
-        printf("\n");
-        printf("  -cis [speed] Dump PCMCIA CIS tuples and configuration entries, then exit.\n");
-        printf("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\n");
-        printf("               memory timing for the scan (default: 720).\n");
+        page_begin();
+        pout("pcmciacheck " STR(VERSION) " - PCMCIA/CF Hardware Test Tool\n");
+        pout("Usage: pcmciacheck [-w] [-s <speed>] <logfile>\n");
+        pout("       pcmciacheck -identify [speed] [-r <runs>]\n");
+        pout("       pcmciacheck -cis [speed]\n");
+        pout("\n");
+        pout("Tests different data access modes and creates diagnostic log.\n");
+        pout("  -w           Enable write testing (WARNING: may overwrite data on sectors 1-5)\n");
+        pout("  -s <speed>   Gayle PCMCIA timing for the run: 100|150|250|720, or\n");
+        pout("               'all' to repeat the capture at each of them and log\n");
+        pout("               every timing. Not combinable with -w. Restored on exit.\n");
+        pout("               Diagnostic only, the driver programs this register\n");
+        pout("               itself via card.resource.\n");
+        pout("\n");
+        pout("  -identify [speed] [-r <runs>]\n");
+        pout("               Read IDENTIFY several times per mode and compare, the\n");
+        pout("               check the driver makes before accepting a card. Console\n");
+        pout("               only, no log file. Optional speed = 100|150|250|720, or\n");
+        pout("               'all' to test at each of them and print a matrix.\n");
+        pout("               -r sets the runs per mode (%d..%d, default %d).\n",
+             STAB_RUNS_MIN, STAB_RUNS_MAX, STAB_RUNS_DEFAULT);
+        pout("\n");
+        pout("  -cis [speed] Dump PCMCIA CIS tuples and configuration entries, then exit.\n");
+        pout("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\n");
+        pout("               memory timing for the scan (default: 720).\n");
+        page_end();
         return 5;
     }
 
