@@ -17,7 +17,8 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-TBD
+* Improved paging in CFInfo and pcmciacheck: in a narrow window, long
+  lines no longer scroll the listing away before it pauses.
 
 FEATURES
 ========
