@@ -1814,7 +1814,7 @@ static void HexDumpTuple(int data_off, UBYTE link)
  */
 #define ATAPI_CISMAX   512
 #define ATAPI_MAXENT   8        /* entries reported; cards offer two or three */
-#define ATAPI_MAXRANGE 4
+#define ATAPI_MAXRANGE 16       /* TPCE_IO describes at most 16 ranges */
 
 /* One CISTPL_CFTABLE_ENTRY as the card describes it. Reported whole: which
  * entry a foreign card offers is exactly what we cannot guess from here. */
@@ -1837,6 +1837,7 @@ struct AtapiScan {
     struct AtapiEntry ent[ATAPI_MAXENT];
     int   nent;
     int   parsed;               /* the chain reached a proper END */
+    int   bad_entry;            /* stopped at an entry that does not parse */
 };
 
 static int AtapiTake(int *cur, int limit, int *val)
@@ -1959,6 +1960,7 @@ static void AtapiScanRaw(struct AtapiScan *s)
     s->cfg_base = 0;
     s->nent = 0;
     s->parsed = 0;
+    s->bad_entry = 0;
 
     while (pos < ATAPI_CISMAX) {
         code = CisByte(pos);
@@ -1988,7 +1990,10 @@ static void AtapiScanRaw(struct AtapiScan *s)
             s->cfg_base = (UWORD)base;
         } else if (code == CISTPL_CFTABLE_ENTRY && s->cfg_base != 0) {
             struct AtapiEntry e;
-            if (!AtapiEntry(data, next, s->cfg_last, &iface_state, &e)) return;
+            if (!AtapiEntry(data, next, s->cfg_last, &iface_state, &e)) {
+                s->bad_entry = 1;
+                return;
+            }
             if (s->nent < ATAPI_MAXENT) s->ent[s->nent++] = e;
         }
         pos = next;
@@ -2000,7 +2005,7 @@ static void AtapiScanRaw(struct AtapiScan *s)
 static void AtapiScanCIS(struct AtapiScan *s)
 {
     AtapiScanRaw(s);
-    if (s->parsed) return;
+    if (s->parsed || s->bad_entry) return;
     s->cfg_base = 0;
 }
 
@@ -2042,11 +2047,12 @@ static void ReportConfig(void)
 
     AtapiScanCIS(&s);
     pout("\r\n");
-    if (!s.parsed) {
+    if (!s.parsed && !s.bad_entry) {
         pout("CIS config: does not parse\r\n");
         return;
     }
     AtapiReportEntries(&s);
+    if (s.bad_entry) pout("  the next entry does not parse; CIS read stops there\r\n");
 }
 
 /*
@@ -2228,7 +2234,7 @@ int main(int argc, char **argv)
         printf("\r\n");
         printf("  -cis [speed] Dump PCMCIA CIS tuples and configuration entries, then exit.\r\n");
         printf("               Optional speed = 100|150|250|720 overrides Gayle PCMCIA\r\n");
-        printf("               memory timing for the scan (default: current setting).\r\n");
+        printf("               memory timing for the scan (default: 720).\r\n");
         return 5;
     }
 

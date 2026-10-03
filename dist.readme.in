@@ -19,6 +19,8 @@ WHAT'S NEW (@DATE@)
 
 * Improved paging in CFInfo and pcmciacheck: in a narrow window, long
   lines no longer scroll the listing away before it pauses.
+* pcmciacheck -cis lists every I/O range of a configuration entry, not
+  only the first four, and the entries before one that does not parse.
 
 FEATURES
 ========

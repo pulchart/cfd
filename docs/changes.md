@@ -17,6 +17,8 @@ _Components in this release_:
 
 ##### 'pcmciacheck 2.2'
 - Improved paging: in a narrow window, long lines no longer scroll the listing away before it pauses.
+- `-cis` lists every I/O range of a configuration entry, not only the first four.
+- `-cis` lists the configuration entries before one that does not parse, instead of none.
 
 ## 20260930
 
