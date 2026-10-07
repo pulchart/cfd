@@ -70,6 +70,8 @@ These settings only take effect on the next mount:
 
 The config is read fresh on every card insert **and** every card removal, so a change applies to the next card you insert or pull, with no reboot and no rebuild. Because removal re-reads it too, a changed `UNMOUNT` applies to the very next card you pull.
 
+The `Setup` icon in the release archive writes this file from one question per setting.
+
 It is read from the first of three places that has it:
 
 1. `ENV:cfd.prefs` - the live copy. Once the machine is up this is always the one used, so edit it for a change to apply now.

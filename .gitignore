@@ -8,3 +8,4 @@ NDK
 tools/kickstart/workdir_*/
 tools/kickstart/out/
 docs/internal/
+build/
