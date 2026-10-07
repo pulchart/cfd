@@ -1,0 +1,9 @@
+; $VER: Install-cfd @VERSION@ (@DATE@)
+(set @default-dest "SYS:")
+(welcome "Installs compactflash.device, ptable.library and compactflash.automount. "
+         "Use Setup afterwards to configure cfd.prefs.")
+(set ptable-src "")
+(set ptable-libdir "/libs/")
+(set ptable-ask-cpu 1)
+(set ptable-cpu "68020")
+(set ptable-ask-lsptres 0)

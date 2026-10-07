@@ -6,8 +6,8 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev). Empty suffix for a final release.
-RELEASE_DATE = 20261003
-VERSION_SUFFIX = -dev
+RELEASE_DATE = 20261007
+VERSION_SUFFIX =
 
 # compactflash.device version
 CFD_MAJOR = 2
@@ -258,7 +258,6 @@ RELEASE_NAME = cfd.v$(VERSION)
 ARCHIVE_NAME = $(RELEASE_NAME).lha
 README_NAME = $(RELEASE_NAME).readme
 README_TEMPLATE = dist.readme.in
-README_INFO = dist/cfd.readme.info
 
 # ============================================================
 # Build targets
@@ -506,36 +505,28 @@ $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMO
 readme: $(README_NAME)
 
 # Create Aminet-compatible LHA release
-release: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(README_NAME) guides check-lha
+# Archive tree: binaries, Installer script and the laid-out icons/ tree.
+STAGE   = build/stage
+INSTALL = install
+
+stage: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(README_NAME) guides
+	$(Q)rm -rf $(STAGE)
+	$(Q)mkdir -p $(STAGE)/cfd/src/lib
+	$(Q)cp -r dist/full dist/small dist/c dist/Storage dist/ENVARC dist/docs dist/images $(STAGE)/cfd/
+	$(Q)cp src/*.* $(STAGE)/cfd/src/
+	$(Q)cp src/lib/*.* $(STAGE)/cfd/src/lib/
+	$(Q)cp $(README_NAME) $(STAGE)/cfd/cfd.readme
+	$(Q)cp LICENSE $(STAGE)/cfd/
+	$(Q)cp -r icons/. $(STAGE)/
+	$(Q)[ -f $(PTABLE)/install/common.inc ] || { echo "ERROR: $(PTABLE) has no install/; build with PTABLE=<amigaos-ptable checkout>"; exit 1; }
+	$(Q)sed -e "s|@VERSION@|$(VERSION)|" -e "s|@DATE@|$(DATE)|" $(INSTALL)/cfd.head $(PTABLE)/install/common.inc $(PTABLE)/install/ptable.inc \
+	    $(INSTALL)/cfd.inc $(INSTALL)/cfd.tail > $(STAGE)/cfd/Install
+	$(Q)sed -e "s|@VERSION@|$(VERSION)|" -e "s|@DATE@|$(DATE)|" $(INSTALL)/setup.head $(INSTALL)/setup.inc $(INSTALL)/setup.tail > $(STAGE)/cfd/Setup
+
+release: check-lha stage
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"
-	@echo "=================================="
-	$(eval STAGING := $(shell mktemp -d))
-	@mkdir -p "$(STAGING)/cfd/src/lib"
-	@echo "Copying files..."
-	@# Per-flavor binary trees (cfd/full/<cpu>/{devs,libs}/<file>)
-	@cp -r dist/full dist/small "$(STAGING)/cfd/"
-	@# Flavor-shared assets (tools, mountlist, example config, docs, images)
-	@cp -r dist/c dist/Storage dist/ENVARC dist/docs dist/images "$(STAGING)/cfd/"
-	@# Top-level icons paired with the top-level drawers/files above.
-	@# (devs.info / libs.info are reused per-flavor below, not at
-	@# the cfd/ root - there are no top-level devs/ or libs/ drawers.)
-	@cp dist/full.info dist/small.info \
-	    dist/c.info dist/docs.info dist/images.info dist/src.info \
-	    dist/LICENSE.info dist/def_CF0.info "$(STAGING)/cfd/"
-	@# Source code
-	@cp src/*.* "$(STAGING)/cfd/src/"
-	@cp src/lib/*.* "$(STAGING)/cfd/src/lib/"
-	@# Documentation and license
-	@cp $(README_NAME) "$(STAGING)/cfd/cfd.readme"
-	@cp $(README_INFO) "$(STAGING)/cfd/cfd.readme.info"
-	@cp LICENSE "$(STAGING)/cfd/"
-	@# Drawer icon
-	@cp dist.info "$(STAGING)/cfd.info"
-	@echo "Creating LHA archive..."
-	@cd "$(STAGING)" && $(LHA) c "$(ARCHIVE_NAME)" cfd cfd.info
-	@mv "$(STAGING)/$(ARCHIVE_NAME)" .
-	@rm -rf "$(STAGING)"
-	@echo ""
+	@rm -f "$(ARCHIVE_NAME)"
+	@cd "$(STAGE)" && $(LHA) c "../../$(ARCHIVE_NAME)" cfd cfd.info >/dev/null
 	@echo "=================================="
 	@echo "Created: $(ARCHIVE_NAME)"
 	@ls -lh "$(ARCHIVE_NAME)"
@@ -608,6 +599,7 @@ test-list-update:
 
 # Clean build artifacts
 clean:
+	rm -rf build
 	rm -f $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES) $(VERSION_INC) $(VERSION_STAMP) $(AUTOMOUNT_VERSION_INC)
 	$(Q)[ ! -f $(PTABLE_SRC)/ptable_lib.s ] || $(MAKE) -C $(PTABLE) clean
 	$(Q)for d in $(OUTDIR)/full $(OUTDIR)/small ; do \
@@ -679,4 +671,4 @@ help:
 	@echo ""
 	@echo "Release: $(VERSION) ($(DATE)); compactflash.device: $(CFD_VERSION) ($(CFD_DATE)); ptable.library: $(PLIB_VERSION) ($(PLIB_DATE))"
 
-.PHONY: all full small full-000 small-000 library library-full library-small library-full-000 library-small-000 tools guide guides version-readme readme release check-lha checksums clean distclean help
+.PHONY: all full small full-000 small-000 library library-full library-small library-full-000 library-small-000 tools guide guides version-readme readme release stage check-lha checksums clean distclean help

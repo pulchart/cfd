@@ -37,11 +37,22 @@ See [docs/changes.md](docs/changes.md) for release news and history.
 * AmigaOS 2.0+ (tested with 3.2.3)
 * CF-to-PCMCIA adapter or SD-to-CF adapter (see [Hardware Notes](#hardware-notes))
 * `ptable.library` (bundled) in `LIBS:` or in ROM: does all partition scanning and mounting
+* Installer 43.3 or newer for `Install` (without it, install by hand)
 * Works with fat95 filesystem for FAT32 support (disk/misc/fat95.lha) or native (FFS, SFS, PFS) filesystems if RDB partition table is used
 
 ## Installation
 
-The archive ships two flavours (`full` / `small`) and two CPU tiers (`68020+` / `68000`), each as a partial sysroot ready to drop onto `SYS:`. The flavour is encoded in the path:
+- Double-click `Install`. It detects the CPU, copies `compactflash.device` to `DEVS:` and `ptable.library` and `compactflash.automount` to `LIBS:` (small variant, full in Expert mode), and offers the tools, the CF0 mountlist, the CF0 disk icon and the example `cfd.prefs`. fat95 is installed separately.
+
+  In Expert mode it also adds a `LoadModule` line at the top of `S:User-Startup`. cfd and fat95 share one `LoadModule` line. Adapt that line to your system as needed.
+
+  I recommend putting `compactflash.device`, `compactflash.automount` and `ptable.library` in ROM as resident modules instead of `LoadModule`.
+
+- Double-click `Setup` to configure the automount feature. It writes `ENVARC:cfd.prefs` and, if wanted, `ENV:cfd.prefs`.
+
+  In Expert mode it also sets the driver flags (`FLAGS`) and can allow mounting a partition that is already mounted.
+
+By hand:
 
 | Flavour | CPU Tier | File | Size |
 |---------|------|------|------|
@@ -50,39 +61,16 @@ The archive ships two flavours (`full` / `small`) and two CPU tiers (`68020+` / 
 | full | 68000+ | full/68000/devs/compactflash.device | ~14.5 KB |
 | small | 68000+ | small/68000/devs/compactflash.device | ~10.7 KB |
 
-Companion libraries live next to the device in the same flavour/CPU tree under `<flavour>/<cpu>/libs/`: `ptable.library` (partition scan/mount) and the optional `compactflash.automount` (boot/automount bringup, only needed for autoboot or automount).
-
-Pick the tier that matches your CPU, then pick the full or small flavour:
-- Use the **full** version if you want serial debug output (`Flags = 8`)
-- Use the **small** version for minimal memory footprint
+full: serial debug output (`Flags = 8`). small: no debug code.
 
 ```
-# A1200 (68020+) full flavour
-Copy from cfd/full/68020/  to SYS:   ALL
-
-# A600 (68000) full flavour
-Copy from cfd/full/68000/  to SYS:   ALL
-
-# Plus the shared tools
+Copy cfd/small/68020/ to SYS: ALL
 Copy cfd/c/CFInfo to C:
-```
-
-The inner `devs/` and `libs/` drawers map directly onto `SYS:Devs/` and `SYS:Libs/`, so a single `Copy ALL` of `<flavour>/<cpu>/` installs both the device and `ptable.library` at once.
-
-Have fat95 installed on your system. Mount the drive by double-clicking `Storage/DOSDrivers/CF0`.
-
-Inserted cards automount by default (with the optional `compactflash.automount` module active). To tune it, or disable it with `AUTOMOUNT 0`, copy the example config to `ENVARC:` (and `ENV:`):
-```
 Copy cfd/ENVARC/cfd.prefs to ENVARC:cfd.prefs
 Copy cfd/ENVARC/cfd.prefs to ENV:cfd.prefs
 ```
-See [docs/automount.md](docs/automount.md) for all keys and the optional `compactflash.automount` module.
 
-For OS 3.5+:
-```
-Copy def_CF0.info sys:prefs/env-archive/sys
-Copy def_CF0.info env:sys
-```
+`devs/` and `libs/` map onto `SYS:Devs/` and `SYS:Libs/`. `cfd.prefs` is optional, automount is on by default (see [docs/automount.md](docs/automount.md)). Without automount, mount with `Storage/DOSDrivers/CF0`. On OS 3.5+ copy `def_CF0.info` to `ENVARC:Sys` and `ENV:Sys`.
 
 ## Autoboot / Automount
 
@@ -577,90 +565,7 @@ Report issues at: https://github.com/pulchart/cfd/issues
 
 ## Building from Source
 
-### Requirements
-
-* **vasm** - Portable 68k assembler ([sun.hasenbraten.de/vasm](http://sun.hasenbraten.de/vasm/))
-* **vbcc** - C compiler for CFInfo tool (optional, [compilers.de/vbcc](http://www.compilers.de/vbcc.html))
-* **NDK** - AmigaOS NDK headers for CFInfo (optional, [aminet.net NDK3.2](https://aminet.net/package/dev/misc/NDK3.2R4))
-* **lha** - For creating release archives (optional)
-
-### NDK Setup (for CFInfo)
-
-Extract NDK to project directory:
-```bash
-mkdir NDK && cd NDK && lha x ~/Downloads/NDK3.2.lha
-```
-
-### ptable submodule
-
-`ptable.library` is not built from this repo. It lives in [amigaos-ptable](https://github.com/pulchart/amigaos-ptable) and is embedded as the `extern/ptable` submodule; `make` builds it there and copies the resulting binaries, `lsptres` and `lsptres.guide` into `dist/`, so a release always ships the ptable-built bytes.
-
-```bash
-git clone --recurse-submodules https://github.com/pulchart/cfd   # fresh clone
-git submodule update --init                                      # existing clone
-make ptable-sync                                                 # move to upstream tip + rebuild
-make PTABLE=/path/to/amigaos-ptable                              # build against a local checkout
-```
-
-`make ptable-sync` fetches `origin` in the submodule, checks out its `master` tip, and rebuilds everything that bundles it. It leaves the result uncommitted: review it, then commit the `extern/ptable` gitlink with the rebuilt `dist/` artifacts. It follows the branch tip rather than the recorded pin, which is also the recovery path when an upstream history rewrite orphans the pinned commit.
-
-### Quick Start
-
-```bash
-# Build all (driver + CFInfo)
-make
-
-# Build with custom tool paths (prefix), the binaries are in prefix/bin/...
-make VASM_HOME=/path/to/vasm VBCC_HOME=/path/to/vbcc
-
-# Verbose output
-make V=1
-```
-
-### Build Options
-
-| Option | Description |
-|--------|-------------|
-| `V=1` | Verbose output (show full compiler messages) |
-| `GTIMING=1` | Enable Gayle timing optimization (experimental) |
-| `VASM_HOME=` | vasm installation path (default: /opt/vbcc) |
-| `VBCC_HOME=` | vbcc installation path (default: /opt/vbcc) |
-
-### Build Targets
-
-| Target | Description |
-|--------|-------------|
-| `make` | Build all driver tiers + `ptable.library` variants + utilities |
-| `make full` | 68020+ full driver only (with debug support) |
-| `make small` | 68020+ small driver only (no debug) |
-| `make full-000` | 68000 full driver only (stock A600) |
-| `make small-000` | 68000 small driver only (stock A600) |
-| `make library` | All `ptable.library` variants (68020+ and 68000, full + small) |
-| `make library-full` | 68020+ full `ptable.library` only |
-| `make library-small` | 68020+ small `ptable.library` only |
-| `make library-full-000` | 68000 full `ptable.library` only |
-| `make library-small-000` | 68000 small `ptable.library` only |
-| `make tools` | Build utilities (requires vbcc + NDK) |
-| `make ptable-sync` | Move `extern/ptable` to its upstream tip and rebuild (left uncommitted) |
-| `make GTIMING=1` | Build with Gayle timing optimization (experimental) |
-| `make release` | Create Aminet LHA archive |
-| `make checksums` | Show file sizes and checksums |
-| `make clean` | Remove built files |
-| `make help` | Show all available targets |
-
-> All targets write into `dist/<flavour>/<cpu>/{devs,libs}/<file>`, e.g. `make` produces `dist/full/68020/devs/compactflash.device` and `dist/full/68020/libs/ptable.library` (and the same for the `small` flavour and the `68000` tier). Each `dist/<flavour>/<cpu>/` drawer is a partial sysroot: drop its contents onto `SYS:` to install both the device and `ptable.library` at once.
-
-### Cross-Compilation Notes
-
-The assembly source uses Motorola 68k syntax compatible with both ASMPro (Amiga) and vasm (Linux/cross).
-
-```bash
-# Manual vasm invocation
-vasmm68k_mot -Fhunkexe -m68020 -nosym -DDEBUG=1 -o compactflash.device src/cfd.s
-
-# Manual vbcc invocation (CFInfo)
-vc +aos68k -O2 -c99 -INDK/Include_H -o CFInfo src/cfinfo.c
-```
+See [docs/building.md](docs/building.md).
 
 ## License
 

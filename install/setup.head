@@ -1,0 +1,4 @@
+; $VER: Setup-cfd @VERSION@ (@DATE@)
+(set @default-dest "ENVARC:")
+(welcome "Writes cfd.prefs, the settings of compactflash.device. "
+         "Nothing else is installed.")

@@ -17,12 +17,21 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-* Improved paging in CFInfo and pcmciacheck: in a narrow window, long
-  lines no longer scroll the listing away before it pauses.
-* pcmciacheck -cis lists every I/O range of a configuration entry, not
-  only the first four, and the entries before one that does not parse.
+Install:
+
+* New Installer and Setup scripts (setup writes cfd.prefs).
+* Reworked icon positions.
+
+ptable.library 2.2, lsptres 1.2:
+
+* Synced with amigaos-ptable, ptable.library ships in small and full
+  variants.
+
+Tools 'CFInfo 1.40', 'pcmciacheck 2.2', 'pcmciaspeed 1.37':
+
+* Improved paging in CFInfo and pcmciacheck.
+* pcmciacheck -cis lists all I/O ranges of a configuration entry.
 * pcmciacheck, pcmciaspeed: output lines end in LF alone.
-* pcmciacheck: the help pauses at each screenful, like the reports.
 
 FEATURES
 ========
@@ -43,55 +52,43 @@ REQUIREMENTS
 * "CompactFlash to PCMCIA/ATA" adapter card (see images/cf-type-1.jpg, images/cf-type-2.jpg)
   or SD-to-CF adapter (see images/sd-cf-adapter.jpg)
 * fat95 filesystem (disk/misc/fat95.lha) recommended
+* Installer 43.3 or newer for Install (without it, install by hand)
 
 INSTALLATION
 ============
-The archive ships two flavours (full / small) and two CPU tiers,
-each as a sysroot ready to drop onto SYS:.
 
-  68020+ (A1200 stock, 68020+):
-    full/68020/devs/compactflash.device       debug-capable
-    small/68020/devs/compactflash.device      no debug code
-    full/68020/libs/ptable.library            debug-capable
-    small/68020/libs/ptable.library           no debug code
-    full/68020/libs/compactflash.automount      optional, debug-capable
-    small/68020/libs/compactflash.automount     optional, no debug code
+* Double-click Install. It detects the CPU, copies compactflash.device
+  to DEVS: and ptable.library and compactflash.automount to LIBS:
+  (small variant, full in Expert mode), and offers the tools, the CF0
+  mountlist, the CF0 disk icon and the example cfd.prefs. fat95 is
+  installed separately.
 
-  68000 (stock A600, 68000+):
-    full/68000/devs/compactflash.device       debug-capable
-    small/68000/devs/compactflash.device      no debug code
-    full/68000/libs/ptable.library            debug-capable
-    small/68000/libs/ptable.library           no debug code
-    full/68000/libs/compactflash.automount      optional, debug-capable
-    small/68000/libs/compactflash.automount     optional, no debug code
+  In Expert mode it also adds a LoadModule line at the top of
+  S:User-Startup. cfd and fat95 share one LoadModule line. Adapt that
+  line to your system as needed.
 
-  compactflash.automount is the optional boot/automount bringup module;
-  install it only if you want autoboot or automount (see AUTOBOOT/AUTOMOUNT).
+  I recommend putting compactflash.device, compactflash.automount and
+  ptable.library in ROM as resident modules instead of LoadModule.
 
-Choose based on your needs:
-- Use the full flavour if you need serial debug output (Flags = 8)
-- Use small for minimal memory footprint (no debug strings/code)
+* Double-click Setup to configure the automount feature. It writes
+  ENVARC:cfd.prefs and, if wanted, ENV:cfd.prefs.
 
-Steps for normal mount-only use (no autoboot):
-1. Drag the contents of <flavor>/<cpu>/ onto SYS: the inner devs/
-   and libs/ drawers map onto SYS:Devs/ and SYS:Libs/ directly.
-     - A1200 (68020+): full/68020/ (or small/68020/)
-     - A600  (68000+): full/68000/ (or small/68000/)
-2. Copy c/CFInfo to C: (optional, card info utility)
-3. Have fat95 installed on your system
-4. Mount the drive by double-clicking Storage/DOSDrivers/CF0
+  In Expert mode it also sets the driver flags (FLAGS) and can allow
+  mounting a partition that is already mounted.
 
-Inserted cards automount by default. To tune it, or disable it with
-AUTOMOUNT 0, copy the example config:
-   Copy ENVARC/cfd.prefs to ENVARC:cfd.prefs
-   Copy ENVARC/cfd.prefs to ENV:cfd.prefs
-The resident driver re-reads cfd.prefs on every card insert and
-removal. See automount.guide for all keys.
+By hand:
+1. Copy the contents of <flavor>/<cpu>/ to SYS: (devs/ to DEVS:,
+   libs/ to LIBS:).
+     - 68020/ for 68020 or higher, 68000/ for 68000/68010
+     - full (serial debug output, Flags = 8), small (no debug code)
+2. Copy c/CFInfo to C: (optional).
+3. Install fat95.
+4. Optional: copy ENVARC/cfd.prefs to ENVARC: and ENV:. Automount is
+   on by default, see automount.guide for all keys.
+5. OS 3.5+: copy def_CF0.info to ENVARC:Sys and ENV:Sys.
+6. Without automount, mount with Storage/DOSDrivers/CF0.
 
-For autoboot, see the AUTOBOOT section below.
-
-For OS 3.5+:
-  Copy def_CF0.info to sys:prefs/env-archive/sys and env:sys
+For autoboot, see AUTOBOOT/AUTOMOUNT below.
 
 AUTOBOOT/AUTOMOUNT
 ==================
@@ -303,6 +300,8 @@ CHECKSUMS
 
 CONTENTS
 ========
+cfd/Install       - Installer script
+cfd/Setup         - Installer script: write cfd.prefs
 cfd/full/<cpu>/   - per-CPU "full" sysroot (debug-capable device + library)
 cfd/small/<cpu>/  - per-CPU "small" sysroot (no debug code/strings)
 
