@@ -1,6 +1,21 @@
-## 20261007
+## 20261008-dev
 
 <!-- COMPONENTS:BEGIN -->
+_Components in this release_:
+
+- `compactflash.device 2.1 (30.09.2026)`
+- `compactflash.automount 2.0 (27.08.2026)`
+- `ptable.library 2.2 (03.10.2026)` _(new)_
+- `CFInfo 1.40 (03.10.2026)`
+- `pcmciaspeed 1.37 (03.10.2026)`
+- `pcmciacheck 2.2 (03.10.2026)`
+- `lsptres 1.2 (03.10.2026)` _(new)_
+<!-- COMPONENTS:END -->
+
+TBD
+
+## 20261007
+
 _Components in this release_:
 
 - `compactflash.device 2.1 (30.09.2026)`
@@ -10,7 +25,6 @@ _Components in this release_:
 - `pcmciaspeed 1.37 (03.10.2026)` _(new)_
 - `pcmciacheck 2.2 (03.10.2026)` _(new)_
 - `lsptres 1.2 (03.10.2026)` _(new)_
-<!-- COMPONENTS:END -->
 
 #### Install
 
