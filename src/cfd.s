@@ -3611,11 +3611,12 @@ _mw_ret:
 ;===========================================================
 CFG_BUFSZ	= 2048
 CFG_OVMAX	= 6			;max override rows
-CFG_NCTL	= 10			;string-pool slots, shared by the CONTROL
-					;values and HANDLER_FAT; worst case is 8
-					;(global CONTROL + six CONTROL_<fs> rows,
-					;PFS burning two, + HANDLER_FAT)
+CFG_NCTL	= 13			;string-pool slots: CONTROL, one per
+					;CONTROL_<fs> row and per HANDLER_<fs> row
+					;(checked after the tables)
 CFG_CTLSZ	= 32			;bytes per string slot
+CFG_NBIND	= 6			;max binding rows (checked after um_table)
+CFG_KEYSZ	= 16			;composed <kind>_<fs> keyword
 
 ;-- CFG_Source values
 CFGSRC_NONE	= 0			;no prefs found: built-in defaults
@@ -3637,11 +3638,13 @@ CFG_UnmStatic	= CFG_AutoMount+6	;byte (1 = static mounts follow UNMOUNT, default
 					;0 = UNMOUNT_STATIC 0, keep hand-mounted nodes)
 CFG_MntUsed	= CFG_AutoMount+7	;byte (1 = MOUNT_USED: a hand mountlist may claim
 					;an already-served partition; default 0)
-CFG_DbgRead	= CFG_AutoMount+8	;long bytes read (-1 = no prefs found)
+CFG_DbgRead	= CFG_AutoMount+12	;long bytes read (-1 = no prefs found)
 CFG_MountCfg	= CFG_DbgRead+4		;MountCfg, mc_Sizeof bytes
 CFG_Overrides	= CFG_MountCfg+mc_Sizeof	;(CFG_OVMAX+1) override rows
 CFG_Controls	= CFG_Overrides+(CFG_OVMAX+1)*ovr_Sizeof	;string slots
-CFG_SIZEOF	= CFG_Controls+CFG_NCTL*CFG_CTLSZ
+CFG_Binds	= CFG_Controls+CFG_NCTL*CFG_CTLSZ	;CFG_NBIND binding rows
+CFG_Key		= CFG_Binds+CFG_NBIND*bnd_Sizeof	;CFG_KEYSZ bytes
+CFG_SIZEOF	= CFG_Key+CFG_KEYSZ
 
 ;-- _mwLoadPrefs: read cfd.prefs into CFG_Buf from the first source that has
 ;   it: ENV: (GetVar), ENVARC:cfd.prefs, SYS:Prefs/Env-Archive/cfd.prefs.
@@ -3829,12 +3832,9 @@ _cfg_term:
 	bsr	_cfgStripComments
 ;-- AUTOMOUNT: an unrecognized value keeps the default and is reported in the
 ;   worker trace
-	lea	CFG_Buf(a5),a0
 	lea	kw_automount(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
+	bsr	_cfgKey
 	beq.s	_cfg_umst
-	move.l	d0,a0
 	bsr	_cfgOnOff
 	bpl.s	_cfg_am_set
 	move.b	#1,CFG_AmBad(a5)
@@ -3844,73 +3844,45 @@ _cfg_am_set:
 _cfg_umst:
 ;-- UNMOUNT_STATIC: 0 keeps hand-mounted (static) nodes when the card is
 ;   pulled; 1 = default, they follow the UNMOUNT policy
-	lea	CFG_Buf(a5),a0
 	lea	kw_unmount_static(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
+	bsr	_cfgKey
 	beq.s	_cfg_mu
-	move.l	d0,a0
 	bsr	_cfgOnOff
 	bmi.s	_cfg_mu			;unrecognized -> keep the default
 	move.b	d0,CFG_UnmStatic(a5)
 _cfg_mu:
 ;-- MOUNT_USED: 1 lets a hand mountlist claim a partition another handler
 ;   already serves, at the user's own risk; default 0 keeps the refusal
-	lea	CFG_Buf(a5),a0
 	lea	kw_mount_used(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
+	bsr	_cfgKey
 	beq.s	_cfg_flags
-	move.l	d0,a0
 	bsr	_cfgOnOff
 	bmi.s	_cfg_flags		;unrecognized -> keep the default
 	move.b	d0,CFG_MntUsed(a5)
 _cfg_flags:
 ;-- global FLAGS
-	lea	CFG_Buf(a5),a0
 	lea	kw_flags(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
+	bsr	_cfgKey
 	beq.s	_cfg_control
-	move.l	d0,a0
-	bsr	_cfgSkipSp
 	bsr	_cfgDec
 	move.l	d0,CFG_MountCfg+mc_Flags(a5)
 _cfg_control:
 ;-- global CONTROL
-	lea	CFG_Buf(a5),a0
 	lea	kw_control(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
-	beq.s	_cfg_dostype		;absent key falls to the NEXT block, not past it
-	move.l	d0,a0
-	bsr	_cfgSkipSp
+	bsr	_cfgKey
+	beq.s	_cfg_dostype
 	bsr	_cfgCtl
 	move.l	d0,CFG_MountCfg+mc_Control(a5)
 _cfg_dostype:
-;-- DOSTYPE_FAT: mount MBR/GPT FAT partitions as this DosType instead of the
-;   detected one, which also pins the node to that partition's block range.
-	lea	CFG_Buf(a5),a0
-	lea	kw_dostype_fat(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
-	beq.s	_cfg_handler
-	move.l	d0,a0
-	bsr	_cfgSkipSp
-	bsr	_cfgHex
-	move.l	d0,CFG_MountCfg+mc_NodeDosType(a5)
-_cfg_handler:
-;-- HANDLER_FAT: where to load the handler from when it is not in
-;   FileSystem.resource. Absent means resource only, no fallback.
-	lea	CFG_Buf(a5),a0
-	lea	kw_handler_fat(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
+;-- <kind>_<fs> binding keys; the FAT row also fills mc_NodeDosType and
+;   mc_NodeHandler for a ptable.library without binding rows
+	bsr	_cfgBinds
+	move.l	#$46415400,d0
+	bsr	_cfgFindBind
 	beq.s	_cfg_ovkw
-	move.l	d0,a0
-	bsr	_cfgSkipSp
-	bsr	_cfgCtl
-	move.l	d0,CFG_MountCfg+mc_NodeHandler(a5)
+	move.l	d1,a0
+	move.l	bnd_DosType(a0),CFG_MountCfg+mc_NodeDosType(a5)
+	move.l	bnd_Handler(a0),CFG_MountCfg+mc_NodeHandler(a5)
 _cfg_ovkw:
 ;-- per-FS overrides: {keyword, dostype-prefix, isControl} rows
 	lea	ovkw_table(pc),a4
@@ -3918,12 +3890,8 @@ _cfg_ovloop:
 	move.l	(a4),d0			;keyword (0 = end)
 	beq.s	_cfg_unmount
 	move.l	d0,a1
-	lea	CFG_Buf(a5),a0
-	bsr	_cfgStr
-	tst.l	d0
+	bsr	_cfgKey			;a0 = value
 	beq.s	_cfg_ovnext
-	move.l	d0,a0			;a0 = value start
-	bsr	_cfgSkipSp
 	move.l	4(a4),d0		;prefix
 	bsr	_cfgFindOrAddOv		;d1 = row (0 = table full)
 	tst.l	d1
@@ -3942,14 +3910,12 @@ _cfg_ovnext:
 	lea	12(a4),a4		;next ovkw row (12 bytes)
 	bra.s	_cfg_ovloop
 _cfg_unmount:
-	lea	CFG_Buf(a5),a0
 	lea	kw_unmount(pc),a1
-	bsr	_cfgStr
-	tst.l	d0
+	bsr	_cfgKey
 	beq.s	_cfg_umstatic		;no UNMOUNT key -> keep default (unmount all)
 ;-- names are searched in the rest of the UNMOUNT line only
-	move.l	d0,d2			;d2 = value start
-	move.l	d0,a4
+	move.l	a0,d2			;d2 = value start
+	move.l	a0,a4
 _cfg_um_eol:
 	move.b	(a4),d3
 	beq.s	_cfg_um_cut
@@ -3969,7 +3935,6 @@ _cfg_um_loop:
 	move.l	d2,a0
 	move.l	d0,a1			;needle = FS name
 	bsr	_cfgStr
-	tst.l	d0
 	beq.s	_cfg_um_next
 	move.l	4(a3),(a2)+		;name present -> append its dostype prefix
 _cfg_um_next:
@@ -4001,11 +3966,23 @@ _cfg_done:
 	movem.l	(sp)+,d0-d7/a0-a4/a6
 	rts
 
+;-- _cfgKey: the value of keyword a1 in CFG_Buf.
+;   Out: a0 = value past blanks and '=', Z clear; Z set if the key is absent.
+;   Clobbers d0.
+_cfgKey:
+	lea	CFG_Buf(a5),a0
+	bsr.s	_cfgStr
+	beq.s	_ck_out
+	move.l	d0,a0
+	bra	_cfgSkipSp		;ends on a non-blank: Z clear
+_ck_out:
+	rts
+
 ;-- _cfgStr: find NUL-term needle (a1) as a WHOLE WORD in NUL-term haystack (a0).
 ;   Word char = [A-Za-z0-9_]; the match must be bounded by non-word chars (or the
 ;   buffer ends) on both sides, so FLAGS does not match inside FLAGS_DOS and a
 ;   name DOS does not match inside FLAGS_DOS.
-;   Out: d0 = ptr just past the match, or 0. Preserves d2-d3/a2-a4.
+;   Out: d0 = ptr just past the match, or 0 with Z set. Preserves d2-d3/a2-a4.
 _cfgStr:
 	movem.l	d2-d3/a2-a4,-(sp)
 	move.l	a1,a3			;needle start
@@ -4243,6 +4220,125 @@ _cfgctl_none:
 	movem.l	(sp)+,d1-d4/a1-a2
 	rts
 
+;-- _cfgBinds: <kind>_<fs> keys into binding rows. Every bk_table kind is
+;   tried with every um_table name; a name with two prefixes (PFS) fills both
+;   rows, and names sharing a prefix (DOS, FFS) share its row.
+_cfgBinds:
+	lea	bk_table(pc),a2		;{keyword prefix, BK_*} rows
+_cb_kind:
+	tst.l	(a2)
+	beq.w	_cb_done
+	lea	um_table(pc),a3		;{name, dostype prefix} rows
+_cb_class:
+	move.l	(a3),d0			;name (0 = end of table)
+	beq.w	_cb_nextkind
+	lea	CFG_Key(a5),a1		;key = kind prefix + name
+	move.l	(a2),a0
+_cb_k1:
+	move.b	(a0)+,(a1)+
+	bne.s	_cb_k1
+	subq.l	#1,a1
+	move.l	d0,a0
+_cb_k2:
+	move.b	(a0)+,(a1)+
+	bne.s	_cb_k2
+	lea	CFG_Key(a5),a1
+	bsr	_cfgKey
+	beq.s	_cb_nextclass
+	move.l	4(a3),d0		;prefix
+	bsr	_cfgFindOrAddBind	;d1 = row
+	move.l	d1,a4
+	move.l	4(a2),d0		;BK_*
+	bne.s	_cb_dt
+	bsr	_cfgCtl			;BK_HANDLER
+	move.l	d0,bnd_Handler(a4)
+	bra.s	_cb_nextclass
+_cb_dt:
+	subq.l	#BK_DOSTYPE,d0
+	bne.s	_cb_st
+	bsr	_cfgHex
+	move.l	d0,bnd_DosType(a4)
+	bra.s	_cb_nextclass
+_cb_st:
+	subq.l	#BK_STACK-BK_DOSTYPE,d0
+	bne.s	_cb_pri
+	bsr	_cfgDec
+	move.l	d0,bnd_Stack(a4)
+	bra.s	_cb_nextclass
+_cb_pri:
+	subq.l	#BK_PRI-BK_STACK,d0
+	bne.s	_cb_force
+	cmp.b	#'-',(a0)
+	bne.s	_cb_pripos
+	addq.l	#1,a0
+	bsr	_cfgDec
+	neg.l	d0
+	bra.s	_cb_priset
+_cb_pripos:
+	bsr	_cfgDec
+_cb_priset:
+	move.l	d0,bnd_Pri(a4)
+	bset	#BNDB_PRI,bnd_Flags(a4)
+	bra.s	_cb_nextclass
+_cb_force:
+	bsr	_cfgOnOff		;BK_FORCE
+	bmi.s	_cb_nextclass		;unrecognized -> unchanged
+	beq.s	_cb_forceoff
+	bset	#BNDB_FORCE,bnd_Flags(a4)
+	bra.s	_cb_nextclass
+_cb_forceoff:
+	bclr	#BNDB_FORCE,bnd_Flags(a4)
+_cb_nextclass:
+	addq.l	#8,a3
+	bra.w	_cb_class
+_cb_nextkind:
+	addq.l	#8,a2
+	bra.w	_cb_kind
+_cb_done:
+	tst.l	CFG_MountCfg+mc_BindCount(a5)
+	beq.s	_cb_none		;no rows: mc_Binds and mc_BindSize stay 0
+	lea	CFG_Binds(a5),a0
+	move.l	a0,CFG_MountCfg+mc_Binds(a5)
+	moveq.l	#bnd_Sizeof,d0
+	move.l	d0,CFG_MountCfg+mc_BindSize(a5)
+_cb_none:
+	rts
+
+;-- _cfgFindBind: the binding row for prefix d0.
+;   Out: d1 = row or 0, Z set when none; a1 = the row after the last used
+;   one. Preserves d0.
+_cfgFindBind:
+	lea	CFG_Binds(a5),a1
+	move.l	CFG_MountCfg+mc_BindCount(a5),d1
+	bra.s	_cfb_next
+_cfb_scan:
+	cmp.l	bnd_Prefix(a1),d0
+	beq.s	_cfb_hit
+	lea	bnd_Sizeof(a1),a1
+_cfb_next:
+	dbf	d1,_cfb_scan
+	moveq.l	#0,d1
+	rts
+_cfb_hit:
+	move.l	a1,d1
+	rts
+
+;-- _cfgFindOrAddBind: the binding row for prefix d0, appended if missing.
+;   A row per um_table name always fits (checked after um_table).
+;   Out: d1 = row. Preserves a0/d0/a2-a4; clobbers d2/a1.
+_cfgFindOrAddBind:
+	bsr	_cfgFindBind
+	bne.s	_cfab_out
+	addq.l	#1,CFG_MountCfg+mc_BindCount(a5)
+	move.l	a1,d1			;new row
+	move.l	d0,(a1)+		;bnd_Prefix
+	moveq.l	#bnd_Sizeof/4-2,d2
+_cfab_clr:
+	clr.l	(a1)+
+	dbf	d2,_cfab_clr
+_cfab_out:
+	rts
+
 ;-- _cfgFindOrAddOv: find the override row for prefix d0, else append one.
 ;   Out: d1 = row addr, or 0 if table full. Preserves a0/d0/a2-a4.
 _cfgFindOrAddOv:
@@ -4298,8 +4394,11 @@ kw_ctl_ffs:	dc.b	"CONTROL_FFS",0
 kw_ctl_sfs:	dc.b	"CONTROL_SFS",0
 kw_ctl_pfs:	dc.b	"CONTROL_PFS",0
 kw_ctl_fat:	dc.b	"CONTROL_FAT",0
-kw_dostype_fat:	dc.b	"DOSTYPE_FAT",0
-kw_handler_fat:	dc.b	"HANDLER_FAT",0
+bk_handler:	dc.b	"HANDLER_",0
+bk_dostype:	dc.b	"DOSTYPE_",0
+bk_stack:	dc.b	"STACK_",0
+bk_pri:		dc.b	"PRI_",0
+bk_force:	dc.b	"FORCE_",0
 nm_pfs:		dc.b	"PFS",0
 nm_dos:		dc.b	"DOS",0
 nm_ffs:		dc.b	"FFS",0
@@ -4322,6 +4421,23 @@ um_table_end:
 	if	(um_table_end-um_table)/8>=CFG_NPFX
 	fail	"CFG_Prefixes cannot hold every um_table row"
 	endc
+	if	(um_table_end-um_table)/8>CFG_NBIND
+	fail	"CFG_Binds cannot hold a row per um_table name"
+	endc
+
+;-- binding key kinds: <keyword prefix><um_table name>, BK_* value parser
+BK_HANDLER	= 0			;path string -> bnd_Handler
+BK_DOSTYPE	= 1			;hex -> bnd_DosType
+BK_STACK	= 2			;decimal -> bnd_Stack
+BK_PRI		= 3			;signed decimal -> bnd_Pri + BNDB_PRI
+BK_FORCE	= 4			;on/off -> BNDB_FORCE
+bk_table:
+	dc.l	bk_handler,BK_HANDLER
+	dc.l	bk_dostype,BK_DOSTYPE
+	dc.l	bk_stack,BK_STACK
+	dc.l	bk_pri,BK_PRI
+	dc.l	bk_force,BK_FORCE
+	dc.l	0
 
 ;-- per-FS override keyword table. Each row: keyword, dostype prefix,
 ;   isControl (0 = FLAGS_<fs>, 1 = CONTROL_<fs>). PFS has two rows (PFS + PDS).
@@ -4333,13 +4449,18 @@ ovkw_table:
 	dc.l	kw_flags_pfs,$50465300,0
 	dc.l	kw_flags_pfs,$50445300,0
 	dc.l	kw_flags_fat,$46415400,0
+ovkw_ctl:
 	dc.l	kw_ctl_dos,$444F5300,1
 	dc.l	kw_ctl_ffs,$444F5300,1
 	dc.l	kw_ctl_sfs,$53465300,1
 	dc.l	kw_ctl_pfs,$50465300,1
 	dc.l	kw_ctl_pfs,$50445300,1
 	dc.l	kw_ctl_fat,$46415400,1
+ovkw_end:
 	dc.l	0
+	if	1+(ovkw_end-ovkw_ctl)/12+(um_table_end-um_table)/8>CFG_NCTL
+	fail	"CFG_NCTL cannot hold CONTROL, CONTROL_<fs> and HANDLER_<fs> strings"
+	endc
 
 MAgentName:
 	dc.b	"CF.MountAgent",0
