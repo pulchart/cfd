@@ -585,7 +585,7 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 
 
 PYTHON ?= python3
-TEST_SUITES = ata_contracts config_loader rom_hunks
+TEST_SUITES = ata_contracts config_loader mountcfg rom_hunks
 .PHONY: test check-test-deps test-list-update
 check-test-deps:
 	$(Q)CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/deps.py

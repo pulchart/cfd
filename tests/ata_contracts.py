@@ -90,7 +90,8 @@ def check_config(d, length, null):
     assert d.mem.r32(REQ+8) == (count or 0xdeadbeef)
 
 
-def check_geometry(d, length):
+def check_geometry(d, length, block=512):
+    d.mem.w32(UNIT+d.eq['CFU_BlockSize'], block)
     d.mem.w16(UNIT+d.eq['CFU_ConfigBlock']+12, 63)
     d.mem.w16(UNIT+d.eq['CFU_ConfigBlock']+6, 16)
     d.mem.w32(REQ+36, length); d.mem.w32(REQ+40, BUF)
@@ -99,7 +100,7 @@ def check_geometry(d, length):
         assert result & 255 == 0xfc
     else:
         assert result == 0 and d.mem.r32(REQ+32) == 32
-        assert bytes(d.mem.r_block(BUF, 32)) == struct.pack('>7IBBH', 512, 12345, 12, 1008, 16, 63, 1, 0, 1, 0)
+        assert bytes(d.mem.r_block(BUF, 32)) == struct.pack('>7IBBH', block, 12345, 12, 1008, 16, 63, 1, 0, 1, 0)
 
 
 def check_media(d, size):
@@ -130,7 +131,8 @@ def main():
                          for name in ('_Read', '_Read64', '_Write', '_Write64')
                          for offset, length in ((0, 0), (0, 512), (512, 2048), (513, 1025), ((1<<32)+512, 512))]
                 cases += [(check_config, (length, null)) for length in (*range(14), 64) for null in (False, True)]
-                cases += [(check_geometry, (length,)) for length in (0, 32)]
+                cases += [(check_geometry, (length,)) for length in (0, 32, 36)]
+                cases += [(check_geometry, (32, 0))]
                 cases += [(check_media, (size,)) for size in (0, 12345)]
                 cases += [(check_notify, (valid,)) for valid in (False, True)]
                 for function, args in cases:
