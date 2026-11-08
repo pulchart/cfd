@@ -3434,8 +3434,7 @@ _ma_fakeseg:
 ;   the live card state via ptable.library v2, signals the agent, exits.
 _MountWorkEntry:
 	movem.l	d2-d7/a2-a6,-(sp)
-	lea	-CFG_SIZEOF(sp),sp	;config frame
-	move.l	sp,a5			;a5 = config frame base
+	sub.l	a5,a5			;no config frame yet
 	move.l	(_AbsExecBase).w,a6
 	jsr	Forbid(a6)
 	lea	SB_DeviceList(a6),a0
@@ -3463,6 +3462,12 @@ _mw_haveLib:
 	else
 	beq.w	_mw_done
 	endc
+	move.l	#CFG_SIZEOF,d0
+	moveq.l	#MEMF_PUBLIC,d1
+	CALLEXEC AllocMem
+	move.l	d0,a5			;a5 = config frame base
+	tst.l	d0
+	beq.w	_mw_close		;no memory: nothing mounts, agent still woken
 	bsr	_mwReadConfig		;cfd.prefs -> a5 frame
 	ifd	DEBUG
 	move.w	CFG_MountCfg+mc_Flags+2(a5),d0	;global FLAGS -> gate so worker trace shows
@@ -3581,7 +3586,13 @@ _mw_done:
 	move.l	d1,a1
 	CALLEXEC Signal
 _mw_out:
-	lea	CFG_SIZEOF(sp),sp	;release config frame
+	move.l	a5,d0
+	beq.s	_mw_ret
+	move.l	a5,a1
+	move.l	#CFG_SIZEOF,d0
+	move.l	(_AbsExecBase).w,a6
+	jsr	FreeMem(a6)
+_mw_ret:
 	movem.l	(sp)+,d2-d7/a2-a6
 	moveq.l	#0,d0
 	rts
@@ -3598,7 +3609,7 @@ _mw_out:
 ; UNMOUNT NONE) keeps handlers on removal instead.
 ; In : a5 = config frame. Preserves a3/a4/a5/d6/d7.
 ;===========================================================
-CFG_BUFSZ	= 512
+CFG_BUFSZ	= 2048
 CFG_OVMAX	= 6			;max override rows
 CFG_NCTL	= 10			;string-pool slots, shared by the CONTROL
 					;values and HANDLER_FAT; worst case is 8
@@ -3652,7 +3663,7 @@ _mlp_try:
 	move.l	a0,d1			;name "cfd.prefs" (bare, no ENV:)
 	lea	CFG_Buf(a5),a0
 	move.l	a0,d2			;buffer
-	move.l	#CFG_BUFSZ,d3		;511 payload plus the NUL GetVar appends
+	move.l	#CFG_BUFSZ,d3		;payload plus the NUL GetVar appends
 	move.l	#GVF_GLOBAL_ONLY!GVF_BINARY_VAR,d4
 	jsr	DosGetVar(a6)
 	move.l	d0,d3

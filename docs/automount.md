@@ -85,7 +85,7 @@ Format:
 - One key per line, the value after whitespace. A missing key keeps its default.
 - Keys are matched case-sensitively as whole words, so `FLAGS` does not match inside `FLAGS_DOS`. The search covers the whole file, not just line starts: a key name appearing as a whole word inside another key's value is picked up too, so do not use key names or the `UNMOUNT` filesystem names inside unquoted values.
 - `;` or `#` starts a comment: the rest of that line is ignored, so `; FLAGS 0` really is disabled.
-- The file is read up to 511 bytes.
+- The file is read up to 2047 bytes.
 
 | Key | Value | Default | Meaning |
 |---|---|---|---|

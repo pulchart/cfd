@@ -12,11 +12,12 @@ from toolchain import PTABLE_SRC, ROOT, VASM
 BASE,UNIT,DEV,CFG,EXEC,DOSB,STACK=0x10000,0x100000,0x140000,0x200000,0x280000,0x2c0000,0x300000
 LVO_OPENLIB,LVO_CLOSELIB=552,414
 LVO_OPEN,LVO_CLOSE,LVO_READ,LVO_DELAY,LVO_GETVAR=30,36,42,198,906
+LVO_FORBID,LVO_PERMIT,LVO_FINDNAME,LVO_ALLOCMEM,LVO_FREEMEM,LVO_SIGNAL=132,138,276,198,210,324
 ENVARC,ARCHIVE='ENVARC:cfd.prefs','SYS:Prefs/Env-Archive/cfd.prefs'
 
-def build(tmp,need=()):
+def build(tmp,need=(),debug=True):
     obj=tmp/'cfd'; lst=tmp/'cfd.lst'
-    subprocess.run([VASM,'-quiet','-Fhunkexe','-m68000','-DDEBUG=1',
+    subprocess.run([VASM,'-quiet','-Fhunkexe','-m68000',*(['-DDEBUG=1'] if debug else []),
                     '-I',str(PTABLE_SRC),'-L',str(lst),'-o',str(obj),'src/cfd.s'],
                    cwd=ROOT,check=True)
     eq={}
@@ -79,13 +80,14 @@ class Loader:
         self.reads.append((name,length))
         if val: self.mem.w_block(buf,val)
         self.cpu.w_reg(0,len(val))
-    def run(self):
+    def run(self,entry='_mwReadConfig'):
         for r in range(15): self.cpu.w_reg(r,0x55550000+r)
         self.cpu.w_reg(11,UNIT); self.cpu.w_reg(12,DEV); self.cpu.w_reg(13,CFG)
-        self.m.prepare(self.syms['_mwReadConfig'],STACK)
-        st=self.m.execute(4000000)
-        assert self.m.was_exit(st),'_mwReadConfig did not return'
-        assert self.cpu.r_sp()==STACK,'_mwReadConfig left the stack unbalanced'
+        self.m.prepare(self.syms[entry],STACK)
+        st=self.m.execute(100_000_000)
+        assert self.m.was_exit(st),entry+' did not return'
+        self.cycles=st.cycles
+        assert self.cpu.r_sp()==STACK,entry+' left the stack unbalanced'
     def b(self,off): return self.mem.r8(CFG+off)
     def l(self,off): return self.mem.r32(CFG+off)
     def close(self): self.m.cleanup()
