@@ -17,7 +17,12 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-TBD
+* cfd.prefs can be up to 2047 bytes, was 511.
+* cfd.prefs: UNMOUNT reads filesystem names from its own line only.
+* cfd.prefs: new keys HANDLER_<fs>, DOSTYPE_<fs>, FORCE_<fs>, STACK_<fs> and
+  PRI_<fs> choose the handler per filesystem (needs ptable.library 2.3).
+* Setup asks for the handler, stack and priority of DOS/FFS, SFS and PFS
+  partitions, and can load fat95 from L: over a resident one.
 
 FEATURES
 ========

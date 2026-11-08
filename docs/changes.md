@@ -12,7 +12,11 @@ _Components in this release_:
 - `lsptres 1.3-dev (08.11.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
-TBD
+##### 'compactflash.device'
+- `cfd.prefs` can be up to 2047 bytes, was 511.
+- `UNMOUNT` reads filesystem names from its own line only.
+- New `cfd.prefs` keys `HANDLER_<fs>`, `DOSTYPE_<fs>`, `FORCE_<fs>`, `STACK_<fs>` and `PRI_<fs>` choose the handler per filesystem, RDB partitions included. They need ptable.library 2.3.
+- Setup asks for the handler, stack and priority of DOS/FFS, SFS and PFS partitions, and can load fat95 from `L:` over a resident one.
 
 ## 20261007
 
