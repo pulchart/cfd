@@ -4013,12 +4013,26 @@ _cfg_unmount:
 	bsr	_cfgStr
 	tst.l	d0
 	beq.s	_cfg_umstatic		;no UNMOUNT key -> keep default (unmount all)
+;-- names are searched in the rest of the UNMOUNT line only
+	move.l	d0,d2			;d2 = value start
+	move.l	d0,a4
+_cfg_um_eol:
+	move.b	(a4),d3
+	beq.s	_cfg_um_cut
+	cmp.b	#10,d3
+	beq.s	_cfg_um_cut
+	cmp.b	#13,d3
+	beq.s	_cfg_um_cut
+	addq.l	#1,a4
+	bra.s	_cfg_um_eol
+_cfg_um_cut:
+	clr.b	(a4)			;end the line; d3 = the byte, put back below
 	lea	CFG_Prefixes(a5),a2	;output cursor
 	lea	um_table(pc),a3		;{name, dostype prefix} rows
 _cfg_um_loop:
 	move.l	(a3),d0			;name pointer (0 = end of table)
 	beq.s	_cfg_um_term
-	lea	CFG_Buf(a5),a0
+	move.l	d2,a0
 	move.l	d0,a1			;needle = FS name
 	bsr	_cfgStr
 	tst.l	d0
@@ -4029,6 +4043,7 @@ _cfg_um_next:
 	bra.s	_cfg_um_loop
 _cfg_um_term:
 	clr.l	(a2)			;terminate prefix list
+	move.b	d3,(a4)
 _cfg_umstatic:
 ;-- fold the parsed policy into MountCfg: MCUF_KEEPSTATIC from
 ;   UNMOUNT_STATIC 0 (ptable stamps it as PEB_KEEPSTATIC on every entry
@@ -4335,7 +4350,11 @@ um_table:
 	dc.l	nm_ffs,$444F5300	;FFS -> 'DOS'
 	dc.l	nm_sfs,$53465300	;SFS -> 'SFS'
 	dc.l	nm_fat,$46415400	;FAT -> 'FAT'
+um_table_end:
 	dc.l	0
+	if	(um_table_end-um_table)/8>=CFG_NPFX
+	fail	"CFG_Prefixes cannot hold every um_table row"
+	endc
 
 ;-- per-FS override keyword table. Each row: keyword, dostype prefix,
 ;   isControl (0 = FLAGS_<fs>, 1 = CONTROL_<fs>). PFS has two rows (PFS + PDS).

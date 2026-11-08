@@ -238,8 +238,8 @@ Format:
   * Keys are matched case-sensitively as whole words, so @{fg shine}FLAGS@{fg text} does not match
     inside @{fg shine}FLAGS_DOS@{fg text} . The search covers the whole file, not just line starts: a
     key name appearing as a whole word inside another key's value is picked up
-    too, so do not use key names or the @{fg shine}UNMOUNT@{fg text} filesystem names inside unquoted
-    values.
+    too, so do not use key names inside values. @{fg shine}UNMOUNT@{fg text} filesystem names are read
+    from the @{fg shine}UNMOUNT@{fg text} line only.
   * @{fg shine};@{fg text} or @{fg shine}#@{fg text} starts a comment: the rest of that line is ignored, so @{fg shine}; FLAGS 0@{fg text} really
     is disabled.
   * The file is read up to 2047 bytes.

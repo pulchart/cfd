@@ -14,8 +14,8 @@ from prefsrig import (CFG, DEV, DOSB, EXEC, UNIT, LVO_ALLOCMEM, LVO_FINDNAME, LV
                       LVO_FREEMEM, LVO_PERMIT, LVO_SIGNAL, Loader, build)
 from toolchain import ROOT
 
-OPEN = {'C4'}
-NEED = ('CFG_MountCfg','CFG_Prefixes','CFG_Overrides','CFG_BUFSZ','CFG_Trunc',
+OPEN = set()
+NEED = ('CFG_Buf','CFG_MountCfg','CFG_Prefixes','CFG_Overrides','CFG_BUFSZ','CFG_Trunc',
         'mc_Flags','mc_Control','mc_Overrides','mc_NodeDosType','mc_NodeHandler','mc_Size',
         'mc_UnmFlags','mc_Sizeof','ovr_Prefix','ovr_Flags','ovr_HasFlags','ovr_Control',
         'ovr_Sizeof','MCUF_KEEPSTATIC','MCUF_STAMPONLY','MCUF_MOUNTUSED')
@@ -28,6 +28,7 @@ class Cfg:
         eq=d.eq; mc=eq['CFG_MountCfg']
         def cstr(p): return d.cstr(p) if p else None
         self.trunc=d.b(eq['CFG_Trunc'])
+        self.buf=bytes(d.mem.r_block(CFG+eq['CFG_Buf'],eq['CFG_BUFSZ']))
         self.mc={n[3:]:d.l(mc+eq[n]) for n in eq if n.startswith('mc_') and n!='mc_Sizeof'}
         self.raw=[d.l(mc+i) for i in range(0,eq['mc_Sizeof'],4)]
         self.control=cstr(self.mc['Control'])
@@ -179,8 +180,10 @@ def c_long_prefs(image,eq,_):
 
 def c_unmount_line(image,eq,_):
     # An UNMOUNT name on another line is not part of the list.
-    c=parse(image,eq,b'UNMOUNT FAT\nHANDLER_FAT "L:SFS"\n')
+    text=b'UNMOUNT FAT\nHANDLER_FAT "L:SFS"\n'
+    c=parse(image,eq,text)
     assert c.prefixes==[FAT],[hex(p) for p in c.prefixes]
+    assert c.buf.startswith(text+b'\0'),'buffer not restored: %r'%c.buf[:40]
     return True
 
 CASES = [
