@@ -1,6 +1,25 @@
-## 20261007
+## 20261108-dev
 
 <!-- COMPONENTS:BEGIN -->
+_Components in this release_:
+
+- `compactflash.device 2.2-dev (08.11.2026)` _(new)_
+- `compactflash.automount 2.0 (27.08.2026)`
+- `ptable.library 2.3-dev (08.11.2026)` _(new)_
+- `CFInfo 1.40 (03.10.2026)`
+- `pcmciaspeed 1.37 (03.10.2026)`
+- `pcmciacheck 2.2 (03.10.2026)`
+- `lsptres 1.3-dev (08.11.2026)` _(new)_
+<!-- COMPONENTS:END -->
+
+##### 'compactflash.device'
+- `cfd.prefs` can be up to 2047 bytes, was 511.
+- `UNMOUNT` reads filesystem names from its own line only.
+- New `cfd.prefs` keys `HANDLER_<fs>`, `DOSTYPE_<fs>`, `FORCE_<fs>`, `STACK_<fs>` and `PRI_<fs>` choose the handler per filesystem, RDB partitions included. They need ptable.library 2.3.
+- Setup asks for the handler, stack and priority of DOS/FFS, SFS and PFS partitions, and can load fat95 from `L:` over a resident one.
+
+## 20261007
+
 _Components in this release_:
 
 - `compactflash.device 2.1 (30.09.2026)`
@@ -10,7 +29,6 @@ _Components in this release_:
 - `pcmciaspeed 1.37 (03.10.2026)` _(new)_
 - `pcmciacheck 2.2 (03.10.2026)` _(new)_
 - `lsptres 1.2 (03.10.2026)` _(new)_
-<!-- COMPONENTS:END -->
 
 #### Install
 

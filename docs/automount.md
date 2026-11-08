@@ -83,9 +83,9 @@ The last two matter at boot: Startup-Sequence assigns `ENV:` and `ENVARC:` only 
 Format:
 
 - One key per line, the value after whitespace. A missing key keeps its default.
-- Keys are matched case-sensitively as whole words, so `FLAGS` does not match inside `FLAGS_DOS`. The search covers the whole file, not just line starts: a key name appearing as a whole word inside another key's value is picked up too, so do not use key names or the `UNMOUNT` filesystem names inside unquoted values.
+- Keys are matched case-sensitively as whole words, so `FLAGS` does not match inside `FLAGS_DOS`. The search covers the whole file, not just line starts: a key name appearing as a whole word inside another key's value is picked up too, so do not use key names inside values. `UNMOUNT` filesystem names are read from the `UNMOUNT` line only.
 - `;` or `#` starts a comment: the rest of that line is ignored, so `; FLAGS 0` really is disabled.
-- The file is read up to 511 bytes.
+- The file is read up to 2047 bytes.
 
 | Key | Value | Default | Meaning |
 |---|---|---|---|
@@ -97,8 +97,11 @@ Format:
 | `MOUNT_USED` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | off | `1` lets a hand `DEVS:DOSDrivers` mount claim a partition another handler already serves, at your own risk: two handlers cache one FAT volume, reading mostly works, any write corrupts it. Default `0`: such a mount is refused and reports `object in use`. Takes effect on the next insert. |
 | `FLAGS_<fs>` | decimal | global `FLAGS` | Per-filesystem override of `FLAGS`. |
 | `CONTROL_<fs>` | string | global `CONTROL` | Per-filesystem override of `CONTROL`. |
-| `DOSTYPE_FAT` | hex | detected | Mount MBR/GPT FAT partitions as this DosType instead of the detected one. See [Choosing the FAT filesystem](#choosing-the-fat-filesystem). |
-| `HANDLER_FAT` | string | none | Where to load the FAT handler from when it is not already in `FileSystem.resource`, e.g. `L:CrossDOSFileSystem`. At most 23 characters. |
+| `DOSTYPE_<fs>` | hex | detected | Mount MBR/GPT/flat partitions as this DosType instead of the detected one. Those are FAT partitions, so only `DOSTYPE_FAT` takes effect; RDB partitions keep their own. See [Choosing the FAT filesystem](#choosing-the-fat-filesystem). |
+| `HANDLER_<fs>` | string | none | Where to load the handler from when it is not already in `FileSystem.resource`, e.g. `L:CrossDOSFileSystem`. Applies to RDB partitions too. At most 23 characters. |
+| `FORCE_<fs>` | `0`/`1`, `ON`/`OFF`, `YES`/`NO` | off | `1` loads `HANDLER_<fs>` even when `FileSystem.resource` has a handler, like `ForceLoad` in a mountlist. |
+| `STACK_<fs>` | decimal | handler's | Minimum handler stack in bytes. |
+| `PRI_<fs>` | signed decimal | handler's | Handler task priority. |
 
 `FLAGS` bits (see also the README "Mount Flags" section):
 
@@ -118,7 +121,7 @@ A CONTROL string is only meaningful for filesystems that parse one. For hot-plug
 MBR and GPT FAT partitions are mounted for **fat95** by default. Two keys change that, and they do separate jobs:
 
 - **`DOSTYPE_FAT`** sets the DosType the node is mounted with. That is what selects the filesystem, because a handler is bound by DosType.
-- **`HANDLER_FAT`** says where to load the handler from, and is used **only** if nothing in `FileSystem.resource` already serves that DosType.
+- **`HANDLER_FAT`** says where to load the handler from, and is used **only** if nothing in `FileSystem.resource` already serves that DosType, unless `FORCE_FAT 1` is set.
 
 So to hand FAT cards to CrossDOS:
 
@@ -146,7 +149,7 @@ Things worth knowing:
 
 ## When a partition does not mount
 
-Automount mounts a partition only when a handler for its filesystem is already in the system. Unless you gave it a `HANDLER_FAT` path (see [Choosing the FAT filesystem](#choosing-the-fat-filesystem)), it does not load a handler from `L:` by itself, so a handler file sitting unused in `L:` does not count. A partition with no handler is still scanned and listed by `lsptres`, but stays `P----` (present, not mounted); it is never falsely shown as mounted. This is the same for every filesystem: FFS, SFS, PFS, FAT and any other.
+Automount mounts a partition only when a handler for its filesystem is already in the system. Unless you gave it a `HANDLER_<fs>` path (see [Choosing the FAT filesystem](#choosing-the-fat-filesystem)), it does not load a handler from `L:` by itself, so a handler file sitting unused in `L:` does not count. A partition with no handler is still scanned and listed by `lsptres`, but stays `P----` (present, not mounted); it is never falsely shown as mounted. This is the same for every filesystem: FFS, SFS, PFS, FAT and any other.
 
 A handler becomes available in one of these ways:
 

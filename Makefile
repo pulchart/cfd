@@ -6,14 +6,14 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev). Empty suffix for a final release.
-RELEASE_DATE = 20261007
-VERSION_SUFFIX =
+RELEASE_DATE = 20261108
+VERSION_SUFFIX = -dev
 
 # compactflash.device version
 CFD_MAJOR = 2
-CFD_MINOR = 1
-CFD_VERSION_SUFFIX =
-CFD_DATE = 30.09.2026
+CFD_MINOR = 2
+CFD_VERSION_SUFFIX = -dev
+CFD_DATE = 08.11.2026
 
 # compactflash.automount version (optional boot/automount module)
 AUTOMOUNT_MAJOR = 2
@@ -585,7 +585,7 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 
 
 PYTHON ?= python3
-TEST_SUITES = ata_contracts config_loader rom_hunks
+TEST_SUITES = ata_contracts config_loader mountcfg rom_hunks
 .PHONY: test check-test-deps test-list-update
 check-test-deps:
 	$(Q)CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/deps.py
