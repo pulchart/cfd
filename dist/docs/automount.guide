@@ -242,7 +242,7 @@ Format:
     values.
   * @{fg shine};@{fg text} or @{fg shine}#@{fg text} starts a comment: the rest of that line is ignored, so @{fg shine}; FLAGS 0@{fg text} really
     is disabled.
-  * The file is read up to 511 bytes.
+  * The file is read up to 2047 bytes.
 
   @{b}Key@{ub}             @{b}Value@{ub}                @{b}Default@{ub}         @{b}Meaning@{ub}               
   --------------  -------------------  --------------  --------------------  
