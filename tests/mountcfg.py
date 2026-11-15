@@ -10,10 +10,11 @@ Status: gated, run by make test.
 Run: python3 tests/mountcfg.py"""
 import sys,tempfile
 from pathlib import Path
-from prefsrig import CFG, Loader, build
+from prefsrig import (CFG, DEV, DOSB, EXEC, UNIT, LVO_ALLOCMEM, LVO_FINDNAME, LVO_FORBID,
+                      LVO_FREEMEM, LVO_PERMIT, LVO_SIGNAL, Loader, build)
 from toolchain import ROOT
 
-OPEN = {'C3','C4'}
+OPEN = {'C4'}
 NEED = ('CFG_MountCfg','CFG_Prefixes','CFG_Overrides','CFG_BUFSZ','CFG_Trunc',
         'mc_Flags','mc_Control','mc_Overrides','mc_NodeDosType','mc_NodeHandler','mc_Size',
         'mc_UnmFlags','mc_Sizeof','ovr_Prefix','ovr_Flags','ovr_HasFlags','ovr_Control',
@@ -51,6 +52,65 @@ def parse(image,eq,text):
     with Loader(image,eq,{'ENV:cfd.prefs':text}) as d:
         d.run()
         return Cfg(d)
+
+PTB,FRAME=0x2e0000,0x380000
+class Worker(Loader):
+    """_MountWorkEntry with exec, dos and ptable.library mocked. alloc=False
+    fails every AllocMem; device/ptable=False make FindName/OpenLibrary fail."""
+    def __init__(self,image,eq,sources,device=True,ptable=True,alloc=True):
+        super().__init__(image,eq,sources)
+        self.device,self.ptable,self.alloc=device,ptable,alloc
+        self.allocs={}; self.events=[]; self.mountcfg=None
+        self.mem.w32(DEV+eq['CFD_ExecBase'],EXEC)
+        self.mem.w32(DEV+eq['CFD_Unit'],UNIT)
+        self.mem.w32(UNIT+eq['CFU_DriveSize'],1000)
+        self.mem.w32(UNIT+eq['CFU_MountDone'],0x100)
+        self.mem.w32(UNIT+eq['CFU_MountAgent'],0x7000)
+        for lvo,fn in ((LVO_FORBID,lambda:None),(LVO_PERMIT,lambda:None),
+                       (LVO_FINDNAME,self.find_name),(LVO_ALLOCMEM,self.alloc_mem),
+                       (LVO_FREEMEM,self.free_mem),
+                       (LVO_SIGNAL,lambda:self.events.append('Signal'))):
+            self.hook(EXEC,lvo,fn)
+        for lvo,name in ((36,'Scan'),(42,'Mount'),(48,'Unmount'),(60,'MarkAbsent')):
+            self.hook(PTB,lvo,lambda name=name:self.ptable_call(name))
+    def find_name(self): self.cpu.w_reg(0,DEV if self.device else 0)
+    def open_lib(self):
+        name=self.cstr(self.cpu.r_reg(9))               # a1
+        base={'dos.library':DOSB,'ptable.library':PTB if self.ptable else 0}[name]
+        self.cpu.w_reg(0,base)
+    def alloc_mem(self):
+        size=self.cpu.r_reg(0)
+        if not self.alloc: self.cpu.w_reg(0,0); return
+        addr=FRAME+0x10000*len(self.allocs)
+        self.mem.w_block(addr,b'\x55'*size)
+        self.allocs[addr]=size; self.cpu.w_reg(0,addr)
+    def free_mem(self):
+        addr,size=self.cpu.r_reg(9),self.cpu.r_reg(0)
+        assert self.allocs.pop(addr,None)==size,'FreeMem of %x/%d not allocated'%(addr,size)
+    def ptable_call(self,name):
+        self.events.append(name)
+        if name=='Mount':
+            a0=self.cpu.r_reg(8)
+            self.mountcfg=(a0,self.mem.r32(a0+self.eq['mc_Size']))
+        self.cpu.w_reg(0,0)
+
+def worker(image,eq,**kw):
+    with Worker(image,eq,{'ENV:cfd.prefs':b'AUTOMOUNT 1\n'},**kw) as d:
+        d.run('_MountWorkEntry')
+        return d.events,d.allocs,d.mountcfg
+
+def c_worker(_,__,wimage_eq):
+    image,eq=wimage_eq
+    ev,left,mc=worker(image,eq)
+    assert ev==['Scan','Mount','Signal'] and not left,(ev,left)
+    assert mc and mc[1]==eq['mc_Sizeof'] and FRAME<=mc[0]<FRAME+0x10000,mc
+    ev,left,_=worker(image,eq,alloc=False)
+    assert ev==['Signal'] and not left,('no memory',ev,left)
+    ev,left,_=worker(image,eq,ptable=False)
+    assert ev==['Signal'] and not left,('no ptable',ev,left)
+    ev,left,_=worker(image,eq,device=False)
+    assert ev==[] and not left,('no device',ev,left)
+    return True
 
 def c_defaults(image,eq,_):
     c=parse(image,eq,b'')
@@ -124,6 +184,7 @@ CASES = [
     ('', 'keys are whole words', c_whole_word), ('', 'per-fs override rows', c_overrides),
     ('', 'every string key fits the pool', c_pool), ('', 'UNMOUNT list', c_unmount),
     ('', 'policy bits', c_policy), ('', 'shipped cfd.prefs', c_shipped),
+    ('', 'worker exits free and signal', c_worker),
     ('C3', 'key past 511 bytes is read', c_long_prefs),
     ('C4', 'UNMOUNT names from its line only', c_unmount_line),
 ]
@@ -132,9 +193,11 @@ def main():
     failures=[]
     with tempfile.TemporaryDirectory() as t:
         image,eq=build(Path(t),NEED)
+        (Path(t)/'w').mkdir()
+        wimage_eq=build(Path(t)/'w',NEED,debug=False)
         for ident,label,fn in CASES:
             try:
-                ok=bool(fn(image,eq,None))
+                ok=bool(fn(image,eq,wimage_eq))
             except AssertionError as e:
                 ok,label=False,'%s (%s)'%(label,e)
             want=ident not in OPEN
