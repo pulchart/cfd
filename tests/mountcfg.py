@@ -164,6 +164,13 @@ def c_policy(image,eq,_):
     c=parse(image,eq,b'AUTOMOUNT 0\nUNMOUNT_STATIC 0\nMOUNT_USED 1\n')
     want=(1<<eq['MCUF_KEEPSTATIC'])|(1<<eq['MCUF_STAMPONLY'])|(1<<eq['MCUF_MOUNTUSED'])
     assert c.mc['UnmFlags']==want,c.mc
+    keep,used=1<<eq['MCUF_KEEPSTATIC'],1<<eq['MCUF_MOUNTUSED']
+    for text,flags in ((b'UNMOUNT_STATIC off\nMOUNT_USED yes\n',keep|used),
+                       (b'UNMOUNT_STATIC No\nMOUNT_USED On\n',keep|used),
+                       (b'UNMOUNT_STATIC maybe\nMOUNT_USED 2\n',0),
+                       (b'UNMOUNT_STATIC ON\nMOUNT_USED NEVER\n',0)):
+        c=parse(image,eq,text)
+        assert c.mc['UnmFlags']==flags,(text,c.mc['UnmFlags'])
     return True
 
 def c_shipped(image,eq,_):
