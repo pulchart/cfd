@@ -48,9 +48,9 @@ See [docs/changes.md](docs/changes.md) for release news and history.
 
   I recommend putting `compactflash.device`, `compactflash.automount` and `ptable.library` in ROM as resident modules instead of `LoadModule`.
 
-- Double-click `Setup` to configure the automount feature. It writes `ENVARC:cfd.prefs` and, if wanted, `ENV:cfd.prefs`.
+- Double-click `Setup` to configure the automount feature. It writes `ENVARC:cfd.prefs` and, if wanted, `ENV:cfd.prefs`, and sets the handler for DOS/FFS, SFS, PFS and FAT partitions.
 
-  In Expert mode it also sets the driver flags (`FLAGS`) and can allow mounting a partition that is already mounted.
+  In Expert mode it also asks for the handler stack and priority, sets the driver flags (`FLAGS`) and can allow mounting a partition that is already mounted.
 
 By hand:
 
@@ -74,11 +74,11 @@ Copy cfd/ENVARC/cfd.prefs to ENV:cfd.prefs
 
 ## Autoboot / Automount
 
-`compactflash.device` can boot straight from an RDB-partitioned CF card (ROM-resident only) and automount inserted cards at DOS time (RDB, MBR, GPT, and flat whole-disk FAT). Both are driven by `ptable.library` plus the optional `compactflash.automount` module; without them the device still works as a plain mount-only device.
+`compactflash.device` can boot straight from an RDB-partitioned CF card (ROM-resident only) and automount inserted cards at DOS time (RDB, MBR, GPT, and a whole card without a partition table). Both are driven by `ptable.library` plus the optional `compactflash.automount` module; without them the device still works as a plain mount-only device.
 
 Automount is **on by default everywhere** (ROM-resident and file-based alike); disable it with `AUTOMOUNT 0` in `ENV:cfd.prefs` (see the example config above). Removing a card fully unmounts all supported filesystems by default; `UNMOUNT <names>` restricts it and `UNMOUNT NONE` keeps the handlers. The resident driver re-reads that file on every card insert and removal.
 
-The per-filesystem config keys (`UNMOUNT`, `FLAGS_<fs>`, `CONTROL_<fs>`) recognise exactly five filesystem names and no others: `DOS`, `FFS`, `SFS`, `PFS`, `FAT`. Any other name is silently ignored. See [docs/automount.md](docs/automount.md) for the full config reference.
+The per-filesystem config keys (`UNMOUNT` and the `<fs>` keys `FLAGS_`, `CONTROL_`, `HANDLER_`, `DOSTYPE_`, `FORCE_`, `STACK_`, `PRI_`) recognise exactly five filesystem names and no others: `DOS`, `FFS`, `SFS`, `PFS`, `FAT`. Any other name is silently ignored. See [docs/automount.md](docs/automount.md) for the full config reference.
 
 `compactflash.automount` provides the boot/automount bringup: in a ROM it gives cold-boot autoboot and opens the device after DOS so the automount agent runs; on disk you get the same run-time automount (hot-swap) by adding it to your startup-sequence with:
 ```
@@ -174,7 +174,7 @@ Cold boot (ROM-resident `compactflash.automount` + `ptable.library`, RDB-partiti
 
 Card identification (hot-plug):
 ```
-[CFD] compactflash.device 2.0 (11.09.2026) [68020]
+[CFD] compactflash.device 2.2 (15.11.2026) [68020]
 [CFD] Card inserted
 [CFD] Identifying card...
 [CFD] Reset
@@ -217,25 +217,25 @@ W248: 0000 0000 0000 0000 0000 0000 0000 0000
 [CFD] ..done, multi RW: 256
 [CFD] Card identified OK
 [CFD] Notify clients
-[MW] config: read=-1 auto=1 flags=0
+[MW] config: src=0 read=-1 auto=1 flags=0
 [MW] scanning compactflash.device:0 for partitions
 [PT] scanning for partitions
 [PT] MBR partition table
-[PT] partitions found: 1
+[PT] new partitions: 1
 [MW] scan done, partitions known: 1
 [MW] mounting new partitions
 [PT] mounting partitions
 [PT] mounted CF0
 [MW] mounted volumes: 1
 [CFD] Card removed
-[MW] config: read=-1 auto=1 flags=0
+[MW] config: src=0 read=-1 auto=1 flags=0
 [MW] card removed
 [PT] card removed, media absent
 [PT] unmounting partitions
 [PT] unmounted CF0
 [MW] entries detached: 1
 ```
-The `[MW]` lines come from the automount mount worker (they appear when `compactflash.automount` is active), the `[PT]` lines from `ptable.library`. `read=-1` means no `ENV:cfd.prefs` is set, so the defaults apply (`auto=1`).
+The `[MW]` lines come from the automount mount worker (they appear when `compactflash.automount` is active), the `[PT]` lines from `ptable.library`. `src=0 read=-1`: no `cfd.prefs` found, the defaults apply (`auto=1`).
 
 #### Capturing serial output without a null-modem cable
 

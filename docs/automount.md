@@ -9,7 +9,7 @@ Insert a CF card and its partitions mount by themselves; pull it and they go awa
 Three modules are involved:
 
 - `compactflash.device`: the I/O driver.
-- `ptable.library`: the partition scanner and automounter (RDB, MBR, GPT, flat FAT).
+- `ptable.library`: the partition scanner and automounter (RDB, MBR, GPT, whole card without a partition table).
 - `compactflash.automount`: bringup. It opens the device after DOS, and in a ROM it also carries the cold-boot autoboot stub.
 
 Automount needs the device open, because the agent lives in the unit task. Anything that opens it will do, a `DEVS:DOSDrivers/CF0` mount included; `compactflash.automount` is how you get it open without a mountlist entry, and the only way to get cold-boot autoboot.
@@ -145,7 +145,7 @@ Things worth knowing:
 - **`DOSTYPE_FAT` pins the mount to one partition's block range**, because a handler told which filesystem to be is not one auto-detecting its own partition. So unlike the default it does not follow a card swap by itself: keep the default `UNMOUNT` policy (or list `FAT`) with it, so the node is torn down and rebuilt for the next card. `HANDLER_FAT` on its own does not change this - it only says where the code comes from, so auto-detect stays intact.
 - **A wrong value does not silently fall back.** If nothing serves the DosType you named and no handler path resolves, the partition stays published but unmounted, listed by `lsptres` as `P----`. On a full build `FLAGS 8` prints the parsed number as `dostype=4D534400` in the worker trace, which is the quickest way to spot a typo. `lsptres` shows the outcome in its `DosType` column.
 - **Changing either key needs a card pull**, or a reboot under `UNMOUNT NONE`. Until the old node goes away its handler is still bound to that partition, and you do not want two handlers caching the same blocks.
-- This is about MBR and GPT cards only. RDB partitions always use the filesystem recorded on the card, and nothing here applies at cold boot, where `cfd.prefs` cannot be read yet.
+- `DOSTYPE_FAT` applies to MBR, GPT and flat partitions only; RDB partitions keep the DosType recorded on the card. Nothing here applies at cold boot, where `cfd.prefs` cannot be read yet.
 
 ## When a partition does not mount
 
@@ -158,7 +158,7 @@ A handler becomes available in one of these ways:
 - Made resident from disk with `LoadModule` (for example adding `L:fat95` to your `LoadModule` line): becoming resident runs the handler's startup, which registers it.
 - Loaded on demand when you mount a matching DOSDriver by hand: mounting one fat95 DOSDriver loads fat95 from `L:` and registers its shared FAT code, after which automount binds every other FAT partition to it.
 
-FAT cards are the case that needs attention: MBR, GPT and whole-disk (flat) FAT cards carry no handler in their partition table, so fat95 must come from the ROM, from `LoadModule`, or from a mounted fat95 DOSDriver.
+FAT cards are the case that needs attention: MBR, GPT and whole-disk (flat) FAT cards carry no handler in their partition table, so fat95 must come from the ROM, from `LoadModule`, from a mounted fat95 DOSDriver or from `HANDLER_FAT L:fat95`.
 
 ## Booting from a CF card (ROM-resident)
 
