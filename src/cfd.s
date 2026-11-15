@@ -3612,36 +3612,25 @@ CFGSRC_ENV	= 1			;ENV:cfd.prefs (GetVar)
 CFGSRC_ENVARC	= 2			;ENVARC:cfd.prefs
 CFGSRC_ARCHIVE	= 3			;SYS:Prefs/Env-Archive/cfd.prefs
 
-CFG_Buf		= 0			;config text buffer (0..CFG_BUFSZ-1)
-CFG_Prefixes	= 512			;UNMOUNT dostype list, 0-terminated (8 longs)
-CFG_AutoMount	= 544			;byte (1 = automount on)
-CFG_CtlNext	= 545			;byte (control slots used)
-CFG_OvNext	= 546			;byte (override rows used)
-CFG_Source	= 547			;byte CFGSRC_*
-CFG_AmBad	= 548			;byte (1 = AUTOMOUNT value not recognized)
-CFG_Trunc	= 549			;byte (1 = prefs filled the buffer)
-CFG_UnmStatic	= 550			;byte (1 = static mounts follow UNMOUNT, default;
-					;0 = UNMOUNT_STATIC 0, keep hand-mounted nodes)
-CFG_MntUsed	= 551			;byte (1 = MOUNT_USED: a hand mountlist may claim
-					;an already-served partition; default 0)
-CFG_DbgRead	= 552			;long bytes read (-1 = no prefs found)
-CFG_MountCfg	= 556			;MountCfg, mc_Sizeof bytes
-CFG_Overrides	= 584			;(CFG_OVMAX+1) override rows * ovr_Sizeof
-CFG_Controls	= 696			;CFG_NCTL string slots * CFG_CTLSZ
-CFG_SIZEOF	= 1016
+CFG_NPFX	= 8			;UNMOUNT prefix longs, terminator included
 
-;-- the frame offsets above are hand-written, so let the assembler check the
-;   blocks still tile exactly. A ptable-side mc_/ovr_ size change then breaks
-;   the build here instead of silently overlapping two fields at runtime.
-	ifne	CFG_Overrides-(CFG_MountCfg+mc_Sizeof)
-	fail	"CFG_Overrides does not follow CFG_MountCfg"
-	endc
-	ifne	CFG_Controls-(CFG_Overrides+(CFG_OVMAX+1)*ovr_Sizeof)
-	fail	"CFG_Controls does not follow CFG_Overrides"
-	endc
-	ifne	CFG_SIZEOF-(CFG_Controls+CFG_NCTL*CFG_CTLSZ)
-	fail	"CFG_SIZEOF does not cover CFG_Controls"
-	endc
+CFG_Buf		= 0			;config text buffer (0..CFG_BUFSZ-1)
+CFG_Prefixes	= CFG_BUFSZ		;UNMOUNT dostype list, 0-terminated
+CFG_AutoMount	= CFG_Prefixes+CFG_NPFX*4	;byte (1 = automount on)
+CFG_CtlNext	= CFG_AutoMount+1	;byte (control slots used)
+CFG_OvNext	= CFG_AutoMount+2	;byte (override rows used)
+CFG_Source	= CFG_AutoMount+3	;byte CFGSRC_*
+CFG_AmBad	= CFG_AutoMount+4	;byte (1 = AUTOMOUNT value not recognized)
+CFG_Trunc	= CFG_AutoMount+5	;byte (1 = prefs filled the buffer)
+CFG_UnmStatic	= CFG_AutoMount+6	;byte (1 = static mounts follow UNMOUNT, default;
+					;0 = UNMOUNT_STATIC 0, keep hand-mounted nodes)
+CFG_MntUsed	= CFG_AutoMount+7	;byte (1 = MOUNT_USED: a hand mountlist may claim
+					;an already-served partition; default 0)
+CFG_DbgRead	= CFG_AutoMount+8	;long bytes read (-1 = no prefs found)
+CFG_MountCfg	= CFG_DbgRead+4		;MountCfg, mc_Sizeof bytes
+CFG_Overrides	= CFG_MountCfg+mc_Sizeof	;(CFG_OVMAX+1) override rows
+CFG_Controls	= CFG_Overrides+(CFG_OVMAX+1)*ovr_Sizeof	;string slots
+CFG_SIZEOF	= CFG_Controls+CFG_NCTL*CFG_CTLSZ
 
 ;-- _mwLoadPrefs: read cfd.prefs into CFG_Buf from the first source that has
 ;   it: ENV: (GetVar), ENVARC:cfd.prefs, SYS:Prefs/Env-Archive/cfd.prefs.
@@ -3784,17 +3773,15 @@ _mwReadConfig:
 	clr.b	CFG_Trunc(a5)
 	move.b	#1,CFG_UnmStatic(a5)	;static mounts follow UNMOUNT by default
 	clr.b	CFG_MntUsed(a5)		;served partitions refuse a second mount
-	clr.l	CFG_MountCfg+mc_Flags(a5)
-	clr.l	CFG_MountCfg+mc_Control(a5)
-	clr.l	CFG_MountCfg+mc_Overrides(a5)
+	lea	CFG_MountCfg(a5),a0	;every field, including ones this source
+	moveq.l	#mc_Sizeof/4-1,d0	;does not name
+_cfg_mcclr:
+	clr.l	(a0)+
+	dbf	d0,_cfg_mcclr
 	move.l	#mc_Sizeof,CFG_MountCfg+mc_Size(a5)
-	clr.l	CFG_MountCfg+mc_NodeDosType(a5)
-	clr.l	CFG_MountCfg+mc_NodeHandler(a5)
-	clr.l	CFG_MountCfg+mc_UnmFlags(a5)
 ;-- default UNMOUNT list: every um_table prefix (unmount all supported
 ;   filesystems on removal). An explicit UNMOUNT key rebuilds the list; a key
-;   with no recognized names leaves it empty (keep handlers). 6 prefixes +
-;   terminator fit the 8-long CFG_Prefixes field.
+;   with no recognized names leaves it empty (keep handlers).
 	lea	CFG_Prefixes(a5),a0
 	lea	um_table(pc),a1
 _cfg_umdef:
