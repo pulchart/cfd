@@ -69,8 +69,8 @@ feature is catalogued scenario by scenario in @{fg shine}automount-review.guide@
 Three modules are involved:
 
   * @{fg shine}compactflash.device@{fg text}: the I/O driver.
-  * @{fg shine}ptable.library@{fg text} : the partition scanner and automounter (RDB, MBR, GPT, flat
-    FAT).
+  * @{fg shine}ptable.library@{fg text} : the partition scanner and automounter (RDB, MBR, GPT, whole
+    card without a partition table).
   * @{fg shine}compactflash.automount@{fg text} : bringup. It opens the device after DOS, and in a ROM
     it also carries the cold-boot autoboot stub.
 
@@ -426,9 +426,9 @@ Things worth knowing:
   * @{b}Changing either key needs a card pull@{ub} , or a reboot under @{fg shine}UNMOUNT NONE@{fg text} . Until
     the old node goes away its handler is still bound to that partition, and you
     do not want two handlers caching the same blocks.
-  * This is about MBR and GPT cards only. RDB partitions always use the filesystem
-    recorded on the card, and nothing here applies at cold boot, where @{fg shine}cfd.prefs@{fg text}
-    cannot be read yet.
+  * @{fg shine}DOSTYPE_FAT@{fg text} applies to MBR, GPT and flat partitions only; RDB partitions keep
+    the DosType recorded on the card. Nothing here applies at cold boot, where
+    @{fg shine}cfd.prefs@{fg text} cannot be read yet.
 
 ----------------------------------------
 @{"<< Prev" link Configuration__ENV_cfd_prefs}  @{"Contents" link Main}  @{"Next >>" link When_a_partition_does_not_mount}
@@ -462,8 +462,8 @@ A handler becomes available in one of these ways:
 
 FAT cards are the case that needs attention: MBR, GPT and whole-disk
 (flat) FAT cards carry no handler in their partition table, so fat95
-must come from the ROM, from @{fg shine}LoadModule@{fg text} , or from a mounted fat95
-DOSDriver.
+must come from the ROM, from @{fg shine}LoadModule@{fg text} , from a mounted fat95 DOSDriver
+or from @{fg shine}HANDLER_FAT L:fat95@{fg text} .
 
 ----------------------------------------
 @{"<< Prev" link Choosing_the_FAT_filesystem}  @{"Contents" link Main}  @{"Next >>" link Booting_from_a_CF_card__ROM_resident_}

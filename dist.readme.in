@@ -30,8 +30,8 @@ FEATURES
 * TD64 and SCSI emulation support
 * Works with fat95 filesystem for FAT32 support, not excluding Amiga native
   (ffs, sfs, pfs) filesystems
-* Scans and automounts RDB, MBR, GPT, and flat (whole-disk FAT) partition
-  tables via ptable.library
+* Scans and automounts RDB, MBR, GPT and whole cards without a partition
+  table via ptable.library
 * Serial debug output for troubleshooting (Flags = 8)
 * Transfer speeds up to 2.2 MB/s read, 1.9 MB/s write
   (in multi-sector mode if firmware supports it or with Flags = 16 override)
@@ -62,10 +62,12 @@ INSTALLATION
   ptable.library in ROM as resident modules instead of LoadModule.
 
 * Double-click Setup to configure the automount feature. It writes
-  ENVARC:cfd.prefs and, if wanted, ENV:cfd.prefs.
+  ENVARC:cfd.prefs and, if wanted, ENV:cfd.prefs, and sets the handler
+  for DOS/FFS, SFS, PFS and FAT partitions.
 
-  In Expert mode it also sets the driver flags (FLAGS) and can allow
-  mounting a partition that is already mounted.
+  In Expert mode it also asks for the handler stack and priority, sets
+  the driver flags (FLAGS) and can allow mounting a partition that is
+  already mounted.
 
 By hand:
 1. Copy the contents of <flavor>/<cpu>/ to SYS: (devs/ to DEVS:,
@@ -109,12 +111,13 @@ adding to your user-startup-sequence:
 (plus L:fat95). LoadModule cannot provide cold-boot autoboot; that needs
 a real ROM.
 
-The per-filesystem config keys (UNMOUNT, FLAGS_<fs>, CONTROL_<fs>)
-recognise exactly five filesystem names and no others: DOS, FFS, SFS,
-PFS, FAT. Any other name is silently ignored.
+The per-filesystem config keys (UNMOUNT and the <fs> keys FLAGS,
+CONTROL, HANDLER, DOSTYPE, FORCE, STACK, PRI) recognise exactly five
+filesystem names and no others: DOS, FFS, SFS, PFS, FAT. Any other name
+is silently ignored.
 
-FAT partitions still need fat95 loaded so its filesystem code is
-registered. At cold boot an empty slot is detected by a single Gayle
+FAT partitions need fat95 resident, or HANDLER_FAT L:fat95 in
+cfd.prefs. At cold boot an empty slot is detected by a single Gayle
 read and costs nothing; with a card present the boot stub polls up to
 5 s for a slow one.
 
@@ -139,7 +142,7 @@ With Flags = 8, connect serial cable and monitor at 9600 baud. The first
 line is a version banner that identifies the driver version and CPU tier
 ([68020] or [68000]):
 
-  [CFD] compactflash.device 2.0 (11.09.2026) [68020]
+  [CFD] compactflash.device 2.2 (15.11.2026) [68020]
   [CFD] Card inserted
   [CFD] Identifying card...
   [CFD] Reset
@@ -195,7 +198,7 @@ log ([CFD] Reset, [CFD] CIS gate, etc.) is not printed during autoboot.
   [CFD] boot: ptable.library not preloaded, InitResident()...
   [CFD] boot: BootScanPartitions(compactflash.device,0)
   [PT] cold boot: scanning for partitions
-  [PT] no partition table (not RDB/MBR/GPT/FAT)
+  [PT] whole medium, no partition table
   [PT] cold boot done, partitions registered: 0
 
 
@@ -302,7 +305,7 @@ cfd/small/68020/devs/compactflash.device - 68020+, no debug code
 cfd/full/68000/devs/compactflash.device  - 68000+, debug-capable (serial output with Flags=8)
 cfd/small/68000/devs/compactflash.device - 68000+, no debug code
 
-ptable.library (required) - partition scanner/automounter (RDB/MBR/GPT/FAT):
+ptable.library (required) - partition scanner/automounter (RDB/MBR/GPT/whole card):
 cfd/full/68020/libs/ptable.library       - 68020+, debug-capable (serial output always on at boot)
 cfd/small/68020/libs/ptable.library      - 68020+, no debug code
 cfd/full/68000/libs/ptable.library       - 68000+, debug-capable (serial output always on at boot)

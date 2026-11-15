@@ -196,10 +196,12 @@ I recommend putting @{fg shine}compactflash.device@{fg text} , @{fg shine}compac
 @{fg shine}ptable.library@{fg text} in ROM as resident modules instead of @{fg shine}LoadModule@{fg text} .
 
   * Double-click @{fg shine}Setup@{fg text} to configure the automount feature. It writes
-    @{fg shine}ENVARC:cfd.prefs@{fg text} and, if wanted, @{fg shine}ENV:cfd.prefs@{fg text} .
+    @{fg shine}ENVARC:cfd.prefs@{fg text} and, if wanted, @{fg shine}ENV:cfd.prefs@{fg text} , and sets the handler for
+    DOS/FFS, SFS, PFS and FAT partitions.
 
-In Expert mode it also sets the driver flags ( @{fg shine}FLAGS@{fg text} ) and can allow
-mounting a partition that is already mounted.
+In Expert mode it also asks for the handler stack and priority, sets the
+driver flags ( @{fg shine}FLAGS@{fg text} ) and can allow mounting a partition that is
+already mounted.
 
 By hand:
 
@@ -234,9 +236,9 @@ and @{fg shine}ENV:Sys@{fg text} .
 
 @{fg shine}compactflash.device@{fg text} can boot straight from an RDB-partitioned CF card
 (ROM-resident only) and automount inserted cards at DOS time (RDB, MBR,
-GPT, and flat whole-disk FAT). Both are driven by @{fg shine}ptable.library@{fg text} plus
-the optional @{fg shine}compactflash.automount@{fg text} module; without them the device
-still works as a plain mount-only device.
+GPT, and a whole card without a partition table). Both are driven by
+@{fg shine}ptable.library@{fg text} plus the optional @{fg shine}compactflash.automount@{fg text} module; without
+them the device still works as a plain mount-only device.
 
 Automount is @{b}on by default everywhere@{ub} (ROM-resident and file-based
 alike); disable it with @{fg shine}AUTOMOUNT 0@{fg text} in @{fg shine}ENV:cfd.prefs@{fg text} (see the example
@@ -245,9 +247,10 @@ by default; @{fg shine}UNMOUNT <names>@{fg text} restricts it and @{fg shine}UNM
 handlers. The resident driver re-reads that file on every card insert
 and removal.
 
-The per-filesystem config keys ( @{fg shine}UNMOUNT@{fg text} , @{fg shine}FLAGS_<fs>@{fg text} , @{fg shine}CONTROL_<fs>@{fg text} )
-recognise exactly five filesystem names and no others: @{fg shine}DOS@{fg text} , @{fg shine}FFS@{fg text} , @{fg shine}SFS@{fg text} ,
-@{fg shine}PFS@{fg text} , @{fg shine}FAT@{fg text} . Any other name is silently ignored. See @{"  docs/automount.guide  " link "automount.guide/Main"} for the full config
+The per-filesystem config keys ( @{fg shine}UNMOUNT@{fg text} and the @{fg shine}<fs>@{fg text} keys @{fg shine}FLAGS_@{fg text} ,
+@{fg shine}CONTROL_@{fg text} , @{fg shine}HANDLER_@{fg text} , @{fg shine}DOSTYPE_@{fg text} , @{fg shine}FORCE_@{fg text} , @{fg shine}STACK_@{fg text} , @{fg shine}PRI_@{fg text} ) recognise
+exactly five filesystem names and no others: @{fg shine}DOS@{fg text} , @{fg shine}FFS@{fg text} , @{fg shine}SFS@{fg text} , @{fg shine}PFS@{fg text} , @{fg shine}FAT@{fg text}
+. Any other name is silently ignored. See @{"  docs/automount.guide  " link "automount.guide/Main"} for the full config
 reference.
 
 @{fg shine}compactflash.automount@{fg text} provides the boot/automount bringup: in a ROM it
@@ -411,7 +414,7 @@ RDB-partitioned card). The @{fg shine}[CFD] boot:@{fg text} lines come from
 
 Card identification (hot-plug):
 @{fg highlight}
-  [CFD] compactflash.device 2.0 (11.09.2026) [68020]
+  [CFD] compactflash.device 2.2 (15.11.2026) [68020]
   [CFD] Card inserted
   [CFD] Identifying card...
   [CFD] Reset
@@ -454,18 +457,18 @@ Card identification (hot-plug):
   [CFD] ..done, multi RW: 256
   [CFD] Card identified OK
   [CFD] Notify clients
-  [MW] config: read=-1 auto=1 flags=0
+  [MW] config: src=0 read=-1 auto=1 flags=0
   [MW] scanning compactflash.device:0 for partitions
   [PT] scanning for partitions
   [PT] MBR partition table
-  [PT] partitions found: 1
+  [PT] new partitions: 1
   [MW] scan done, partitions known: 1
   [MW] mounting new partitions
   [PT] mounting partitions
   [PT] mounted CF0
   [MW] mounted volumes: 1
   [CFD] Card removed
-  [MW] config: read=-1 auto=1 flags=0
+  [MW] config: src=0 read=-1 auto=1 flags=0
   [MW] card removed
   [PT] card removed, media absent
   [PT] unmounting partitions
@@ -474,7 +477,7 @@ Card identification (hot-plug):
 @{fg text}
 The @{fg shine}[MW]@{fg text} lines come from the automount mount worker (they appear when
 @{fg shine}compactflash.automount@{fg text} is active), the @{fg shine}[PT]@{fg text} lines from @{fg shine}ptable.library@{fg text} .
-@{fg shine}read=-1@{fg text} means no @{fg shine}ENV:cfd.prefs@{fg text} is set, so the defaults apply ( @{fg shine}auto=1@{fg text} ).
+@{fg shine}src=0 read=-1@{fg text} : no @{fg shine}cfd.prefs@{fg text} found, the defaults apply ( @{fg shine}auto=1@{fg text} ).
 
 @{b}Capturing serial output without a null-modem cable@{ub}
 
