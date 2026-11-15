@@ -3827,110 +3827,44 @@ _cfg_term:
 	clr.b	0(a0,d3.l)		;NUL-terminate
 	lea	CFG_Buf(a5),a0
 	bsr	_cfgStripComments
-;-- AUTOMOUNT
+;-- AUTOMOUNT: an unrecognized value keeps the default and is reported in the
+;   worker trace
 	lea	CFG_Buf(a5),a0
 	lea	kw_automount(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
 	beq.s	_cfg_umst
-;-- accepted values: 0 1 ON OFF YES NO, either case. Anything else keeps the
-;   default and is reported in the worker trace.
 	move.l	d0,a0
-	bsr	_cfgSkipSp
-	move.b	(a0),d0
-	cmp.b	#'0',d0
-	beq.s	_cfg_am_off
-	cmp.b	#'1',d0
-	beq.s	_cfg_am_on
-	bsr	_cfgUpper
-	cmp.b	#'N',d0			;NO
-	beq.s	_cfg_am_off
-	cmp.b	#'Y',d0			;YES
-	beq.s	_cfg_am_on
-	cmp.b	#'O',d0			;ON / OFF
-	bne.s	_cfg_am_bad
-	move.b	1(a0),d0
-	bsr	_cfgUpper
-	cmp.b	#'F',d0
-	beq.s	_cfg_am_off
-	cmp.b	#'N',d0
-	beq.s	_cfg_am_on
-_cfg_am_bad:
-	move.b	#1,CFG_AmBad(a5)	;unrecognized value -> keep the default
+	bsr	_cfgOnOff
+	bpl.s	_cfg_am_set
+	move.b	#1,CFG_AmBad(a5)
 	bra.s	_cfg_umst
-_cfg_am_off:
-	clr.b	CFG_AutoMount(a5)
-	bra.s	_cfg_umst
-_cfg_am_on:
-	move.b	#1,CFG_AutoMount(a5)
+_cfg_am_set:
+	move.b	d0,CFG_AutoMount(a5)
 _cfg_umst:
-;-- UNMOUNT_STATIC (same value grammar as AUTOMOUNT): 0 keeps hand-mounted
-;   (static) nodes when the card is pulled; 1 = default, they follow the
-;   UNMOUNT policy. Unrecognized value keeps the default.
+;-- UNMOUNT_STATIC: 0 keeps hand-mounted (static) nodes when the card is
+;   pulled; 1 = default, they follow the UNMOUNT policy
 	lea	CFG_Buf(a5),a0
 	lea	kw_unmount_static(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
 	beq.s	_cfg_mu
 	move.l	d0,a0
-	bsr	_cfgSkipSp
-	move.b	(a0),d0
-	cmp.b	#'0',d0
-	beq.s	_cfg_us_off
-	cmp.b	#'1',d0
-	beq.s	_cfg_us_on
-	bsr	_cfgUpper
-	cmp.b	#'N',d0			;NO
-	beq.s	_cfg_us_off
-	cmp.b	#'Y',d0			;YES
-	beq.s	_cfg_us_on
-	cmp.b	#'O',d0			;ON / OFF
-	bne.s	_cfg_mu			;unrecognized -> keep the default
-	move.b	1(a0),d0
-	bsr	_cfgUpper
-	cmp.b	#'F',d0
-	beq.s	_cfg_us_off
-	cmp.b	#'N',d0
-	bne.s	_cfg_mu
-_cfg_us_on:
-	move.b	#1,CFG_UnmStatic(a5)
-	bra.s	_cfg_mu
-_cfg_us_off:
-	clr.b	CFG_UnmStatic(a5)
+	bsr	_cfgOnOff
+	bmi.s	_cfg_mu			;unrecognized -> keep the default
+	move.b	d0,CFG_UnmStatic(a5)
 _cfg_mu:
-;-- MOUNT_USED (same value grammar): 1 lets a hand mountlist claim a
-;   partition another handler already serves, at the user's own risk;
-;   default 0 keeps the refusal. Stamped like UNMOUNT_STATIC.
+;-- MOUNT_USED: 1 lets a hand mountlist claim a partition another handler
+;   already serves, at the user's own risk; default 0 keeps the refusal
 	lea	CFG_Buf(a5),a0
 	lea	kw_mount_used(pc),a1
 	bsr	_cfgStr
 	tst.l	d0
 	beq.s	_cfg_flags
 	move.l	d0,a0
-	bsr	_cfgSkipSp
-	move.b	(a0),d0
-	cmp.b	#'0',d0
-	beq.s	_cfg_mu_off
-	cmp.b	#'1',d0
-	beq.s	_cfg_mu_on
-	bsr	_cfgUpper
-	cmp.b	#'N',d0			;NO
-	beq.s	_cfg_mu_off
-	cmp.b	#'Y',d0			;YES
-	beq.s	_cfg_mu_on
-	cmp.b	#'O',d0			;ON / OFF
-	bne.s	_cfg_flags		;unrecognized -> keep the default
-	move.b	1(a0),d0
-	bsr	_cfgUpper
-	cmp.b	#'F',d0
-	beq.s	_cfg_mu_off
-	cmp.b	#'N',d0
-	bne.s	_cfg_flags
-_cfg_mu_on:
-	move.b	#1,CFG_MntUsed(a5)
-	bra.s	_cfg_flags
-_cfg_mu_off:
-	clr.b	CFG_MntUsed(a5)
+	bsr	_cfgOnOff
+	bmi.s	_cfg_flags		;unrecognized -> keep the default
+	move.b	d0,CFG_MntUsed(a5)
 _cfg_flags:
 ;-- global FLAGS
 	lea	CFG_Buf(a5),a0
@@ -4109,6 +4043,39 @@ _cs_no:
 	moveq.l	#0,d0
 _cs_ret:
 	movem.l	(sp)+,d2-d3/a2-a4
+	rts
+
+;-- _cfgOnOff: the value after a key at a0: 0 1 ON OFF YES NO, either case.
+;   Only the first letter decides (N/0 off, Y/1 on, O+N/F).
+;   Out: d0.l = 1 on, 0 off, -1 not recognized (N set). Advances a0.
+_cfgOnOff:
+	bsr	_cfgSkipSp
+	move.b	(a0),d0
+	cmp.b	#'0',d0
+	beq.s	_coo_off
+	cmp.b	#'1',d0
+	beq.s	_coo_on
+	bsr	_cfgUpper
+	cmp.b	#'N',d0			;NO
+	beq.s	_coo_off
+	cmp.b	#'Y',d0			;YES
+	beq.s	_coo_on
+	cmp.b	#'O',d0			;ON / OFF
+	bne.s	_coo_bad
+	move.b	1(a0),d0
+	bsr	_cfgUpper
+	cmp.b	#'F',d0
+	beq.s	_coo_off
+	cmp.b	#'N',d0
+	beq.s	_coo_on
+_coo_bad:
+	moveq.l	#-1,d0
+	rts
+_coo_off:
+	moveq.l	#0,d0
+	rts
+_coo_on:
+	moveq.l	#1,d0
 	rts
 
 ;-- _cfgWordCh: d2.b char -> d0.b = 1 if [A-Za-z0-9_] else 0.
