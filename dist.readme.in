@@ -5,7 +5,7 @@ Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v20260930.lha
+Replaces:     driver/media/cfd.v20261007.lha
 Kurz:         PCMCIA CompactFlash-Treiber A600/1200
 
 PCMCIA CompactFlash driver and supporting tools for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -17,21 +17,7 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-Install:
-
-* New Installer and Setup scripts (setup writes cfd.prefs).
-* Reworked icon positions.
-
-ptable.library 2.2, lsptres 1.2:
-
-* Synced with amigaos-ptable, ptable.library ships in small and full
-  variants.
-
-Tools 'CFInfo 1.40', 'pcmciacheck 2.2', 'pcmciaspeed 1.37':
-
-* Improved paging in CFInfo and pcmciacheck.
-* pcmciacheck -cis lists all I/O ranges of a configuration entry.
-* pcmciacheck, pcmciaspeed: output lines end in LF alone.
+TBD
 
 FEATURES
 ========
