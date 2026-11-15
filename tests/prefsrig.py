@@ -30,10 +30,10 @@ def build(tmp,need=(),debug=True):
 class Loader:
     """sources: name -> bytes, or None for "not there". v36 makes GetVar report
     the whole variable instead of what it copied."""
-    def __init__(self,image,eq,sources,v36=False,prefs_ready=True):
+    def __init__(self,image,eq,sources,v36=False,prefs_ready=True,cpu='68000'):
         self.eq=eq; self.sources=sources; self.v36=v36
         self.opened=[]; self.reads=[]; self.delays=0
-        self.m=Machine.from_name('68000',ram_size=8192)
+        self.m=Machine.from_name(cpu,ram_size=8192)
         self.cpu,self.mem=self.m.get_cpu(),self.m.get_mem()
         self.mem.w_block(BASE,bytes(Relocate(image).relocate_one_block(BASE)))
         self.syms={s.name.decode():BASE+s.offset

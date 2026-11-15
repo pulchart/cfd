@@ -3,7 +3,7 @@
 
 Drives _mwReadConfig with a prefs text and reads back the MountCfg handed to
 ptable.library, by offsets from the assembler listing. Case ids: C3 prefs
-buffer size, C4 table bounds and line scope. OPEN lists the ids whose fix has
+buffer size, C4 table bounds and line scope, C5 binding rows. OPEN lists the ids whose fix has
 not landed: their check must still fail, and the fixing commit removes the id.
 
 Status: gated, run by make test.
@@ -42,6 +42,20 @@ class Cfg:
                               cstr(d.mem.r32(p+eq['ovr_Control']))))
             p+=eq['ovr_Sizeof']
         self.overrides_at=p and CFG+eq['CFG_Overrides']
+        self.binds=[]
+        if 'mc_Binds' in eq:
+            p,n,size=self.mc['Binds'],self.mc['BindCount'],self.mc['BindSize']
+            for i in range(n if p else 0):
+                r=p+i*size
+                flags=d.mem.r8(r+eq['bnd_Flags'])
+                pri=d.mem.r32(r+eq['bnd_Pri'])
+                self.binds.append(dict(prefix=d.mem.r32(r+eq['bnd_Prefix']),
+                    force=bool(flags&(1<<eq['BNDB_FORCE'])),
+                    pri=(pri-(1<<32) if pri>>31 else pri) if flags&(1<<eq['BNDB_PRI']) else None,
+                    dostype=d.mem.r32(r+eq['bnd_DosType']),
+                    handler=cstr(d.mem.r32(r+eq['bnd_Handler'])),
+                    stack=d.mem.r32(r+eq['bnd_Stack'])))
+            self.bindsize_ok=(n==0 and p==0) or size==eq['bnd_Sizeof']
         self.prefixes=[]
         for i in range(16):
             v=d.l(eq['CFG_Prefixes']+4*i)
@@ -143,16 +157,6 @@ def c_overrides(image,eq,_):
     assert sorted(c.rows)==sorted([(PFS,3,1,None),(PDS,3,1,None),(SFS,0,0,'abc'),(DOS,0,0,'ffs')]),c.rows
     return True
 
-def c_pool(image,eq,_):
-    # Every string key at once: CONTROL, each CONTROL_<fs> row, HANDLER_FAT.
-    text=b'CONTROL g\nHANDLER_FAT L:h\n'+b''.join(b'CONTROL_%s %s\n'%(k,k.lower())
-                                                    for k in (b'DOS',b'FFS',b'SFS',b'PFS',b'FAT'))
-    c=parse(image,eq,text)
-    assert c.control=='g' and c.handler=='L:h',vars(c)
-    want={DOS:'ffs',SFS:'sfs',PFS:'pfs',PDS:'pfs',FAT:'fat'}
-    assert {r[0]:r[3] for r in c.rows}==want,c.rows
-    return True
-
 def c_unmount(image,eq,_):
     c=parse(image,eq,b'UNMOUNT FAT SFS\n')
     assert c.prefixes==[SFS,FAT],[hex(p) for p in c.prefixes]
@@ -193,14 +197,70 @@ def c_unmount_line(image,eq,_):
     assert c.buf.startswith(text+b'\0'),'buffer not restored: %r'%c.buf[:40]
     return True
 
+def bind(c,prefix):
+    rows=[r for r in c.binds if r['prefix']==prefix]
+    assert len(rows)==1,(hex(prefix),c.binds)
+    return rows[0]
+
+def row(prefix,**kw):
+    out=dict(prefix=prefix,force=False,pri=None,dostype=0,handler=None,stack=0)
+    out.update(kw); return out
+
+def c_bind_none(image,eq,_):
+    c=parse(image,eq,b'FLAGS 1\n')
+    assert 'mc_Binds' in eq,'no binding rows in this build'
+    assert c.binds==[] and c.mc['Binds']==0,c.mc
+    return True
+
+def c_bind_handler(image,eq,_):
+    c=parse(image,eq,b'HANDLER_SFS L:SmartFilesystem\n')
+    assert c.binds==[row(SFS,handler='L:SmartFilesystem')] and c.bindsize_ok,c.binds
+    return True
+
+def c_bind_fat_legacy(image,eq,_):
+    c=parse(image,eq,b'DOSTYPE_FAT 0x4D534400\nHANDLER_FAT L:CrossDOSFileSystem\nFORCE_FAT YES\n')
+    assert c.binds==[row(FAT,dostype=0x4D534400,handler='L:CrossDOSFileSystem',force=True)],c.binds
+    assert (c.mc['NodeDosType'],c.handler)==(0x4D534400,'L:CrossDOSFileSystem'),c.mc
+    return True
+
+def c_bind_pfs(image,eq,_):
+    c=parse(image,eq,b'STACK_PFS 16384\nPRI_PFS -2\n')
+    want=dict(stack=16384,pri=-2)
+    assert bind(c,PFS)==row(PFS,**want) and bind(c,PDS)==row(PDS,**want),c.binds
+    return True
+
+def c_bind_dos_ffs(image,eq,_):
+    c=parse(image,eq,b'HANDLER_FFS L:FastFileSystem\nSTACK_DOS 8000\nPRI_DOS 3\nFORCE_FFS 0\n')
+    assert c.binds==[row(DOS,handler='L:FastFileSystem',stack=8000,pri=3)],c.binds
+    return True
+
+def c_bind_pool(image,eq,_):
+    # Every string key at once: CONTROL, each CONTROL_<fs> and HANDLER_<fs>.
+    names=(b'DOS',b'FFS',b'SFS',b'PFS',b'FAT')
+    text=b'CONTROL g\n'+b''.join(b'CONTROL_%s c%s\nHANDLER_%s L:%s\n'%(k,k.lower(),k,k.lower())
+                                for k in names)
+    c=parse(image,eq,text)
+    assert c.control=='g',c.control
+    assert {r[0]:r[3] for r in c.rows}=={DOS:'cffs',SFS:'csfs',PFS:'cpfs',PDS:'cpfs',FAT:'cfat'},c.rows
+    assert {r['prefix']:r['handler'] for r in c.binds}=={DOS:'L:ffs',SFS:'L:sfs',PFS:'L:pfs',
+                                                       PDS:'L:pfs',FAT:'L:fat'},c.binds
+    assert c.handler=='L:fat',c.handler
+    return True
+
 CASES = [
     ('', 'defaults', c_defaults), ('', 'global keys', c_globals),
     ('', 'keys are whole words', c_whole_word), ('', 'per-fs override rows', c_overrides),
-    ('', 'every string key fits the pool', c_pool), ('', 'UNMOUNT list', c_unmount),
-    ('', 'policy bits', c_policy), ('', 'shipped cfd.prefs', c_shipped),
+    ('', 'UNMOUNT list', c_unmount), ('', 'policy bits', c_policy),
+    ('', 'shipped cfd.prefs', c_shipped),
     ('', 'worker exits free and signal', c_worker),
     ('C3', 'key past 511 bytes is read', c_long_prefs),
     ('C4', 'UNMOUNT names from its line only', c_unmount_line),
+    ('C5', 'no binding keys: no rows', c_bind_none),
+    ('C5', 'HANDLER_SFS row', c_bind_handler),
+    ('C5', 'FAT keys: row and mc_Node*', c_bind_fat_legacy),
+    ('C5', 'PFS keys fill PFS and PDS rows', c_bind_pfs),
+    ('C5', 'DOS and FFS keys share a row', c_bind_dos_ffs),
+    ('C5', 'every string key fits the pool', c_bind_pool),
 ]
 
 def main():
