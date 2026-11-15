@@ -1,15 +1,15 @@
-## 20261115-dev
+## 20261115
 
 <!-- COMPONENTS:BEGIN -->
 _Components in this release_:
 
-- `compactflash.device 2.2-dev (15.11.2026)` _(new)_
+- `compactflash.device 2.2 (15.11.2026)` _(new)_
 - `compactflash.automount 2.0 (27.08.2026)`
-- `ptable.library 2.3-dev (15.11.2026)` _(new)_
+- `ptable.library 2.3 (15.11.2026)` _(new)_
 - `CFInfo 1.40 (03.10.2026)`
 - `pcmciaspeed 1.37 (03.10.2026)`
 - `pcmciacheck 2.2 (03.10.2026)`
-- `lsptres 1.3-dev (15.11.2026)` _(new)_
+- `lsptres 1.3 (15.11.2026)` _(new)_
 <!-- COMPONENTS:END -->
 
 ##### 'compactflash.device'
