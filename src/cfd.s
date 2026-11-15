@@ -4061,38 +4061,35 @@ _cfgStr:
 	movem.l	d2-d3/a2-a4,-(sp)
 	move.l	a1,a3			;needle start
 	move.l	a0,a4			;haystack start
+	move.b	(a3),d3			;first needle char
 _cs_outer:
-	tst.b	(a0)
+	move.b	(a0)+,d2
 	beq.s	_cs_no			;haystack end -> no match
-	cmp.l	a0,a4
+	cmp.b	d2,d3
+	bne.s	_cs_outer		;first char differs
+	lea	-1(a0),a2
+	cmp.l	a2,a4
 	beq.s	_cs_try			;at start -> prev boundary ok
-	move.l	a0,a2
-	subq.l	#1,a2
-	move.b	(a2),d2
+	move.b	-2(a0),d2
 	bsr	_cfgWordCh
 	tst.b	d0
-	bne.s	_cs_adv			;prev is word char -> not a word start
+	bne.s	_cs_outer		;prev is word char -> not a word start
 _cs_try:
-	move.l	a0,a2			;haystack cursor
-	move.l	a3,a1			;needle cursor
+	move.l	a0,a2			;haystack cursor past the first char
+	lea	1(a3),a1		;needle cursor past the first char
 _cs_inner:
-	move.b	(a1)+,d3
+	move.b	(a1)+,d0
 	beq.s	_cs_chksfx		;needle end -> check suffix boundary
-	move.b	(a2)+,d2
-	beq.s	_cs_no			;haystack ended mid-needle
-	cmp.b	d3,d2
+	cmp.b	(a2)+,d0
 	beq.s	_cs_inner
-	bra.s	_cs_adv			;mismatch
+	bra.s	_cs_outer		;mismatch or haystack end
 _cs_chksfx:
 	move.b	(a2),d2			;char just past match
 	bsr	_cfgWordCh
 	tst.b	d0
-	bne.s	_cs_adv			;suffix is word char -> not whole word
+	bne.s	_cs_outer		;suffix is word char -> not whole word
 	move.l	a2,d0			;whole-word match
 	bra.s	_cs_ret
-_cs_adv:
-	addq.l	#1,a0
-	bra.s	_cs_outer
 _cs_no:
 	moveq.l	#0,d0
 _cs_ret:

@@ -130,6 +130,10 @@ def c_whole_word(image,eq,_):
     c=parse(image,eq,b'FLAGS_DOS 7\nCONTROL_FAT x\n')
     assert c.mc['Flags']==0 and c.control is None,c.mc
     assert c.row(DOS)==[(DOS,7,1,None)] and c.row(FAT)==[(FAT,0,0,'x')],c.rows
+    c=parse(image,eq,b'XFLAGS 1\nFLAGSX 2\nFLAGS_DOS 7\nCONTROL_FA')
+    assert c.mc['Flags']==0 and c.rows==[(DOS,7,1,None)],(c.mc,c.rows)
+    c=parse(image,eq,b'FFLAGS 1\nFLAGS 3')
+    assert c.mc['Flags']==3,c.mc
     return True
 
 def c_overrides(image,eq,_):
