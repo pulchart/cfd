@@ -1,6 +1,29 @@
-## 20261115
+## 20261121-dev
 
 <!-- COMPONENTS:BEGIN -->
+_Components in this release_:
+
+- `compactflash.device 2.3-dev (21.11.2026)` _(new)_
+- `compactflash.automount 2.1-dev (21.11.2026)` _(new)_
+- `ptable.library 2.4-dev (21.11.2026)` _(new)_
+- `CFInfo 1.40 (03.10.2026)`
+- `pcmciaspeed 1.37 (03.10.2026)`
+- `pcmciacheck 2.2 (03.10.2026)`
+- `lsptres 1.3 (15.11.2026)`
+<!-- COMPONENTS:END -->
+
+##### 'compactflash.device 2.3'
+- Fixed a crash under AROS with the full build, found by the new integration tests.
+
+##### 'compactflash.automount 2.1'
+- Fixed a crash under AROS with the full build, found by the new integration tests.
+
+#### Tests
+
+The source repository now has integration tests that run in FS-UAE. They check cfd before a release on AmigaOS 3.1 and 3.2.3 with an emulated PCMCIA card. See [integration tests](https://github.com/pulchart/cfd/tree/master/tests/integration) for more details.
+
+## 20261115
+
 _Components in this release_:
 
 - `compactflash.device 2.2 (15.11.2026)` _(new)_
@@ -10,7 +33,6 @@ _Components in this release_:
 - `pcmciaspeed 1.37 (03.10.2026)`
 - `pcmciacheck 2.2 (03.10.2026)`
 - `lsptres 1.3 (15.11.2026)` _(new)_
-<!-- COMPONENTS:END -->
 
 ##### 'compactflash.device'
 - `cfd.prefs` can be up to 2047 bytes, was 511.
