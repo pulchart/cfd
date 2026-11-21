@@ -1,5 +1,2 @@
 *.info filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
-dist/c/* filter=lfs diff=lfs merge=lfs -text
-dist/devs/*.device* filter=lfs diff=lfs merge=lfs -text
-dist/devs/**/*.device* filter=lfs diff=lfs merge=lfs -text
