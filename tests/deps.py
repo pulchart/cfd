@@ -1,15 +1,14 @@
 """Check make test dependencies before importing the emulator."""
 
 import importlib.metadata as md
-import shutil
 import subprocess
 import sys
-from toolchain import PTABLE_SRC, ROOT, VASM
+from toolchain import PTABLE_SRC, VASM
 
 
 def main():
-    bad = sys.version_info < (3, 11)
-    print("Python", sys.version.split()[0], "(3.11+ required)")
+    bad = sys.version_info < (3, 14)
+    print("Python", sys.version.split()[0], "(3.14+ required)")
     for name, tested in (
         ("amitools-amifuse", "0.8.0.post8"),
         ("machine68k-amifuse", "0.4.1.post1"),
