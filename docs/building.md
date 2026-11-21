@@ -36,7 +36,7 @@ make clean; make; make guide; make release
 | `make lint` | ruff and yamllint |
 | `make checksums`, `clean`, `distclean`, `help` | sizes and checksums, cleanup, target list |
 
-CI runs on every pull request, master push and manual run in the image's current digest. It lints, builds and tests in parallel and uploads the build as `cfd-dist`. Then it packs that build into the release archive, checks that the archive holds the build's drivers, ptable.library copies and tools and uploads the archive with its readme as `cfd-release`. Each run's summary lists the image, the built files, the test suites and the archive with a download link.
+CI runs on every pull request, master push and manual run in the image's current digest. It lints, builds and tests in parallel and uploads the build as `cfd-dist`. The FS-UAE integration suite runs on the build in the amiga-fsuae images of AROS and ApolloOS. Then it packs that build into the release archive, checks that the archive holds the build's drivers, ptable.library copies and tools and uploads the archive with its readme as `cfd-release`. Each run's summary lists the image, the built files, the test suites and the archive with a download link.
 
 Options: `V=1` verbose, `GTIMING=1` Gayle timing (experimental), `FUNCEXT_VOTING=0`, `ATAPI=1`.
 

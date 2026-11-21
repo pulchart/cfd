@@ -68,8 +68,8 @@ jobs:
           submodules: true
       - name: Trust the checkout, which another user owns
         run: git config --global --add safe.directory '*'
-      - name: Build the drivers, ptable.library, the tools and the guides
-        run: make all guides
+      - name: Build the drivers, ptable.library, the tools, the guides and the guest tools
+        run: make all guides devinfo holdfile cardout cardin noreq
       - name: Summary
         run: |
           {
@@ -87,6 +87,10 @@ jobs:
         with:
           name: cfd-dist
           path: dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cfd-it-tools
+          path: build/tools/
 
   test:
     needs: image
@@ -119,6 +123,57 @@ jobs:
             [ -n "$suites" ] || [ "$rc" -eq 0 ] || echo "| dependency check | **failed** |"
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$rc"
+
+  # FS-UAE integration suite in the amiga-fsuae image of each OS (IT_IMAGE_* in the Makefile)
+  integration:
+    needs: build
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: aros
+            image: docker.io/pulchart/amiga-fsuae-aros:latest
+          - os: apolloos
+            image: ghcr.io/pulchart/amiga-fsuae-apolloos:latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: cfd-dist
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: cfd-it-tools
+          path: build/tools/
+      - name: Scenarios
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          set +e
+          python3 tests/integration/run.py --os "$OS" --work "build/integration/$OS" 2>&1 | tee it.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          {
+            echo
+            echo "### Integration, $OS"
+            echo
+            echo "| scenario | result |"
+            echo "|---|---|"
+            awk '/^== /{n=$3; sub(/:$/, "", n)} /^  (PASS|FAIL) in /{print "| `" n "` | " ($1 == "PASS" ? "passed" : "**failed**") " |"}' it.log
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+      - name: Upload the guest output
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cfd-integration-${{ matrix.os }}
+          path: |
+            build/integration/${{ matrix.os }}/*/out/*.txt
+            build/integration/${{ matrix.os }}/*/serial.txt
+            build/integration/${{ matrix.os }}/*/fsuae.log
 
   # the release archive from the build job's output, checked against it
   package:

@@ -1,31 +1,37 @@
 #!/usr/bin/env python3
-"""compactflash.device, ptable.library and fat95 under AmigaOS on an
-emulated PCMCIA IDE card (FS-UAE, A1200).
+"""compactflash.device, ptable.library and fat95 on an emulated PCMCIA IDE
+card (FS-UAE, A1200).
 
-    run.py [--config FILE] [--os NAME ...] [--scenario NAME ...] [--list] [--work DIR]
+    run.py --os NAME [--config FILE] [--scenario NAME ...] [--work DIR]
+    run.py --list
 
-Preparation builds a boot disk from the AmigaOS disks named in the config
-(C: commands, Format) with the driver set and the test tools on it. Each
-scenario then gets its own card image, cfd.prefs and steps; the guest writes
-its findings to the host directory OUT:, and the host checks them, the serial
-log (FLAGS 8) and the image. Exit 0 when every scenario that ran passes; an
-OS whose files are missing is skipped.
+Runs in an amiga-fsuae OS image (make test-integration): AMIGA_SYSTEM is the
+system directory, AMIGA_KICKSTART the ROM and AMIGA_KICKSTART_EXT its second
+half. --os names the OS profile of the config. Preparation copies the system
+directory and puts the driver set and the test tools on it: the driver,
+ptable.library, lsptres and CFInfo from dist/, the guest tools from make,
+fat95, lsfsres and PFS3 from their releases unless the config names builds.
+Each scenario then gets its own card image, cfd.prefs and steps; the guest
+writes its findings to the host directory OUT:, and the host checks them, the
+serial log (FLAGS 8) and the image. Exit 0 when every scenario passes.
 
-FS-UAE needs: controller scide with pcmcia on, Fast RAM at most
-4 MB (8 MB Zorro II overlaps the PCMCIA window and card.resource stays off),
-HANDLER_FAT in cfd.prefs, and a read-only boot disk. A swap is the Gayle
-disable bit set and cleared from the guest; card.resource re-enables the slot
-at once, so a card cannot stay out and the UNMOUNT policies are not covered.
-UAE generates its own card CIS, so CIS routing is not covered either.
+FS-UAE needs: controller scide with pcmcia on, Fast RAM at most 4 MB (8 MB
+Zorro II overlaps the PCMCIA window and card.resource stays off) and
+HANDLER_FAT in cfd.prefs. A swap is the Gayle disable bit set and cleared
+from the guest; card.resource re-enables the slot at once, so a card cannot
+stay out and the UNMOUNT policies are not covered. UAE generates its own card
+CIS, so CIS routing is not covered either.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 import yaml
@@ -38,25 +44,32 @@ MIX_SECTORS = 245760  # 120 MB card for the mixed layouts
 BOOT_LIMIT = 60  # seconds to the first line in OUT:log.txt
 GPT_FAT = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 
-PATH_KEYS = ("cfd", "ptable", "lsptres", "fat95", "lsfsres", "pfs3", "work")
-OS_PATH_KEYS = ("kickstart", "kickstart_ext", "commands_adf", "workbench_adf")
-# guest tools built by make (tools/*.c)
-GUEST_TOOLS = [ROOT / "build/tools" / n for n in ("devinfo", "holdfile")]
-
-# C: commands the steps use, taken from the OS disks for an AmigaOS boot disk
-COMMANDS = ["Assign", "Copy", "Delete", "DiskChange", "Execute", "Info", "List",
-            "MakeDir", "Mount", "SetPatch", "Version", "Wait"]  # fmt: skip
-
-# small guest tools, assembled with vasm during preparation
-TOOLS = {
-    # the Gayle PCMCIA disable bit: set, FS-UAE drops card detect; cleared, it
-    # raises it again. Together they are a swap of the same card.
-    "cardout": "\tmove.b\t$da8000,d0\n\tor.b\t#1,d0\n\tmove.b\td0,$da8000\n",
-    "cardin": "\tmove.b\t$da8000,d0\n\tand.b\t#$fe,d0\n\tmove.b\td0,$da8000\n",
-    # pr_WindowPtr -1 for the shell process: a missing volume is an error,
-    # not a requester that waits forever
-    "noreq": "\tmove.l\t4.w,a6\n\tsub.l\ta1,a1\n\tjsr\t-294(a6)\n\tmove.l\td0,a0\n\tmoveq\t#-1,d0\n\tmove.l\td0,184(a0)\n",
+# this repository's builds (make)
+BUILDS = {
+    "cfd": "dist/full/68020/devs/compactflash.device",
+    "cfinfo": "dist/c/CFInfo",
+    "ptable": "dist/full/68020/libs/ptable.library",
+    "lsptres": "dist/c/lsptres",
 }
+# guest tools (make devinfo holdfile cardout cardin noreq)
+GUEST_TOOLS = [
+    ROOT / "build/tools" / n for n in ("devinfo", "holdfile", "cardout", "cardin", "noreq")
+]
+# releases fetched into build/deps when the config names no build:
+# key: (url, SHA-256 of the download, file in the lha archive or None for a plain file)
+FAT95_LHA = "https://github.com/pulchart/fat95/releases/download/v20261115/fat95.v20261115.lha"
+FAT95_SHA256 = "0493cea074caccda415716ff0035fad06ee88a86e61a1e48419f89afed36e758"
+RELEASES = {
+    "fat95": (FAT95_LHA, FAT95_SHA256, "fat95/l/68020/fat95"),
+    "lsfsres": (FAT95_LHA, FAT95_SHA256, "fat95/c/lsfsres"),
+    "pfs3": (
+        "https://github.com/pulchart/pfs3aio/releases/download/20261119-1/pfs3aio-20261119-1-020-gcc13",
+        "7d42e1257752299572c0453394c04c6d5d37128abda6a0d454654db8e72a3761",
+        None,
+    ),
+}
+DEPS = ROOT / "build/deps"
+PATH_KEYS = (*BUILDS, *RELEASES, "work")
 
 STARTUP = """SetPatch >NIL:
 FailAt 200
@@ -76,64 +89,55 @@ def sh(*a, **k):
     return subprocess.run([str(x) for x in a], check=True, capture_output=True, **k)
 
 
-def adf_read(adf, path, dest):
-    """Read path from an ADF; a compressed update file (name.Z) is unpacked."""
-    for name in (path, path + ".Z"):
-        r = subprocess.run(["xdftool", str(adf), "read", name, str(dest)], capture_output=True)
-        if r.returncode == 0 and dest.exists():
-            if name.endswith(".Z"):
-                data = subprocess.run(["gzip", "-dc", str(dest)], capture_output=True, check=True)
-                dest.write_bytes(data.stdout)
-            return True
-    return False
+def fetch(key):
+    """A release file, downloaded once into build/deps and checked by SHA-256."""
+    url, sha256, member = RELEASES[key]
+    name = url.rsplit("/", 1)[1]
+    dest = DEPS / (member or name)
+    if not dest.exists():
+        download = DEPS / name
+        if not download.exists():
+            data = urllib.request.urlopen(url).read()
+            if hashlib.sha256(data).hexdigest() != sha256:
+                sys.exit("%s: unexpected SHA-256" % url)
+            DEPS.mkdir(parents=True, exist_ok=True)
+            download.write_bytes(data)
+        if member:
+            sh("lha", "-xqw=%s" % DEPS, download)
+    return dest
 
 
-def tools(cfg, work):
-    """Guest tools, built once for every OS."""
-    prep = work / "tools"
-    files = prep / "files"
-    files.mkdir(parents=True)
-    for name, src in TOOLS.items():
-        s = prep / (name + ".s")
-        s.write_text(src + "\tmoveq\t#0,d0\n\trts\n")
-        sh(cfg["vasm"], "-quiet", "-Fhunkexe", "-o", files / name, s)
-    for p in GUEST_TOOLS:
-        shutil.copyfile(p, files / p.name)
-    return files
-
-
-def payload_files(cfg, files):
-    """What the boot medium carries besides the OS: tools, modules, handler."""
-    return [
-        (files / "noreq", "C/noreq"),
+def prepare(cfg, osc, work):
+    """The boot volume, a copy of the system directory; returns the FS-UAE
+    lines that attach it."""
+    sysdir = work / "boot"
+    shutil.copytree(os.environ["AMIGA_SYSTEM"], sysdir, symlinks=True)
+    subprocess.run(["chmod", "-R", "u+w", str(sysdir)], check=True)  # an ISO tree is read-only
+    if not (sysdir / "C/Format").exists():  # AmigaOS keeps it in System/
+        shutil.copyfile(sysdir / "System/Format", sysdir / "C/Format")
+    payload = [
+        (ROOT / "build/tools/noreq", "C/noreq"),
         (cfg["lsptres"], "C/lsptres"),
         (cfg["lsfsres"], "C/lsfsres"),
-        (cfg["cfd"] / "dist/full/68020/devs/compactflash.device", "Devs/compactflash.device"),
+        (cfg["cfd"], "Devs/compactflash.device"),
         (cfg["ptable"], "Libs/ptable.library"),
         (cfg["fat95"], "L/fat95"),
     ]
+    for src, dest in payload:
+        shutil.copyfile(src, sysdir / dest)
+    startup = STARTUP if osc.get("setpatch", True) else STARTUP.replace("SetPatch >NIL:\n", "")
+    (sysdir / "S/Startup-Sequence").write_text(startup)
+    return ["hard_drive_2 = %s" % sysdir, "hard_drive_2_label = Boot", "hard_drive_2_priority = 10"]
 
 
-def prepare(cfg, osname, osc, files, work):
-    """The boot disk for one OS, built from the OS disks. Returns FS-UAE lines."""
-    prep = work / osname / "boot"
-    prep.mkdir(parents=True)
-    adf = prep / "boot.adf"
-    sh("xdftool", adf, "create", "+", "format", "TestBoot", "DOS3", "+", "boot", "install")
-    for d in ("C", "S", "L", "Libs", "Devs"):
-        sh("xdftool", adf, "makedir", d)
-    for cmd in COMMANDS:
-        dest = prep / cmd
-        if not any(adf_read(src, "C/" + cmd, dest) for src in osc["commands_adf"]):
-            sys.exit("C/%s is on none of %s" % (cmd, ", ".join(map(str, osc["commands_adf"]))))
-        sh("xdftool", adf, "write", dest, "C/" + cmd)
-    if not adf_read(osc["workbench_adf"], "System/Format", prep / "Format"):
-        sys.exit("System/Format is not on %s" % osc["workbench_adf"])
-    for src, dest in [*payload_files(cfg, files), (prep / "Format", "C/Format")]:
-        sh("xdftool", adf, "write", src, dest)
-    (prep / "startup").write_text(STARTUP)
-    sh("xdftool", adf, "write", prep / "startup", "S/Startup-Sequence")
-    return ["floppy_drive_0 = %s" % adf, "writable_floppy_images = 0"]
+def ntfs_volume(path, sectors):
+    """An NTFS boot sector, enough for a handler to tell the volume apart."""
+    with path.open("r+b") as f:
+        f.write(b"\xeb\x52\x90NTFS    " + (512).to_bytes(2, "little") + b"\x08")
+        f.seek(0x28)
+        f.write((sectors - 1).to_bytes(8, "little"))
+        f.seek(510)
+        f.write(b"\x55\xaa")
 
 
 def mix_partition(path, fs, sectors, payload):
@@ -150,7 +154,7 @@ def mix_partition(path, fs, sectors, payload):
     with path.open("wb") as f:
         f.truncate(sectors * 512)
     if fs == "ntfs":
-        sh("mkntfs", "-F", "-Q", "-q", "-s", "512", "-L", "NTFS", path)
+        ntfs_volume(path, sectors)
     else:
         sh("mkfs.exfat", "-L", "EXFAT", path)
 
@@ -299,27 +303,26 @@ def emulate(cfg, d, cfgfile, name):
     return False, took
 
 
-def run(cfg, osname, osc, boot, files, work, name, sc):
-    d = work / osname / name
+def run(cfg, osname, osc, boot, work, name, sc):
+    d = work / name
     for sub in ("out", "xdg", "base"):
         (d / sub).mkdir(parents=True)
     out = d / "out"
     payload, up = os.urandom(300000), os.urandom(70000)
     hdf, parts = card_image(d, sc.get("layout", "mbr"), payload, cfg)
     (out / "up.bin").write_bytes(up)
-    prefs = dict(BASE_PREFS, **sc.get("prefs", {}))
+    prefs = dict(BASE_PREFS, **osc.get("prefs", {}), **sc.get("prefs", {}))
     (out / "cfd.prefs").write_text("".join("%s %s\n" % kv for kv in prefs.items()))
     (out / "yes").write_text("y\ny\ny\n\n\n")
-    for tool in ("cardout", "cardin", *(p.name for p in GUEST_TOOLS)):
-        shutil.copyfile(files / tool, out / tool)
-    shutil.copyfile(cfg["cfd"] / "dist/c/CFInfo", out / "CFInfo")
+    for tool in GUEST_TOOLS:
+        shutil.copyfile(tool, out / tool.name)
+    shutil.copyfile(cfg["cfinfo"], out / "CFInfo")
     if "mountlist" in sc:
         (out / sc["mountlist"]).write_text(CF0_MOUNTLIST.format(name=sc["mountlist"]))
     (out / "steps").write_text(sc["steps"].format(wait=cfg["wait"]))
     serial = d / "serial.txt"
     serial.touch()
-    rom = str(osc["kickstart"])
-    ext = osc.get("kickstart_ext") or (rom[:-2] + "E0" if rom.endswith(".F8") else None)
+    rom, ext = os.environ["AMIGA_KICKSTART"], os.environ.get("AMIGA_KICKSTART_EXT")
     lines = (
         ["[fs-uae]", "amiga_model = A1200", "cpu = %s" % osc.get("cpu", "68020"), "chip_memory = 2048",
          "fast_memory = 4096", "kickstart_file = %s" % rom]
@@ -328,7 +331,7 @@ def run(cfg, osname, osc, boot, files, work, name, sc):
         + ["hard_drive_0 = %s" % out, "hard_drive_0_label = OUT", "hard_drive_0_priority = -128",
            "hard_drive_1 = %s" % hdf, "hard_drive_1_type = hdf", "hard_drive_1_controller = scide",
            "uae_pcmcia = true", "serial_port = %s" % serial, "joystick_port_1 = none", "uae_cpu_speed = max",
-           "floppy_drive_speed = 800", "fullscreen = 0", "base_dir = %s" % (d / "base"), ""]
+           "fullscreen = 0", "base_dir = %s" % (d / "base"), ""]
     )  # fmt: skip
     cfgfile = d / "run.fs-uae"
     cfgfile.write_text("\n".join(lines))
@@ -345,47 +348,28 @@ def run(cfg, osname, osc, boot, files, work, name, sc):
 
 def resolve(value):
     """A config path: absolute as given, relative from the repository root."""
-    if isinstance(value, list):
-        return [resolve(v) for v in value]
     p = Path(value).expanduser()
     return p if p.is_absolute() else ROOT / p
 
 
 def load_config(path):
-    cfg = {"fsuae": "fs-uae", "vasm": "vasmm68k_mot", "wait": 10, "limit": 180,
-           "work": "build/integration", "cfd": "."}  # fmt: skip
+    cfg = {"fsuae": "fs-uae", "wait": 10, "limit": 180, "work": "build/integration"}
+    cfg.update(BUILDS)
     cfg.update(yaml.safe_load(path.read_text()) or {})
-    missing = [k for k in ("os", "ptable", "lsptres", "fat95", "lsfsres", "pfs3") if k not in cfg]
-    for name, osc in (cfg.get("os") or {}).items():
-        missing += [
-            "os %s: %s" % (name, k)
-            for k in ("kickstart", "commands_adf", "workbench_adf")
-            if k not in osc
-        ]
-    if missing:
-        sys.exit("%s lacks %s" % (path, ", ".join(missing)))
+    if "os" not in cfg:
+        sys.exit("%s lacks os" % path)
     for k in PATH_KEYS:
-        cfg[k] = resolve(cfg[k])
-    # a fat95 with exFAT carries the boot sector signature; the mixed cards then expect exFAT to mount
-    cfg["fat95_exfat"] = cfg["fat95"].exists() and b"EXFAT   " in cfg["fat95"].read_bytes()
-    for osc in cfg["os"].values():
-        if isinstance(osc.get("commands_adf"), str):
-            osc["commands_adf"] = [osc["commands_adf"]]
-        for k in OS_PATH_KEYS:
-            if k in osc:
-                osc[k] = resolve(osc[k])
+        if k in cfg:
+            cfg[k] = resolve(cfg[k])
     return cfg
-
-
-def os_missing(osc):
-    """The OS files of a profile that are not there."""
-    paths = [osc[k] for k in ("kickstart", "kickstart_ext", "workbench_adf") if k in osc]
-    return [p for p in paths + osc["commands_adf"] if not p.exists()]
 
 
 def shown(p):
     """A path relative to the repository root when it is near it."""
-    return os.path.relpath(p, ROOT) if p.is_relative_to(ROOT.parent) else str(p)
+    try:
+        return os.path.relpath(p, ROOT) if p.is_relative_to(ROOT.parent) else str(p)
+    except ValueError:
+        return str(p)
 
 
 def main():
@@ -394,7 +378,7 @@ def main():
     ap.add_argument(
         "--config", type=Path, default=Path(os.environ.get("CFD_IT_CONFIG", HERE / "config.yaml"))
     )
-    ap.add_argument("--os", action="append", help="run on these configured OSes only (repeatable)")
+    ap.add_argument("--os", help="OS profile of the config")
     ap.add_argument(
         "--scenario", action="append", choices=sorted(SCENARIOS), help="run only these (repeatable)"
     )
@@ -410,52 +394,40 @@ def main():
             print("%-18s %s" % (name, s["doc"]))
         return
     cfg = load_config(a.config)
-    builds = [
-        cfg[k] for k in ("ptable", "lsptres", "fat95", "lsfsres", "pfs3") if not cfg[k].exists()
-    ]
-    builds += [p for p in (cfg["cfd"] / "dist/full/68020/devs/compactflash.device", cfg["cfd"] / "dist/c/CFInfo",
-                           *GUEST_TOOLS) if not p.exists()]  # fmt: skip
+    if a.os not in cfg["os"]:
+        sys.exit("--os: one of %s" % ", ".join(cfg["os"]))
+    osc = cfg["os"][a.os] or {}
+    unset = [v for v in ("AMIGA_SYSTEM", "AMIGA_KICKSTART") if not os.environ.get(v)]
+    if unset:
+        sys.exit("%s not set: run in an amiga-fsuae OS image" % " and ".join(unset))
+    for k in RELEASES:
+        if k not in cfg:
+            cfg[k] = fetch(k)
+    builds = [cfg[k] for k in (*BUILDS, *RELEASES) if not cfg[k].exists()]
+    builds += [p for p in GUEST_TOOLS if not p.exists()]
     if builds:
         sys.exit("missing builds: %s" % ", ".join(map(shown, builds)))
-    oses = a.os or list(cfg["os"])
-    unknown = [o for o in oses if o not in cfg["os"]]
-    if unknown:
-        sys.exit("not in the config: %s" % ", ".join(unknown))
+    # a fat95 with exFAT carries the boot sector signature; the mixed cards then expect exFAT to mount
+    cfg["fat95_exfat"] = b"EXFAT   " in cfg["fat95"].read_bytes()
     names = a.scenario or list(SCENARIOS)
-    plan, skipped = [], []
-    print("plan:")
-    print(
-        "  fat95 %s: exFAT partitions %s"
-        % (shown(cfg["fat95"]), "mount" if cfg["fat95_exfat"] else "refused")
-    )
-    for osname in oses:
-        osc = cfg["os"][osname]
-        gone = os_missing(osc)
-        if gone:
-            skipped.append(osname)
-            print("  %-13s skip: %s not found" % (osname, ", ".join(map(shown, gone))))
-        else:
-            plan.append((osname, osc))
-            print("  %-13s %s" % (osname, " ".join(names)))
     work = (a.work or cfg["work"] / time.strftime("cfd-it-%Y%m%d-%H%M%S")).resolve()
     if work.exists():
         sys.exit("%s exists; give a new --work directory" % work)
     work.mkdir(parents=True)
-    files = tools(cfg, work)
-    failed, total = [], 0
-    for osname, osc in plan:
-        boot = prepare(cfg, osname, osc, files, work)
-        for n in names:
-            total += 1
-            if not run(cfg, osname, osc, boot, files, work, n, SCENARIOS[n]):
-                failed.append("%s %s" % (osname, n))
+    print("%s: %s" % (a.os, " ".join(names)))
     print(
-        "%d/%d scenarios passed%s%s"
+        "  fat95 %s: exFAT partitions %s"
+        % (shown(cfg["fat95"]), "mount" if cfg["fat95_exfat"] else "refused")
+    )
+    boot = prepare(cfg, osc, work)
+    failed = [n for n in names if not run(cfg, a.os, osc, boot, work, n, SCENARIOS[n])]
+    print(
+        "%s: %d/%d scenarios passed%s"
         % (
-            total - len(failed),
-            total,
+            a.os,
+            len(names) - len(failed),
+            len(names),
             "; failed: " + ", ".join(failed) if failed else "",
-            "; skipped: " + ", ".join(skipped) if skipped else "",
         )
     )
     sys.exit(1 if failed else 0)
