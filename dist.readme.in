@@ -112,9 +112,8 @@ adding to your user-startup-sequence:
 a real ROM.
 
 The per-filesystem config keys (UNMOUNT and the <fs> keys FLAGS,
-CONTROL, HANDLER, DOSTYPE, FORCE, STACK, PRI) recognise exactly five
-filesystem names and no others: DOS, FFS, SFS, PFS, FAT. Any other name
-is silently ignored.
+CONTROL, HANDLER, DOSTYPE, FORCE, STACK, PRI) accept only DOS, FFS,
+SFS, PFS and FAT. Any other name is silently ignored.
 
 FAT partitions need fat95 resident, or HANDLER_FAT L:fat95 in
 cfd.prefs. At cold boot an empty slot is detected by a single Gayle
