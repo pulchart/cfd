@@ -1,0 +1,11 @@
+---
+extends: default
+
+rules:
+  line-length: disable
+  commas: disable
+  colons:
+    max-spaces-after: -1
+  comments:
+    require-starting-space: false
+  comments-indentation: disable

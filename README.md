@@ -78,7 +78,7 @@ Copy cfd/ENVARC/cfd.prefs to ENV:cfd.prefs
 
 Automount is **on by default everywhere** (ROM-resident and file-based alike); disable it with `AUTOMOUNT 0` in `ENV:cfd.prefs` (see the example config above). Removing a card fully unmounts all supported filesystems by default; `UNMOUNT <names>` restricts it and `UNMOUNT NONE` keeps the handlers. The resident driver re-reads that file on every card insert and removal.
 
-The per-filesystem config keys (`UNMOUNT` and the `<fs>` keys `FLAGS_`, `CONTROL_`, `HANDLER_`, `DOSTYPE_`, `FORCE_`, `STACK_`, `PRI_`) recognise exactly five filesystem names and no others: `DOS`, `FFS`, `SFS`, `PFS`, `FAT`. Any other name is silently ignored. See [docs/automount.md](docs/automount.md) for the full config reference.
+The per-filesystem config keys (`UNMOUNT` and the `<fs>` keys `FLAGS_`, `CONTROL_`, `HANDLER_`, `DOSTYPE_`, `FORCE_`, `STACK_`, `PRI_`) accept only `DOS`, `FFS`, `SFS`, `PFS` and `FAT`. Any other name is silently ignored. See [docs/automount.md](docs/automount.md) for the full config reference.
 
 `compactflash.automount` provides the boot/automount bringup: in a ROM it gives cold-boot autoboot and opens the device after DOS so the automount agent runs; on disk you get the same run-time automount (hot-swap) by adding it to your startup-sequence with:
 ```

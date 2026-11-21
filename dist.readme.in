@@ -1,11 +1,11 @@
-Short:        PCMCIA CompactFlash driver A600/1200
+Short:        PCMCIA CompactFlash driver
 Uploader:     jaroslav.pulchart@gmail.com (Jaroslav Pulchart)
 Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by Torsten Jager and Paul Carter
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v20261007.lha
+Replaces:     driver/media/cfd.v20261115.lha
 Kurz:         PCMCIA CompactFlash-Treiber A600/1200
 
 PCMCIA CompactFlash driver and supporting tools for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -17,12 +17,16 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-* cfd.prefs can be up to 2047 bytes, was 511.
-* cfd.prefs: UNMOUNT reads filesystem names from its own line only.
-* cfd.prefs: new keys HANDLER_<fs>, DOSTYPE_<fs>, FORCE_<fs>, STACK_<fs> and
-  PRI_<fs> choose the handler per filesystem (needs ptable.library 2.3).
-* Setup asks for the handler, stack and priority of DOS/FFS, SFS and PFS
-  partitions, and can load fat95 from L: over a resident one.
+* Fixed a crash under AROS with the full build of compactflash.device and
+  compactflash.automount, found by the new integration tests.
+
+Tests:
+
+The source repository now has integration tests that run in FS-UAE. They
+check cfd before a release on AmigaOS 3.1 and 3.2.3 with an emulated PCMCIA
+card.
+See https://github.com/pulchart/cfd/tree/master/tests/integration
+for more details.
 
 FEATURES
 ========
@@ -112,9 +116,8 @@ adding to your user-startup-sequence:
 a real ROM.
 
 The per-filesystem config keys (UNMOUNT and the <fs> keys FLAGS,
-CONTROL, HANDLER, DOSTYPE, FORCE, STACK, PRI) recognise exactly five
-filesystem names and no others: DOS, FFS, SFS, PFS, FAT. Any other name
-is silently ignored.
+CONTROL, HANDLER, DOSTYPE, FORCE, STACK, PRI) accept only DOS, FFS,
+SFS, PFS and FAT. Any other name is silently ignored.
 
 FAT partitions need fat95 resident, or HANDLER_FAT L:fat95 in
 cfd.prefs. At cold boot an empty slot is detected by a single Gayle

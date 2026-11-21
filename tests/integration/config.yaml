@@ -1,0 +1,20 @@
+# Settings of run.py. os names the OS profiles, the image brings the OS. A
+# relative path starts at the repository root. The driver, ptable.library,
+# lsptres and CFInfo come from this repository's dist/; fat95, lsfsres and
+# pfs3 from their releases unless set here, e.g. fat95: ../fat95/dist/l/68020/fat95.
+---
+os:
+  "3.2.3": {}
+  "3.1": {}
+  aros:
+    setpatch: false
+    cpu: 68040-NOMMU
+    prefs: {STACK_FAT: "65536"}
+  apolloos:
+    setpatch: false
+    cpu: 68040-NOMMU
+    prefs: {STACK_FAT: "65536"}
+# work: build/integration
+# fsuae: fs-uae
+# wait: 10
+# limit: 180

@@ -1,25 +1,25 @@
 # Makefile for compactflash.device
-# Build using vasm/ASMPro (assembler) and vbcc (C compiler)
+# Builds in the amiga-toolchain image with vasm (assembler) and vbcc (C compiler)
 #
 # Usage: make [options] [target]
 #   help - show detailed usage output
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev). Empty suffix for a final release.
-RELEASE_DATE = 20261115
-VERSION_SUFFIX =
+RELEASE_DATE = 20261121
+VERSION_SUFFIX = -dev
 
 # compactflash.device version
 CFD_MAJOR = 2
-CFD_MINOR = 2
-CFD_VERSION_SUFFIX =
-CFD_DATE = 15.11.2026
+CFD_MINOR = 3
+CFD_VERSION_SUFFIX = -dev
+CFD_DATE = 21.11.2026
 
 # compactflash.automount version (optional boot/automount module)
 AUTOMOUNT_MAJOR = 2
-AUTOMOUNT_MINOR = 0
-AUTOMOUNT_VERSION_SUFFIX =
-AUTOMOUNT_DATE = 27.08.2026
+AUTOMOUNT_MINOR = 1
+AUTOMOUNT_VERSION_SUFFIX = -dev
+AUTOMOUNT_DATE = 21.11.2026
 
 # Tool-specific versions
 CFINFO_MAJOR = 1
@@ -140,14 +140,7 @@ else
   TEXT := $(TEXT), -atapi
 endif
 
-# Tools (override these for different installations)
-VASM_HOME = /opt/vasm
-VBCC_HOME = /opt/vbcc
-VASM = $(VASM_HOME)/bin/vasmm68k_mot
-VBCC = $(VBCC_HOME)/bin/vc
 LHA = lha
-EXPECTED_VASM_VERSION = 2.0f
-MD2GUIDE = tools/md2guide.py
 
 # Flags
 # VASMFLAGS is the base set shared by all tiers; per-tier CPU flag
@@ -159,9 +152,49 @@ PTABLE_SRC = $(PTABLE)/src
 PTABLE_VERSION_FILE = $(PTABLE)/dist/ptable.version
 PTABLE_LSPTRES_VERSION_FILE = $(PTABLE)/dist/lsptres.version
 
+# Every target runs in the amiga-toolchain image: the tools are on its PATH,
+# VBCC and NDK in its environment
+TOOLCHAIN_IMAGE ?= ghcr.io/pulchart/amiga-toolchain:latest
+#TOOLCHAIN_IMAGE ?= docker.io/pulchart/amiga-toolchain:latest
+
+# Outside the image make runs the goals in TOOLCHAIN_IMAGE, pulled when the registry
+# has a newer one; the checkout, PTABLE and their git dirs are mounted at their paths
+ifeq ($(wildcard /usr/share/amiga-toolchain/toolchain.json),)
+GOALS  := $(filter-out test-integration,$(or $(MAKECMDGOALS),all))
+gitdir  = $(shell d=$$(git -C $(1) rev-parse --git-common-dir 2>/dev/null) && cd $(1) && cd "$$d" && pwd)
+MOUNTS := $(sort $(filter-out $(CURDIR) $(CURDIR)/%,$(call gitdir,.) $(abspath $(PTABLE)) $(call gitdir,$(PTABLE))))
+ifneq ($(GOALS),)
+.PHONY: $(GOALS)
+$(firstword $(GOALS)):
+	@podman run --rm --pull=newer --security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		$(foreach d,$(MOUNTS),-v $(d):$(d)) $(TOOLCHAIN_IMAGE) make $(MAKEOVERRIDES) $(GOALS)
+$(wordlist 2,$(words $(GOALS)),$(GOALS)):
+	@:
+endif
+
+# FS-UAE integration suite: the guest tools built in TOOLCHAIN_IMAGE, then
+# tests/integration/run.py in the amiga-fsuae image of each OS in IT_OS, one
+# after another. Needs the driver set built (make). IT_WORK is the run
+# directory, IT passes options to run.py (IT="--scenario swap").
+IT_OS ?= aros apolloos
+IT_IMAGE_3.2.3 = localhost/amiga-fsuae-amigaos:3.2.3
+IT_IMAGE_3.1 = localhost/amiga-fsuae-amigaos:3.1
+IT_IMAGE_aros = docker.io/pulchart/amiga-fsuae-aros:latest
+IT_IMAGE_apolloos = ghcr.io/pulchart/amiga-fsuae-apolloos:latest
+IT_WORK := build/integration/$(shell date +%Y%m%d-%H%M%S)
+.PHONY: test-integration
+test-integration:
+	@podman run --rm --pull=newer --security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		$(foreach d,$(MOUNTS),-v $(d):$(d)) $(TOOLCHAIN_IMAGE) make $(MAKEOVERRIDES) devinfo holdfile cardout cardin noreq
+	@mkdir -p $(IT_WORK); rc=0; $(foreach os,$(IT_OS),podman run --rm --pull=newer \
+		--security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		$(IT_IMAGE_$(os)) python3 tests/integration/run.py --os $(os) \
+		--work $(abspath $(IT_WORK))/$(os) $(IT) || rc=1;) exit $$rc
+else
+
 # -I $(PTABLE_SRC) lets the driver resolve the submodule's ptable_pub.i.
 VASMFLAGS = -Fhunkexe -nosym $(DEFINITIONS) -I $(PTABLE_SRC)
-VBCCFLAGS = +aos68k -O2 -c99 -INDK/Include_H
+VBCCFLAGS = +aos68k -O2 -c99 -I$(NDK)/Include_H
 
 # CPU tier flags
 # -D__68020__=1 enables the 020+ inline math paths (mulu.l / divul.l / bfffo)
@@ -241,6 +274,9 @@ TARGET_PCMCIACHECK = $(OUTDIR_C)/pcmciacheck
 # lsptres binary + guide are built by the $(PTABLE) submodule and copied
 # from its dist/, so every release ships the ptable-built bytes.
 TARGET_LSPTRES = $(OUTDIR_C)/lsptres
+# Guest tools of the integration suite, not shipped.
+IT_TOOLS = devinfo holdfile cardout cardin noreq
+IT_TARGETS = $(addprefix build/tools/,$(IT_TOOLS))
 
 # compactflash.automount: optional boot/automount bringup module (cold-boot
 # autoboot + after-DOS device open), split out of compactflash.device.  Shipped
@@ -264,12 +300,12 @@ README_TEMPLATE = dist.readme.in
 # ============================================================
 
 # Default target - build all driver tiers, library, and tools
-all: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
+all: version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
 
 # Generate version include file (always check, only update if changed)
 # Uses a stamp file to track the current version string
 VERSION_STAMP = .version-stamp
-.PHONY: FORCE check-vasm check-lha
+.PHONY: FORCE check-lha
 FORCE:
 
 $(VERSION_STAMP): FORCE
@@ -304,19 +340,21 @@ $(AUTOMOUNT_VERSION_INC): Makefile
 	$(Q)echo "	dc.b	\"compactflash.automount $(AUTOMOUNT_VERSION) ($(AUTOMOUNT_DATE))\"" >> $@
 	$(Q)echo "	endm" >> $@
 
-# Build ptable.library in the submodule (produces all four tiers, lsptres,
-# the guides, and the dist/*.version stamps that PLIB_*/LSPTRES_* read).
-# Everything ptable-owned is copied from that build, never rebuilt here.
-# MD2GUIDE/NDK are passed as absolute paths: the submodule's own relative
-# defaults do not resolve from inside extern/ptable.
-# Depends on the submodule Makefile: a pin bump or version/date change
-# there must refresh the stamps, or changes.md keeps old component rows.
-$(PTABLE_VERSION_FILE): $(PTABLE)/Makefile
+# Build ptable.library in the submodule (all four tiers, lsptres, the guides
+# and the dist/*.version stamps that PLIB_*/LSPTRES_* read); its own make
+# decides what to rebuild. Everything ptable-owned is copied from that build.
+PTABLE_OUTPUTS = $(foreach f,$(FLAVORS),$(PTABLE)/dist/$(f)/ptable.library) \
+                 $(PTABLE)/dist/c/lsptres $(PTABLE)/dist/docs/lsptres.guide \
+                 $(PTABLE_VERSION_FILE) $(PTABLE_LSPTRES_VERSION_FILE)
+.PHONY: ptable-build
+ptable-build:
 	$(Q)test -f $(PTABLE_SRC)/ptable_lib.s || { \
 		echo "ERROR: ptable submodule missing at $(PTABLE)."; \
 		echo "  git submodule update --init, or build with PTABLE=<path>"; \
 		exit 1; }
-	$(Q)$(MAKE) -C $(PTABLE) all guides MD2GUIDE=$(abspath $(MD2GUIDE)) NDK=$(abspath NDK)
+	$(Q)$(MAKE) -C $(PTABLE) all guides
+$(PTABLE_OUTPUTS): | ptable-build
+	@:
 
 # Move the ptable submodule to its upstream tip and rebuild everything that
 # bundles it (guides included: "all" does not cover dist/docs/lsptres.guide).
@@ -341,9 +379,9 @@ ptable-sync:
 # Depends on the submodule version stamp: PLIB_*/LSPTRES_* expand lazily
 # from $(PTABLE)/dist/*.version, so stamping before that build exists
 # writes empty "component  ()" rows into changes.md.
-version-readme: $(PTABLE_VERSION_FILE)
+version-readme: $(PTABLE_VERSION_FILE) $(PTABLE_LSPTRES_VERSION_FILE)
 	$(Q)sed -i '0,/^## [0-9]\{8\}[^[:space:]]*/s/^## [0-9]\{8\}[^[:space:]]*/## $(VERSION)/' docs/changes.md
-	$(Q)block="_Components in this release_:\n\n$$(sh tools/components.sh md $(COMPONENT_ARGS))"; \
+	$(Q)block="_Components in this release_:\n\n$$(PTABLE=$(PTABLE) sh tools/components.sh md $(COMPONENT_ARGS))"; \
 	awk -v block="$$block" ' \
 	    /<!-- COMPONENTS:BEGIN -->/{print; print block; in_block=1; next} \
 	    /<!-- COMPONENTS:END -->/{in_block=0} \
@@ -360,27 +398,27 @@ $(DEVICE_TARGETS): $(OUTDIR)/%/devs/compactflash.device: $(SOURCE) $(SOURCE_DEPS
 	$(eval cpu  := $(word 2,$(subst /, ,$*)))
 	$(Q)mkdir -p $(@D)
 	$(Q)echo "  VASM    $@ [$(flav), $(cpu)$(TEXT)]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_$(cpu)) $(DEBUG_$(flav)) -o $@ $<
+	$(Q)vasmm68k_mot $(VASMFLAGS) $(VASMCPU_$(cpu)) $(DEBUG_$(flav)) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # ptable.library: copied from the submodule build (dist/<flavor>/<cpu>/ptable.library)
 # into our install tree at dist/<flavor>/<cpu>/libs/ptable.library.
-$(LIBRARY_TARGETS): $(OUTDIR)/%/libs/ptable.library: $(PTABLE_VERSION_FILE)
+$(LIBRARY_TARGETS): $(OUTDIR)/%/libs/ptable.library: $(PTABLE)/dist/%/ptable.library
 	$(Q)mkdir -p $(@D)
 	$(Q)cp $(PTABLE)/dist/$*/ptable.library $@
 	$(Q)echo "  PTABLE  $@ [$*] (md5:$$(md5sum $@ | cut -c1-8))"
 
 # Per-tier convenience phonies (subsets of DEVICE_TARGETS / LIBRARY_TARGETS)
-full:      check-vasm $(TARGET_FULL)
-small:     check-vasm $(TARGET_SMALL)
-full-000:  check-vasm $(TARGET_FULL_000)
-small-000: check-vasm $(TARGET_SMALL_000)
+full:      $(TARGET_FULL)
+small:     $(TARGET_SMALL)
+full-000:  $(TARGET_FULL_000)
+small-000: $(TARGET_SMALL_000)
 
-library:           check-vasm $(LIBRARY_TARGETS)
-library-full:      check-vasm $(LIB_FULL)
-library-small:     check-vasm $(LIB_SMALL)
-library-full-000:  check-vasm $(LIB_FULL_000)
-library-small-000: check-vasm $(LIB_SMALL_000)
+library:           $(LIBRARY_TARGETS)
+library-full:      $(LIB_FULL)
+library-small:     $(LIB_SMALL)
+library-full-000:  $(LIB_FULL_000)
+library-small-000: $(LIB_SMALL_000)
 
 # Tools only target
 tools: $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
@@ -398,43 +436,43 @@ GUIDE_LSPTRES    = $(GUIDE_OUTPUT_DIR)/lsptres.guide
 
 guide guides: $(GUIDE_CFD) $(GUIDE_AUTOMOUNT) $(GUIDE_AMREVIEW) $(GUIDE_CHANGES) $(GUIDE_CFINFO) $(GUIDE_SPEED) $(GUIDE_CHECK) $(GUIDE_LSPTRES)
 
-$(GUIDE_CFD): README.md $(MD2GUIDE)
+$(GUIDE_CFD): README.md
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) README.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
+	$(Q)md2guide README.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "compactflash.device guide"
 
-$(GUIDE_AUTOMOUNT): docs/automount.md $(MD2GUIDE)
+$(GUIDE_AUTOMOUNT): docs/automount.md
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) docs/automount.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount guide"
+	$(Q)md2guide docs/automount.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount guide"
 
-$(GUIDE_AMREVIEW): docs/automount-review.md $(MD2GUIDE)
+$(GUIDE_AMREVIEW): docs/automount-review.md
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) docs/automount-review.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount feature review guide"
+	$(Q)md2guide docs/automount-review.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount feature review guide"
 
-$(GUIDE_CHANGES): docs/changes.md $(MD2GUIDE)
+$(GUIDE_CHANGES): docs/changes.md Makefile
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) docs/changes.md $@ --version $(VERSION) --date $(DATE) --title "compactflash.device release notes" --ver-title "compactflash.device release notes guide"
+	$(Q)md2guide docs/changes.md $@ --version $(VERSION) --date $(DATE) --title "compactflash.device release notes" --ver-title "compactflash.device release notes guide"
 
-$(GUIDE_CFINFO): docs/CFInfo.md $(MD2GUIDE)
+$(GUIDE_CFINFO): docs/CFInfo.md
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) docs/CFInfo.md $@ --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
+	$(Q)md2guide docs/CFInfo.md $@ --version $(CFINFO_VERSION) --date $(CFINFO_DATE) --ver-title "CFInfo guide"
 
-$(GUIDE_SPEED): docs/pcmciaspeed.md $(MD2GUIDE)
+$(GUIDE_SPEED): docs/pcmciaspeed.md
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) docs/pcmciaspeed.md $@ --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
+	$(Q)md2guide docs/pcmciaspeed.md $@ --version $(PCMCIASPEED_VERSION) --date $(PCMCIASPEED_DATE) --ver-title "pcmciaspeed guide"
 
-$(GUIDE_CHECK): docs/pcmciacheck.md $(MD2GUIDE)
+$(GUIDE_CHECK): docs/pcmciacheck.md
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
-	$(Q)$(MD2GUIDE) docs/pcmciacheck.md $@ --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
+	$(Q)md2guide docs/pcmciacheck.md $@ --version $(PCMCIACHECK_VERSION) --date $(PCMCIACHECK_DATE) --ver-title "pcmciacheck guide"
 
 # lsptres.guide: copied from the submodule build, not generated here.
-$(GUIDE_LSPTRES): $(PTABLE_VERSION_FILE)
+$(GUIDE_LSPTRES): $(PTABLE)/dist/docs/lsptres.guide
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)cp $(PTABLE)/dist/docs/lsptres.guide $@
 	$(Q)echo "  PTABLE  $@"
@@ -442,23 +480,36 @@ $(GUIDE_LSPTRES): $(PTABLE_VERSION_FILE)
 $(TARGET_CFINFO): $(SOURCE_CFINFO) $(SOURCE_PAGE) $(PTABLE_SRC)/page.h Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_CFINFO)"
-	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -I$(PTABLE_SRC) -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $(SOURCE_CFINFO) $(SOURCE_PAGE)
+	$(Q)vc +aos68k -O2 -c99 -I$(NDK)/Include_H -I$(PTABLE_SRC) -DVERSION='"$(CFINFO_VERSION)"' -DDATE='"$(CFINFO_DATE)"' -o $(TARGET_CFINFO) $(SOURCE_CFINFO) $(SOURCE_PAGE)
 	$(Q)echo "          $$(stat -c%s $(TARGET_CFINFO)) bytes, md5:$$(md5sum $(TARGET_CFINFO) | cut -c1-8)"
 
 $(TARGET_PCMCIASPEED): $(SOURCE_PCMCIASPEED) Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIASPEED)"
-	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -DVERSION='"$(PCMCIASPEED_VERSION)"' -DDATE='"$(PCMCIASPEED_DATE)"' -o $(TARGET_PCMCIASPEED) $<
+	$(Q)vc +aos68k -O2 -c99 -I$(NDK)/Include_H -DVERSION='"$(PCMCIASPEED_VERSION)"' -DDATE='"$(PCMCIASPEED_DATE)"' -o $(TARGET_PCMCIASPEED) $<
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIASPEED)) bytes, md5:$$(md5sum $(TARGET_PCMCIASPEED) | cut -c1-8)"
 
 $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK) $(SOURCE_PAGE) $(PTABLE_SRC)/page.h Makefile
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)echo "  VBCC    $(TARGET_PCMCIACHECK)"
-	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) +aos68k -O2 -c99 -INDK/Include_H -I$(PTABLE_SRC) -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $(SOURCE_PCMCIACHECK) $(SOURCE_PAGE)
+	$(Q)vc +aos68k -O2 -c99 -I$(NDK)/Include_H -I$(PTABLE_SRC) -DVERSION='"$(PCMCIACHECK_VERSION)"' -DDATE='"$(PCMCIACHECK_DATE)"' -o $(TARGET_PCMCIACHECK) $(SOURCE_PCMCIACHECK) $(SOURCE_PAGE)
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIACHECK)) bytes, md5:$$(md5sum $(TARGET_PCMCIACHECK) | cut -c1-8)"
 
 # lsptres: copied from the submodule build (dist/c/lsptres), not compiled here.
-$(TARGET_LSPTRES): $(PTABLE_VERSION_FILE)
+
+build/tools/%: tools/%.c Makefile
+	$(Q)mkdir -p $(dir $@)
+	$(Q)echo "  VBCC    $@"
+	$(Q)vc $(VBCCFLAGS) -o $@ $< -lamiga
+
+build/tools/%: tools/%.asm Makefile
+	$(Q)mkdir -p $(dir $@)
+	$(Q)echo "  VASM    $@"
+	$(Q)vasmm68k_mot -quiet -Fhunkexe -nosym -o $@ $<
+
+$(IT_TOOLS): %: build/tools/%
+
+$(TARGET_LSPTRES): $(PTABLE)/dist/c/lsptres
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)cp $(PTABLE)/dist/c/lsptres $@
 	$(Q)echo "  PTABLE  $@ (md5:$$(md5sum $@ | cut -c1-8))"
@@ -467,7 +518,7 @@ $(AUTOMOUNT_TARGETS): $(OUTDIR)/%/libs/compactflash.automount: $(SOURCE_AUTOMOUN
 	$(eval flav := $(word 1,$(subst /, ,$*)))
 	$(Q)mkdir -p $(@D)
 	$(Q)echo "  VASM    $@ [$(flav), automount]"
-	$(Q)$(VASM) $(VASMFLAGS) $(VASMCPU_68000) $(DEBUG_$(flav)) -o $@ $<
+	$(Q)vasmm68k_mot $(VASMFLAGS) $(VASMCPU_68000) $(DEBUG_$(flav)) -o $@ $<
 	$(Q)echo "          $$(stat -c%s $@) bytes, md5:$$(md5sum $@ | cut -c1-8)"
 
 # ============================================================
@@ -476,7 +527,7 @@ $(AUTOMOUNT_TARGETS): $(OUTDIR)/%/libs/compactflash.automount: $(SOURCE_AUTOMOUN
 
 # Component summary with literal `\n` for GNU sed substitution; plain
 # text (no markdown), changed-since-previous-tag components flagged "(new)".
-COMPONENT_VERSIONS_NL = $(shell sh tools/components.sh plain $(COMPONENT_ARGS))
+COMPONENT_VERSIONS_NL = $(shell PTABLE=$(PTABLE) sh tools/components.sh plain $(COMPONENT_ARGS))
 
 # Generate readme from template
 $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
@@ -509,7 +560,7 @@ readme: $(README_NAME)
 STAGE   = build/stage
 INSTALL = install
 
-stage: check-vasm version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(README_NAME) guides
+stage: version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(README_NAME) guides
 	$(Q)rm -rf $(STAGE)
 	$(Q)mkdir -p $(STAGE)/cfd/src/lib
 	$(Q)cp -r dist/full dist/small dist/c dist/Storage dist/ENVARC dist/docs dist/images $(STAGE)/cfd/
@@ -540,25 +591,6 @@ release: check-lha stage
 	@echo ""
 	@echo "Upload to: ftp://main.aminet.net/new"
 
-# Check if vasm is installed and expected version
-check-vasm:
-	@[ -x "$(VASM)" ] || { \
-		echo "ERROR: vasm command not found: $(VASM)"; \
-		echo "Set VASM_HOME to your vasm installation (expected $(EXPECTED_VASM_VERSION))"; \
-		exit 1; \
-	}
-	@version_output="$$( $(VASM) -v 2>&1 )"; \
-	detected_version="$$( printf '%s\n' "$$version_output" | sed '/./!d' | sed -n '1p' )"; \
-	case "$$version_output" in \
-		*"$(EXPECTED_VASM_VERSION)"*) ;; \
-		*) \
-			echo "ERROR: unsupported vasm version!"; \
-			echo "Expected: $(EXPECTED_VASM_VERSION)"; \
-			echo "Detected: $${detected_version:-<no output>}"; \
-			exit 1; \
-			;; \
-	esac
-
 # Check if lha is installed
 check-lha:
 	@command -v $(LHA) >/dev/null 2>&1 || { \
@@ -584,18 +616,27 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 	done
 
 
-PYTHON ?= python3
 TEST_SUITES = ata_contracts config_loader mountcfg rom_hunks
-.PHONY: test check-test-deps test-list-update
+.PHONY: test check-test-deps test-list-update lint test-integration $(IT_TOOLS)
 check-test-deps:
-	$(Q)CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/deps.py
+	$(Q)CFD_PTABLE="$(PTABLE)" python3 tests/deps.py
 test: check-test-deps
 	$(Q)set -e; for suite in $(TEST_SUITES); do \
-		echo "TEST $$suite"; CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/$$suite.py; \
+		echo "TEST $$suite"; CFD_PTABLE="$(PTABLE)" python3 tests/$$suite.py; \
 	done
 test-list-update:
-	$(Q)$(PYTHON) tests/list_tests.py
+	$(Q)python3 tests/list_tests.py
 	$(Q)echo "Updated: tests/INVENTORY.md"
+
+# ruff over the tracked Python files (rules in ruff.toml), yamllint over the YAML files.
+lint:
+	$(Q)ruff check $$(git ls-files '*.py')
+	$(Q)ruff format --check $$(git ls-files '*.py')
+	$(Q)yamllint -s $$(git ls-files '*.yaml' '*.yml')
+
+# FS-UAE integration suite: runs outside the toolchain image, see above.
+test-integration:
+	@echo "make test-integration runs the amiga-fsuae images, call it outside the toolchain image" >&2; exit 1
 
 # Clean build artifacts
 clean:
@@ -626,6 +667,7 @@ help:
 	@echo "  library-full-000 - Build 68000 full ptable.library only"
 	@echo "  library-small-000- Build 68000 small ptable.library only"
 	@echo "  tools            - Build all tools"
+	@echo "  $(IT_TOOLS) - Build build/tools/<name> for the integration suite"
 	@echo "  guide / guides   - Generate AmigaGuide documentation from Markdown"
 	@echo "  ptable-sync      - Move $(PTABLE) to its upstream tip and rebuild (uncommitted)"
 	@echo ""
@@ -634,8 +676,7 @@ help:
 	@echo "  GTIMING=1           - Enable Gayle timing optimization (experimental)"
 	@echo "  FUNCEXT_VOTING=0    - Relaxed CIS gate: report FUNCEXT but always accept (default: enforce IDE)"
 	@echo "  ATAPI=1             - Compile in the ATAPI handler (default: out; untested, no pass CIS gating till refactored)"
-	@echo "  VASM_HOME=/opt/vbcc - vasm installation path"
-	@echo "  VBCC_HOME=/opt/vbcc - vbcc installation path"
+	@echo "  TOOLCHAIN_IMAGE=... - amiga-toolchain image the targets run in"
 	@echo ""
 	@echo "Note: every device build carries a tiny RTF_COLDSTART stub"
 	@echo "      that OpenLibrarys ptable.library at Kickstart cold start."
@@ -672,3 +713,5 @@ help:
 	@echo "Release: $(VERSION) ($(DATE)); compactflash.device: $(CFD_VERSION) ($(CFD_DATE)); ptable.library: $(PLIB_VERSION) ($(PLIB_DATE))"
 
 .PHONY: all full small full-000 small-000 library library-full library-small library-full-000 library-small-000 tools guide guides version-readme readme release stage check-lha checksums clean distclean help
+
+endif

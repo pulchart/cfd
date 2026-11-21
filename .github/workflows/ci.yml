@@ -1,0 +1,234 @@
+---
+name: CI
+
+"on":
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # TOOLCHAIN_IMAGE from the Makefile, pinned to its current digest for every job
+  image:
+    runs-on: ubuntu-24.04
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve the toolchain image
+        id: resolve
+        run: |
+          image=$(sed -n 's/^TOOLCHAIN_IMAGE ?= *//p' Makefile)
+          info=$(skopeo inspect "docker://$image")
+          ref="${image%:*}@$(jq -r .Digest <<<"$info")"
+          echo "ref=$ref" >>"$GITHUB_OUTPUT"
+          {
+            echo
+            echo "### Toolchain image"
+            echo
+            echo "\`$image\` = \`$ref\`"
+            echo
+            echo "| tool | version |"
+            echo "|---|---|"
+            for l in vasm vlink vbcc ndk ruff yamllint fedora build; do
+              key=$l.version; [ "$l" = build ] && key=build.date
+              echo "| $l | $(jq -r --arg k "$key" '.Labels[$k] // "?"' <<<"$info") |"
+            done
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  lint:
+    needs: image
+    runs-on: ubuntu-24.04
+    container: ${{ needs.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Trust the checkout, which another user owns
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: ruff and yamllint
+        run: make lint
+
+  build:
+    needs: image
+    runs-on: ubuntu-24.04
+    container: ${{ needs.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Trust the checkout, which another user owns
+        run: git config --global --add safe.directory '*'
+      - name: Build the drivers, ptable.library, the tools, the guides and the guest tools
+        run: make all guides devinfo holdfile cardout cardin noreq
+      - name: Summary
+        run: |
+          {
+            echo
+            echo "### Build"
+            echo
+            echo "| file | version | bytes | MD5 |"
+            echo "|---|---|---|---|"
+            for f in dist/*/*/devs/* dist/*/*/libs/* dist/c/*; do
+              ver=$(strings "$f" | sed -n '/VER: /{s/.*VER: //p;q}')
+              echo "| \`$f\` | $ver | $(stat -c%s "$f") | \`$(md5sum "$f" | cut -c1-32)\` |"
+            done
+          } >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cfd-dist
+          path: dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cfd-it-tools
+          path: build/tools/
+
+  test:
+    needs: image
+    runs-on: ubuntu-24.04
+    container: ${{ needs.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Trust the checkout, which another user owns
+        run: git config --global --add safe.directory '*'
+      - name: Emulated test suites
+        run: |
+          set +e
+          make test 2>&1 | tee test.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          suites=$(sed -n 's/^TEST //p' test.log)
+          {
+            echo
+            echo "### Tests"
+            echo
+            echo "| suite | result |"
+            echo "|---|---|"
+            for s in $suites; do
+              r=passed
+              [ "$rc" -ne 0 ] && [ "$s" = "$(tail -n 1 <<<"$suites")" ] && r="**failed**"
+              echo "| \`$s\` | $r |"
+            done
+            [ -n "$suites" ] || [ "$rc" -eq 0 ] || echo "| dependency check | **failed** |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+  # FS-UAE integration suite in the amiga-fsuae image of each OS (IT_IMAGE_* in the Makefile)
+  integration:
+    needs: build
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: aros
+            image: docker.io/pulchart/amiga-fsuae-aros:latest
+          - os: apolloos
+            image: ghcr.io/pulchart/amiga-fsuae-apolloos:latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: cfd-dist
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: cfd-it-tools
+          path: build/tools/
+      - name: Scenarios
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          set +e
+          python3 tests/integration/run.py --os "$OS" --work "build/integration/$OS" 2>&1 | tee it.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          {
+            echo
+            echo "### Integration, $OS"
+            echo
+            echo "| scenario | result |"
+            echo "|---|---|"
+            awk '/^== /{n=$3; sub(/:$/, "", n)} /^  (PASS|FAIL) in /{print "| `" n "` | " ($1 == "PASS" ? "passed" : "**failed**") " |"}' it.log
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+      - name: Upload the guest output
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cfd-integration-${{ matrix.os }}
+          path: |
+            build/integration/${{ matrix.os }}/*/out/*.txt
+            build/integration/${{ matrix.os }}/*/serial.txt
+            build/integration/${{ matrix.os }}/*/fsuae.log
+
+  # the release archive from the build job's output, checked against it
+  package:
+    needs: [image, lint, build, test]
+    runs-on: ubuntu-24.04
+    container: ${{ needs.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Trust the checkout, which another user owns
+        run: git config --global --add safe.directory '*'
+      - uses: actions/download-artifact@v8
+        with:
+          name: cfd-dist
+          path: dist/
+      - name: Keep a copy of the build
+        run: |
+          chmod 755 dist/c/*
+          cp -r dist "$RUNNER_TEMP/build"
+      - name: Archive and readme
+        run: make release
+      - name: Check the archive against the build
+        run: |
+          archive=$(ls cfd.v*.lha)
+          read -r cfd_version cfd_date <.version-stamp
+          build=$RUNNER_TEMP/build
+          mkdir unpacked
+          lha -xqw=unpacked "$archive"
+          for f in "$build"/full/*/*/* "$build"/small/*/*/* "$build"/c/*; do
+            cmp "$f" "unpacked/cfd/${f#"$build"/}"
+          done
+          for f in "$build"/*/*/devs/compactflash.device; do
+            strings "$f" | grep -F "compactflash.device $cfd_version ($cfd_date)" >/dev/null
+          done
+          for f in cfd/Install cfd/Setup cfd/LICENSE cfd/cfd.readme cfd.info "$build"/docs/*.guide; do
+            [ "${f#"$build"/}" = "$f" ] || f=cfd/${f#"$build"/}
+            [ -e "unpacked/$f" ] || { echo "$archive lacks $f" >&2; exit 1; }
+          done
+          {
+            echo
+            echo "### Package"
+            echo
+            echo "\`$archive\`, $(stat -c%s "$archive") bytes, $(find unpacked -type f | wc -l) files, SHA-256 \`$(sha256sum "$archive" | cut -c1-64)\`"
+            echo
+            echo "Its drivers, ptable.library copies and tools are the build job's bytes, the drivers carry compactflash.device $cfd_version ($cfd_date)."
+          } >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        id: upload
+        with:
+          name: cfd-release
+          path: |
+            cfd.v*.lha
+            cfd.v*.readme
+      - name: Link the archive in the summary
+        env:
+          URL: ${{ steps.upload.outputs.artifact-url }}
+        run: printf '\n[Download cfd-release](%s)\n' "$URL" >>"$GITHUB_STEP_SUMMARY"
