@@ -1,7 +1,5 @@
 line-length = 100
 target-version = "py314"
-# deps.py reports an old Python, so it must parse there
-per-file-target-version = { "tests/deps.py" = "py310" }
 
 [format]
 quote-style = "double"

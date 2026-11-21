@@ -33,7 +33,7 @@ def main():
         print(VASM, banner)
         if "2.0f" not in banner:
             print("vasm version untested; expected 2.0f")
-    except (OSError, subprocess.SubprocessError, IndexError):
+    except OSError, subprocess.SubprocessError, IndexError:
         print("vasm missing; set VASM_HOME or put vasmm68k_mot on PATH")
         bad = True
     if not (PTABLE_SRC / "ptable_pub.i").is_file():
