@@ -15,15 +15,16 @@
 
 	ifd	DEBUG
 _bootDebug:
-	movem.l	d0-d1/a0-a1/a6,-(sp)
+	movem.l	d0-d1/a0-a2/a6,-(sp)
 	move.l	(_AbsExecBase).w,a6
+	move.l	a0,a2			;RawPutChar may clobber d0-d1/a0-a1
 _bdbg_lp:
 	moveq.l	#0,d0
-	move.b	(a0)+,d0
+	move.b	(a2)+,d0
 	beq.s	_bdbg_end
 	jsr	RawPutChar(a6)
 	bra.s	_bdbg_lp
 _bdbg_end:
-	movem.l	(sp)+,d0-d1/a0-a1/a6
+	movem.l	(sp)+,d0-d1/a0-a2/a6
 	rts
 	endc
