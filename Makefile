@@ -381,7 +381,7 @@ ptable-sync:
 # writes empty "component  ()" rows into changes.md.
 version-readme: $(PTABLE_VERSION_FILE) $(PTABLE_LSPTRES_VERSION_FILE)
 	$(Q)sed -i '0,/^## [0-9]\{8\}[^[:space:]]*/s/^## [0-9]\{8\}[^[:space:]]*/## $(VERSION)/' docs/changes.md
-	$(Q)block="_Components in this release_:\n\n$$(sh tools/components.sh md $(COMPONENT_ARGS))"; \
+	$(Q)block="_Components in this release_:\n\n$$(PTABLE=$(PTABLE) sh tools/components.sh md $(COMPONENT_ARGS))"; \
 	awk -v block="$$block" ' \
 	    /<!-- COMPONENTS:BEGIN -->/{print; print block; in_block=1; next} \
 	    /<!-- COMPONENTS:END -->/{in_block=0} \
@@ -527,7 +527,7 @@ $(AUTOMOUNT_TARGETS): $(OUTDIR)/%/libs/compactflash.automount: $(SOURCE_AUTOMOUN
 
 # Component summary with literal `\n` for GNU sed substitution; plain
 # text (no markdown), changed-since-previous-tag components flagged "(new)".
-COMPONENT_VERSIONS_NL = $(shell sh tools/components.sh plain $(COMPONENT_ARGS))
+COMPONENT_VERSIONS_NL = $(shell PTABLE=$(PTABLE) sh tools/components.sh plain $(COMPONENT_ARGS))
 
 # Generate readme from template
 $(README_NAME): $(README_TEMPLATE) $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIASPEED) $(TARGET_PCMCIACHECK) $(TARGET_LSPTRES)
