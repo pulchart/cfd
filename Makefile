@@ -241,6 +241,9 @@ TARGET_PCMCIACHECK = $(OUTDIR_C)/pcmciacheck
 # lsptres binary + guide are built by the $(PTABLE) submodule and copied
 # from its dist/, so every release ships the ptable-built bytes.
 TARGET_LSPTRES = $(OUTDIR_C)/lsptres
+# Guest tools of the integration suite, not shipped.
+IT_TOOLS = devinfo holdfile
+IT_TARGETS = $(addprefix build/tools/,$(IT_TOOLS))
 
 # compactflash.automount: optional boot/automount bringup module (cold-boot
 # autoboot + after-DOS device open), split out of compactflash.device.  Shipped
@@ -458,6 +461,14 @@ $(TARGET_PCMCIACHECK): $(SOURCE_PCMCIACHECK) $(SOURCE_PAGE) $(PTABLE_SRC)/page.h
 	$(Q)echo "          $$(stat -c%s $(TARGET_PCMCIACHECK)) bytes, md5:$$(md5sum $(TARGET_PCMCIACHECK) | cut -c1-8)"
 
 # lsptres: copied from the submodule build (dist/c/lsptres), not compiled here.
+
+build/tools/%: tools/%.c Makefile
+	$(Q)mkdir -p $(dir $@)
+	$(Q)echo "  VBCC    $@"
+	$(Q)VBCC=$(VBCC_HOME) PATH=$(VBCC_HOME)/bin:$$PATH $(VBCC) $(VBCCFLAGS) -o $@ $< -lamiga
+
+$(IT_TOOLS): %: build/tools/%
+
 $(TARGET_LSPTRES): $(PTABLE_VERSION_FILE)
 	$(Q)mkdir -p $(OUTDIR_C)
 	$(Q)cp $(PTABLE)/dist/c/lsptres $@
@@ -586,7 +597,7 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 
 PYTHON ?= python3
 TEST_SUITES = ata_contracts config_loader mountcfg rom_hunks
-.PHONY: test check-test-deps test-list-update lint
+.PHONY: test check-test-deps test-list-update lint test-integration $(IT_TOOLS)
 check-test-deps:
 	$(Q)CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/deps.py
 test: check-test-deps
@@ -602,6 +613,11 @@ lint:
 	$(Q)ruff check $$(git ls-files '*.py')
 	$(Q)ruff format --check $$(git ls-files '*.py')
 	$(Q)yamllint -s $$(git ls-files '*.yaml' '*.yml')
+
+# FS-UAE integration suite: the built driver set under the OS profiles of
+# tests/integration/config.yaml. IT passes options to run.py.
+test-integration: $(IT_TARGETS)
+	$(Q)$(PYTHON) tests/integration/run.py $(IT)
 
 # Clean build artifacts
 clean:
@@ -632,6 +648,7 @@ help:
 	@echo "  library-full-000 - Build 68000 full ptable.library only"
 	@echo "  library-small-000- Build 68000 small ptable.library only"
 	@echo "  tools            - Build all tools"
+	@echo "  $(IT_TOOLS) - Build build/tools/<name> for the integration suite"
 	@echo "  guide / guides   - Generate AmigaGuide documentation from Markdown"
 	@echo "  ptable-sync      - Move $(PTABLE) to its upstream tip and rebuild (uncommitted)"
 	@echo ""
