@@ -104,6 +104,8 @@ def fetch(key):
             download.write_bytes(data)
         if member:
             sh("lha", "-xqw=%s" % DEPS, download)
+            # lha keeps the archive's owner, a foreign uid outside the container
+            sh("chown", "-R", "%d:%d" % (os.getuid(), os.getgid()), DEPS)
     return dest
 
 
