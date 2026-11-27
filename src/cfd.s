@@ -5291,7 +5291,6 @@ _ri_fail:
 ;
 ; Register usage:
 ;   d2 = return value (device type)
-;   d3 = read mode counter (tries different PIO modes)
 ;   d4 = (scratch)
 ;   d5 = command word ($e0ec=IDENTIFY, $a0a1=IDENTIFY PACKET)
 ;   d6 = retry counter for slow SD-to-CF adapters
@@ -5303,11 +5302,12 @@ _ri_fail:
 ;   3. If DRQ never sets, fall back to IDENTIFY PACKET DEVICE
 ;      ($A1) as a final attempt to elicit any response from the
 ;      card. See _gid_check_retry for the rationale.
-;   4. Read 512-byte identify data
+;   4. Read 512-byte identify data, check it (pattern, XOR, a
+;      second read); DRQ left set after the block does not matter
 ;   5. Parse device type and set unit parameters
 ;
 _GetIDEID:
-	movem.l	d2-d6/a2,-(sp)
+	movem.l	d2/d4-d6/a2,-(sp)
 	DBGMSG	dbg_id_get		;"[CFD] Getting IDE ID"
 
 	;--- SD-to-CF adapter retry logic ---
@@ -5330,9 +5330,8 @@ _GetIDEID:
 _gid_retry:
 	bsr	_IDEStart
 	move.w	#$e0ec,d5		;LBA, drive #0, IDENTIFY DEVICE
-	moveq.l	#0,d3			;the read mode
+	clr.w	CFU_ReceiveMode(a3)	;WORD
 _gid_command:
-	move.w	d3,CFU_ReceiveMode(a3)
 	clr.l	CFU_IDESet+2(a3)
 	move.w	d5,CFU_IDESet+6(a3)
 	bsr	_IDECmd
@@ -5355,58 +5354,7 @@ _gid_command:
 	lea	CFU_ConfigBlock(a3),a2
 	moveq.l	#512>>8,d0
 	lsl.l	#8,d0
-	bsr	_pio_in			;read data
-	move.l	CFU_IDEAddr(a3),a0
-	move.l	#A_Pb,a1
-	moveq.l	#120,d1
-_gid_wait:
-	bsr	Wait1
-	move.b	14(a0),d0
-	bpl.s	_gid_done
-
-	subq.w	#1,d1
-	bgt.s	_gid_wait
-_gid_done:
-	btst	#3,d0
-	beq.s	_gid_found		;that is all, OK
-
-	move.w	#$e000,CFU_IDESet+6(a3)	;NOP
-	bsr	_IDECmd			;abort
-	bsr	WaitReady
-	cmp.b	#3,d3
-	bgt.s	_gid_break
-	beq.s	_gid_switch
-
-	add.w	#$0101,d3		;try different read mode
-	bra.w	_gid_command
-_gid_switch:
-	bsr	_IDEStop
-	move.w	#$0404,d3
-	move.w	d3,CFU_ReceiveMode(a3)
-	move.l	CFU_ConfigAddr(a3),a0
-	move.b	#$40,(a0)
-	bsr	Wait40
-	move.l	CFU_MemPtr(a3),CFU_IDEAddr(a3)
-	bsr	_IDEStart
-	bra.w	_gid_command
-_gid_break:
-	move.w	#$a0a1,d1		;drive #0, IDENTIFY PACKET DEVICE
-	cmp.w	d1,d5
-	beq.s	_gid_error
-
-	move.w	d1,d5
-	bra.w	_gid_command
-_gid_error:
-	moveq.l	#0,d5
-	addq.l	#1,CFU_ReadErrors(a3)
-_gid_found:
-	lea	CFU_TimeReq(a3),a1
-	CALLEXEC _AbortIO
-	lea	CFU_TimeReq(a3),a1
-	CALLEXEC WaitIO
-	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
-	move.l	d5,d2
-	beq.w	_gid_timeout
+	bsr	_pio_in			;read data, DRQ after it is a card quirk
 
 	; Step 1: Check for stuck FIFO
 	lea	CFU_ConfigBlock(a3),a0
@@ -5422,16 +5370,18 @@ _gid_found:
 	; Step 3: Second read for verification
 	bsr	_ReadIdentify
 	tst.w	d0
-	beq.s	_gid_verify_fail
+	beq.s	_gid_mismatch
 
 	; Step 4: XOR checksum of second read and compare
 	lea	CFU_ConfigBlock(a3),a0
 	bsr	_XORChecksum
 	cmp.w	d4,d0
-	beq.s	_gid_verified
+	beq.s	_gid_found		;data checked, OK
 
-_gid_verify_fail:
+_gid_mismatch:
 	DBGMSG	dbg_id_mismatch
+_gid_bad:
+	bsr	_gid_untime
 	moveq.l	#0,d2
 	bra.w	_gid_end
 
@@ -5445,8 +5395,22 @@ _gid_stuck:
 	bsr	_DebugHexWord
 	DBGMSG	dbg_id_garbage_end
 	endc
-	moveq.l	#0,d2
-	bra.w	_gid_end
+	bra.s	_gid_bad
+
+_gid_break:
+	move.w	#$a0a1,d1		;drive #0, IDENTIFY PACKET DEVICE
+	cmp.w	d1,d5
+	beq.s	_gid_error
+
+	move.w	d1,d5
+	bra.w	_gid_command
+_gid_error:
+	moveq.l	#0,d5
+	addq.l	#1,CFU_ReadErrors(a3)
+_gid_found:
+	bsr	_gid_untime
+	move.l	d5,d2
+	beq.w	_gid_timeout
 
 _gid_verified:
 	lea	CFU_ConfigBlock(a3),a0
@@ -5504,7 +5468,15 @@ _gid_end:
 	bsr	_IDEStop
 	bsr	_BindIOHandlers		;probe settled, rebind handlers
 	move.l	d2,d0
-	movem.l	(sp)+,d2-d6/a2
+	movem.l	(sp)+,d2/d4-d6/a2
+	rts
+
+_gid_untime:				;stop the IDENTIFY timeout
+	lea	CFU_TimeReq(a3),a1
+	CALLEXEC _AbortIO
+	lea	CFU_TimeReq(a3),a1
+	CALLEXEC WaitIO
+	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
 	rts
 
 	ifd	ATAPI
@@ -6120,7 +6092,7 @@ po4_loop2:
 ; from every later site that changes CFU_ReceiveMode or
 ; CFU_SendMode:
 ;   - end of RWTest
-;   - _gid_end (covers _gid_switch's mode-4 fallback)
+;   - _gid_end
 ;   - _wb_switch (mid-write fallback to memory-mapped mode)
 ;   - _wb_bump fallback step (try next send mode)
 ;
