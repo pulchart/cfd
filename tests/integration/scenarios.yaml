@@ -11,7 +11,10 @@
 #   doc        one line for --list and the report
 #   prefs      cfd.prefs keys on top of the base set in scenarios.py
 #   mountlist  a CF0 mountlist written to OUT: under this name
-#   layout     card layout: mbr (default, one FAT16 partition), rdb, mbr_mix, gpt_mix
+#   layout     card layout: mbr (default, one FAT16 partition), rdb, mbr_mix, gpt_mix,
+#              big (FAT32 past 4 GB), sram (an empty SRAM card)
+#   controller the FS-UAE PCMCIA controller: scide (default) or scsram
+#   other_card true: a second card, inserted after OUT:swap while the card is out
 #   steps      fragment names, in order
 #   checks     the check set in scenarios.py
 #
@@ -81,6 +84,23 @@ fragments:
   hold_open: |  # tools/holdfile.c keeps the payload open until OUT:go
     Run >NIL: OUT:holdfile >OUT:hold.txt CF0:payload.bin OUT:held.bin OUT:go
     Wait 2
+  pull_write: |  # the card leaves in the middle of a write
+    Run >NIL: {copy} OUT:big.bin CF0:big.bin
+    Wait 1
+    OUT:cardout
+    Wait 3
+    OUT:cardin
+    Wait {wait}
+  swap_other: |  # the host puts the other card in place while the slot is empty
+    OUT:cardout
+    Echo >OUT:swap
+    Wait 5
+    OUT:cardin
+    Wait {wait}
+  avail0: |
+    Avail TOTAL FLUSH >OUT:avail0.txt
+  avail1: |
+    Avail TOTAL FLUSH >OUT:avail1.txt
   hold_release: |
     Echo "go" >OUT:go
     Wait 3
@@ -176,3 +196,27 @@ scenarios:
     layout: gpt_mix
     steps: [start, snap, mix_io]
     checks: gpt_mix
+  pull_io:
+    doc: "the card leaves in the middle of a write: removal seen, remounted, data intact"
+    steps: [start, snap, pull_write, snap_after, write]
+    checks: swap
+  swap_loop:
+    doc: "repeated swaps leave the free memory as it was"
+    steps: [start, snap, swap, swap, avail0, swap, swap, swap, swap, avail1, snap_after]
+    checks: swap_loop
+  swap_other:
+    doc: "another card goes in while the slot is empty: CF0 shows the new card"
+    other_card: true
+    steps: [start, snap, swap_other, snap_after, write]
+    checks: swap_other
+  sram:
+    doc: "an SRAM card is refused at the CIS gate and nothing mounts"
+    layout: sram
+    controller: scsram
+    steps: [start, snap]
+    checks: sram
+  big:
+    doc: "a 5 GB card with its FAT32 partition past 4 GB mounts, reads and writes"
+    layout: big
+    steps: [start, snap, read, write]
+    checks: automount

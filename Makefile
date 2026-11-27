@@ -181,8 +181,10 @@ endif
 # by side, each into IT_WORK/<os>.log, printed when all are done. Needs the driver set built (make). IT_WORK is the run
 # directory, IT passes options to run.py (IT="--scenario swap").
 IT_OS ?= aros apolloos
-IT_IMAGE_3.2.3 = localhost/amiga-fsuae-amigaos:3.2.3
-IT_IMAGE_3.1 = localhost/amiga-fsuae-amigaos:3.1
+IT_IMAGE_3.2.3-a1200 = localhost/amiga-fsuae-amigaos:3.2.3
+IT_IMAGE_3.1-a1200 = localhost/amiga-fsuae-amigaos:3.1
+IT_IMAGE_3.2.3-a600 = localhost/amiga-fsuae-amigaos:3.2.3
+IT_IMAGE_3.1-a600 = localhost/amiga-fsuae-amigaos:3.1
 IT_IMAGE_aros = ghcr.io/pulchart/amiga-fsuae-aros:latest
 IT_IMAGE_apolloos = ghcr.io/pulchart/amiga-fsuae-apolloos:latest
 IT_WORK := build/integration/$(shell date +%Y%m%d-%H%M%S)

@@ -45,6 +45,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent  # relative paths in the config start here
 IMAGE_SECTORS = 131072  # 64 MB card
 MIX_SECTORS = 245760  # 120 MB card for the mixed layouts
+BIG_SECTORS = 10485760  # 5 GB sparse card, its FAT32 partition starts past 4 GB
+SRAM_BYTES = 1048576  # 1 MB SRAM card
 BOOT_LIMIT = 60  # seconds to the first line in OUT:log.txt
 GPT_FAT = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 
@@ -70,6 +72,11 @@ RELEASES = {
     "pfs3": (
         "https://github.com/pulchart/pfs3aio/releases/download/20261119-1/pfs3aio-20261119-1-020-gcc13",
         "7d42e1257752299572c0453394c04c6d5d37128abda6a0d454654db8e72a3761",
+        None,
+    ),
+    "pfs3_000": (
+        "https://github.com/pulchart/pfs3aio/releases/download/20261119-1/pfs3aio-20261119-1-000-gcc13",
+        "e9dcdf57ae350f00639cfe82a30eb0698b3108abb08d5483799e58bd67b7b6a8",
         None,
     ),
 }
@@ -180,8 +187,12 @@ def mix_partition(path, fs, sectors, payload):
         sh("mkfs.exfat", "-L", "EXFAT", path)
 
 
-def card_image(d, layout, payload, cfg):
-    hdf = d / "cf.hdf"
+def card_image(d, layout, payload, cfg, name="cf.hdf"):
+    hdf = d / name
+    if layout == "sram":
+        with hdf.open("wb") as f:
+            f.truncate(SRAM_BYTES)
+        return hdf, []
     if layout == "rdb":
         cmd = ["rdbtool", "-f", str(hdf), "create", "size=64Mi", "+", "init", "rdb_cyls=32", "+",
                "fsadd", str(cfg["pfs3"]), "dostype=0x50465303"]  # fmt: skip
@@ -199,7 +210,9 @@ def card_image(d, layout, payload, cfg):
         return hdf, []
     mix = layout.endswith("_mix")
     with hdf.open("wb") as f:
-        f.truncate((MIX_SECTORS if mix else IMAGE_SECTORS) * 512)
+        f.truncate(
+            (MIX_SECTORS if mix else BIG_SECTORS if layout == "big" else IMAGE_SECTORS) * 512
+        )
     if layout == "mbr_mix":
         first = MIX[0]
         table = "label: dos\nstart=2048, size=%d, type=%x\ntype=f\n" % (
@@ -208,6 +221,8 @@ def card_image(d, layout, payload, cfg):
         ) + "".join("size=%d, type=%x\n" % (n, t) for _, n, t in MIX[1:])
     elif layout == "gpt_mix":
         table = "label: gpt\n" + "".join("size=%d, type=%s\n" % (n, GPT_FAT) for _, n, _ in MIX)
+    elif layout == "big":
+        table = "label: dos\nstart=9437184, size=524288, type=c\n"
     else:
         table = "label: dos\nstart=2048, size=126976, type=6\n"
     subprocess.run(
@@ -216,7 +231,7 @@ def card_image(d, layout, payload, cfg):
     dump = sh("sfdisk", "-J", hdf, text=True).stdout
     parts = [(p["start"], p["size"]) for p in json.loads(dump)["partitiontable"]["partitions"]
              if str(p["type"]).lower() not in ("5", "f")]  # not the extended container  # fmt: skip
-    fss = [m[0] for m in MIX] if mix else ["fat16"]
+    fss = [m[0] for m in MIX] if mix else ["fat32" if layout == "big" else "fat16"]
     for i, ((start, size), fs) in enumerate(zip(parts, fss, strict=True)):
         part = d / ("part%d.img" % i)
         mix_partition(part, fs, size, payload)
@@ -310,6 +325,10 @@ def emulate(cfg, d, cfgfile, name):
                 ):
                     if time.monotonic() - t0 > BOOT_LIMIT and not (out / "log.txt").exists():
                         break
+                    # OUT:swap while the card is out: the other card takes its place
+                    if (out / "swap").exists() and not (out / "swapped").exists():
+                        (d / "cf.hdf").write_bytes((d / "cf2.hdf").read_bytes())
+                        (out / "swapped").touch()
                     time.sleep(1)
                 took = time.monotonic() - t0
                 in_time = (out / "done").exists() and took <= limit
@@ -331,7 +350,12 @@ def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     out = d / "out"
     payload, up = os.urandom(300000), os.urandom(70000)
     hdf, parts = card_image(d, sc.get("layout", "mbr"), payload, cfg)
+    other = os.urandom(300000) if sc.get("other_card") else None
+    if other:
+        card_image(d, "mbr", other, cfg, "cf2.hdf")
     (out / "up.bin").write_bytes(up)
+    if "big.bin" in sc["steps"]:
+        (out / "big.bin").write_bytes(os.urandom(32 << 20))
     # the driver reads SYS:Prefs/Env-Archive/cfd.prefs when ENV: has none
     prefs = {**BASE_PREFS, **osc.get("prefs", {}), **sc.get("prefs", {})}
     archive = sysdir / "Prefs/Env-Archive"
@@ -347,13 +371,15 @@ def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     serial = d / "serial.txt"
     serial.touch()
     rom, ext = os.environ["AMIGA_KICKSTART"], os.environ.get("AMIGA_KICKSTART_EXT")
+    if "model" in osc:  # the image keeps each model's ROM as <model>.rom beside it
+        rom = str(Path(rom).with_name(osc["model"] + ".rom"))
     lines = (
-        ["[fs-uae]", "amiga_model = A1200", "cpu = %s" % osc.get("cpu", "68020"), "chip_memory = 2048",
+        ["[fs-uae]", "amiga_model = %s" % osc.get("model", "A1200"), "cpu = %s" % osc.get("cpu", "68020"), "chip_memory = 2048",
          "fast_memory = 4096", "kickstart_file = %s" % rom]
         + (["kickstart_ext_file = %s" % ext] if ext else [])
         + boot + list(osc.get("fsuae", []))
         + ["hard_drive_0 = %s" % out, "hard_drive_0_label = OUT", "hard_drive_0_priority = -128",
-           "hard_drive_1 = %s" % hdf, "hard_drive_1_type = hdf", "hard_drive_1_controller = scide",
+           "hard_drive_1 = %s" % hdf, "hard_drive_1_type = hdf", "hard_drive_1_controller = %s" % sc.get("controller", "scide"),
            "uae_pcmcia = true", "serial_port = %s" % serial, "joystick_port_1 = none", "uae_cpu_speed = max",
            "fullscreen = 0", "base_dir = %s" % (d / "base"), ""]
     )  # fmt: skip
@@ -361,6 +387,7 @@ def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     cfgfile.write_text("\n".join(lines))
     in_time, took = emulate(cfg, d, cfgfile, name)
     r = Result(cfg, d, hdf, parts, payload, up)
+    r.other = other
     checks = [("finished in time", in_time), *sc["checks"](r)]
     print("== %s %s: %s" % (osname, name, sc["doc"]))
     for what, ok in checks:
@@ -435,6 +462,10 @@ def main():
         for k in RELEASES:
             if k not in cfg:
                 cfg[k] = from_archive(lha, k) if lha and RELEASES[k][0] == FAT95_LHA else fetch(k)
+    if osc.get("tier") == "68000":  # the 68000 builds of the driver, ptable.library and fat95
+        for k in ("cfd", "ptable", "fat95"):
+            cfg[k] = Path(str(cfg[k]).replace("/68020/", "/68000/"))
+        cfg["pfs3"] = cfg["pfs3_000"]
     builds = [cfg[k] for k in (*BUILDS, *RELEASES) if not cfg[k].exists()]
     builds += [p for p in GUEST_TOOLS if not p.exists()]
     if builds:
