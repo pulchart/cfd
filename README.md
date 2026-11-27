@@ -323,6 +323,7 @@ A card can report READY after the reset before its CIS is valid, so no tuple is 
 ```mermaid
 flowchart TD
     Identify["IDENTIFY DEVICE"] --> Answer["status: DRQ or ERR<br/>within 2 s?"]
+    Answer -->|"ready, no DRQ or ERR"| Identify
     Answer -->|no| RejectTimeout["REJECT<br/>timeout"]
     Answer -->|ERR or DF| Packet["IDENTIFY PACKET DEVICE"]
     Packet -->|"ERR or no answer"| RejectTimeout
@@ -336,7 +337,7 @@ flowchart TD
     AtapiBranch -->|no| RejectAtapi["REJECT"]
 ```
 
-IDENTIFY ends on DRQ, ERR or DF in the status register, which the driver reads itself after every wake-up. The whole identification has 2 s. Whether the read worked is decided by the data, not by the status. Some cards leave DRQ set after the 512-byte block, and that alone does not reject them.
+IDENTIFY ends on DRQ, ERR or DF in the status register, which the driver reads itself after every wake-up. The whole identification has 2 s. A card that turns ready without any of them has dropped the command, as an SD-to-CF adapter does until it is ready itself, and gets it again. Whether the read worked is decided by the data, not by the status. Some cards leave DRQ set after the 512-byte block, and that alone does not reject them.
 
 The CIS gate is the primary disk-vs-not-disk filter; an ATAPI signature returned by `IDENTIFY DEVICE` after CIS accept is handled by the ATAPI build flag (default 0 releases the card so a dedicated ATAPI driver can claim it; `ATAPI=1` routes ATAPI cards through `_t_iatapi`). See [ATAPI status](#atapi-status) for details.
 
