@@ -5,7 +5,7 @@
 # wait from the config, {copy} the command that moves files to and from
 # OUT: (dd on AROS and ApolloOS). scenarios.py adds mix_io (every CFn: of a mixed card:
 # read the payload, write a file, read it back) and rdb_io (format, write and
-# read every RDB partition).
+# read every RDB partition) and rdb_after (read the written files back).
 #
 # scenarios:
 #   doc        one line for --list and the report
@@ -104,6 +104,11 @@ scenarios:
     layout: rdb
     steps: [start, snap, fsres, rdb_io]
     checks: rdb
+  rdb_swap:
+    doc: "the RDB card leaves and comes back: FFS and PFS3 remount, written files read back"
+    layout: rdb
+    steps: [start, snap, fsres, rdb_io, swap, rdb_after]
+    checks: rdb_swap
   mbr_mix:
     doc: "MBR, a primary and logical partitions: FAT12, FAT16, FAT32, NTFS, exFAT"
     layout: mbr_mix
