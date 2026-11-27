@@ -2,20 +2,17 @@
 
 ## Requirements
 
-* vasm 2.0f (`vasmm68k_mot`), default path `/opt/vasm` (`VASM_HOME=`)
-* vbcc and the NDK for the tools, default path `/opt/vbcc` (`VBCC_HOME=`); extract the NDK into `NDK/`
-* an amigaos-ptable checkout: `extern/ptable` submodule or `PTABLE=`
-* python3 for the guides and tests, `lha` for releases
+Podman and an amigaos-ptable checkout: the `extern/ptable` submodule or `PTABLE=`. Every target runs in the [amiga-toolchain](https://github.com/pulchart/container-amiga-toolchain) image, which holds vasm, vbcc, the NDK, the test and lint tools, md2guide and lha. Outside the image `make` runs the requested targets there, in one container, with the checkout and `PTABLE` mounted; inside it, as in CI, make runs them directly. make pulls a newer `latest` when the registry has one; `TOOLCHAIN_IMAGE=` selects another image, such as a dated tag or the Docker Hub copy.
 
 ## ptable.library
 
-`ptable.library`, `lsptres` and `lsptres.guide` are built in amigaos-ptable and copied into `dist/`. During ptable development build against a local checkout:
+`ptable.library`, `lsptres` and `lsptres.guide` are built in amigaos-ptable by its own make, which every build runs, and copied into `dist/`. During ptable development build against a local checkout:
 
 ```sh
 export PTABLE=/path/to/amigaos-ptable
 ```
 
-`make ptable-sync` moves `extern/ptable` to its `origin/master` tip and rebuilds; commit the gitlink with the rebuilt `dist/` afterwards.
+`make ptable-sync` moves `extern/ptable` to its `origin/master` tip and rebuilds; commit the gitlink afterwards.
 
 ## Release
 
@@ -36,6 +33,7 @@ make clean; make; make guide; make release
 | `make stage` | archive tree in `build/stage` |
 | `make release` | Aminet LHA archive and readme |
 | `make test` | emulated test suites |
+| `make lint` | ruff and yamllint |
 | `make checksums`, `clean`, `distclean`, `help` | sizes and checksums, cleanup, target list |
 
 Options: `V=1` verbose, `GTIMING=1` Gayle timing (experimental), `FUNCEXT_VOTING=0`, `ATAPI=1`.
