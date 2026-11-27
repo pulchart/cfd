@@ -4,7 +4,7 @@ Assembled sources run in amitools/vamos with the card, Exec and dos.library mock
 
 ## Requires
 
-The ptable submodule. `make test` runs the suites in the amiga-toolchain image, which holds vasm 2.0f, Python 3.14+ and the pinned amifuse forks of `amitools` and `machine68k` listed in `requirements.txt`, see [docs/building.md](../docs/building.md):
+The ptable submodule. `make test` runs the suites in the amiga-toolchain image, which holds vasm 2.0f, Python 3.14+, `amitools` and `machine68k` at the versions in its `requirements.txt`, see [docs/building.md](../docs/building.md). For Python runs outside the image, `uv pip install -r` that file into a venv:
 
 ```sh
 git submodule update --init
