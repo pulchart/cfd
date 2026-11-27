@@ -61,6 +61,10 @@ RDB_IO = (
     )
     + "Wait 5\n"
 )
+# after a swap: every RDB partition gives the written file back
+RDB_AFTER = "".join(
+    "{copy} %s:up.bin OUT:after%d.bin\n" % (n, i) for i, (n, _, _) in enumerate(RDB)
+)
 
 
 def volume_line(lines, dev):
@@ -205,6 +209,20 @@ def rdb(r):
     return out
 
 
+def rdb_swap(r):
+    order = ("[CFD] Card removed", "[CFD] Card inserted", "..RESULT: accept")
+    out = [*rdb(r), ("removal then insertion in the serial log", r.serial_order(*order))]
+    for i, (name, _, _) in enumerate(RDB):
+        after = r.out / ("after%d.bin" % i)
+        out.append(
+            (
+                "%s file reads back after the swap" % name,
+                after.exists() and after.read_bytes() == r.up,
+            )
+        )
+    return out
+
+
 CHECKS = {
     "automount": automount,
     "automount_off": automount_off,
@@ -215,6 +233,7 @@ CHECKS = {
     "swap": swap,
     "swap_open": swap_open,
     "rdb": rdb,
+    "rdb_swap": rdb_swap,
     "mbr_mix": lambda r: mix(r, "MBR"),
     "gpt_mix": lambda r: mix(r, "GPT"),
 }
@@ -222,7 +241,7 @@ CHECKS = {
 
 def load(path):
     data = yaml.safe_load(path.read_text())
-    fragments = dict(data["fragments"], mix_io=MIX_IO, rdb_io=RDB_IO)
+    fragments = dict(data["fragments"], mix_io=MIX_IO, rdb_io=RDB_IO, rdb_after=RDB_AFTER)
     out = {}
     for name, s in data["scenarios"].items():
         unknown = [f for f in s["steps"] if f not in fragments]

@@ -59,6 +59,7 @@ Optional parameters:
 | `swap` | the card leaves and comes back: removal and insertion seen, CF0 mounted again, data intact |
 | `swap_open` | `swap` with the payload held open by `holdfile`: the same handle reads it whole after the swap |
 | `rdb` | RDB with FFS and PFS3: PFS3 loaded from the RDB, both formatted, written and read |
+| `rdb_swap` | `rdb`, then the card leaves and comes back: removal and insertion seen, both partitions remount, the written files read back |
 | `mbr_mix` | MBR with a primary and logical partitions: FAT12, FAT16 and FAT32 mount and read and write; NTFS is published and refused; exFAT mounts with a fat95 that has it, is refused otherwise |
 | `gpt_mix` | the same file systems in GPT basic data partitions |
 
