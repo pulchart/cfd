@@ -167,7 +167,7 @@ jobs:
       matrix:
         include:
           - os: aros
-            image: docker.io/pulchart/amiga-fsuae-aros:latest
+            image: ghcr.io/pulchart/amiga-fsuae-aros:latest
           - os: apolloos
             image: ghcr.io/pulchart/amiga-fsuae-apolloos:latest
     steps:
