@@ -26,6 +26,7 @@ CIS routing is not covered.
 """
 
 import argparse
+import contextlib
 import fcntl
 import hashlib
 import json
@@ -248,7 +249,30 @@ def card_image(d, layout, payload, cfg, name="cf.hdf"):
     return hdf, parts
 
 
+def fsuae_pids(pgid):
+    """Live FS-UAE processes in the process group of xvfb-run."""
+    pids = []
+    for d in Path("/proc").iterdir():
+        try:
+            stat = (d / "stat").read_text()
+        except OSError:
+            continue
+        name, f = stat[stat.index("(") + 1 : stat.rindex(")")], stat[stat.rindex(")") + 2 :].split()
+        if name == "fs-uae" and f[0] != "Z" and int(f[2]) == pgid:  # state, pgrp
+            pids.append(int(d.name))
+    return pids
+
+
 def stop(p):
+    # FS-UAE first: its last hard file write is flushed only on a clean exit,
+    # which losing Xvfb at the same moment cuts short
+    for pid in fsuae_pids(p.pid):
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, 15)
+    for _ in range(30):
+        if not fsuae_pids(p.pid):
+            break
+        time.sleep(0.1)
     for sig in (15, 9):  # FS-UAE can outlive SIGTERM once the guest hangs
         try:
             os.killpg(p.pid, sig)
