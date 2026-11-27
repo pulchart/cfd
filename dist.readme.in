@@ -39,7 +39,7 @@ FEATURES
 REQUIREMENTS
 ============
 * Amiga 600 or 1200 with PCMCIA slot (A1200 tested)
-* AmigaOS 2.0 or higher (3.2.3 tested)
+* AmigaOS 2.0 or higher
 * "CompactFlash to PCMCIA/ATA" adapter card (see images/cf-type-1.jpg, images/cf-type-2.jpg)
   or SD-to-CF adapter (see images/sd-cf-adapter.jpg)
 * fat95 filesystem (disk/misc/fat95.lha) recommended

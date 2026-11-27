@@ -34,7 +34,7 @@ See [docs/changes.md](docs/changes.md) for release news and history.
 ## System Requirements
 
 * Amiga 1200 or 600 (A1200 tested)
-* AmigaOS 2.0+ (tested with 3.2.3)
+* AmigaOS 2.0+
 * CF-to-PCMCIA adapter or SD-to-CF adapter (see [Hardware Notes](#hardware-notes))
 * `ptable.library` (bundled) in `LIBS:` or in ROM: does all partition scanning and mounting
 * Installer 43.3 or newer for `Install` (without it, install by hand)
