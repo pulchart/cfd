@@ -230,19 +230,18 @@ Testing IDENTIFY read stability (5 runs per mode)...
 
 ### Only the driver's own mode decides
 
-The driver tries read modes 0, 1, 2 and 3 in order and falls back to
-mode 4 last, so it uses the first one that works. A mode further down
-that list is never reached once an earlier one works, and a failure
-there says nothing about the card.
+The driver reads IDENTIFY in read mode 0 only. The other modes are
+measured for comparison, and a failure there says nothing about the
+card.
 
-The report therefore names the mode the driver would use and judges the
-card on that one alone:
+The report therefore names the mode the driver uses and judges the card
+on that one alone:
 
 ```
   mode 4 (MMAP word         ) NOT USABLE (all zeros, nothing was read)
   Driver uses mode 0: stable
   1 other mode(s) are not usable here, which does not
-  affect the card: the driver never falls back to them.
+  affect the card: the driver does not read IDENTIFY in them.
 ```
 
 That is a working card. It is common for read mode 4 to be unusable,
@@ -620,7 +619,7 @@ pcmciacheck -identify -r 20
 If the mode the driver uses reports `STUCK` or `UNSTABLE`, the driver's
 rejection is correct and the card is not safe to mount in that machine.
 A failure in one of the other modes does not condemn the card, because
-the driver never falls back to them.
+the driver does not read IDENTIFY in them.
 
 If the driver's mode is `STABLE` across repeated invocations and the
 driver still rejects the card, that is worth reporting as an issue, with

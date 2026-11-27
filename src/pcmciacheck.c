@@ -865,18 +865,15 @@ static int StabVerdict(const StabResult *r, int runs)
  * driver's verdict, so it uses the same modes and the same 512-byte
  * single-call transfer the driver uses.
  *
- * The driver takes the first mode that delivers a block, so the lowest
- * numbered mode that delivered one here is the mode whose verdict
- * decides the card. Note that is not the same as the first mode with
- * *plausible* data: on a stuck card the driver does take mode 0, gets
- * garbage, and rejects the card.
+ * The driver reads IDENTIFY in mode 0 only, so mode 0's verdict decides
+ * the card; the other modes are measured for comparison.
  */
 int TestReadStability(int runs)
 {
     StabResult res;
     int mode;
     int bad_modes = 0;
-    int used_mode = -1;
+    int used_mode = 0;
     int used_verdict = STAB_NODATA;
 
     if (runs < STAB_RUNS_MIN) runs = STAB_RUNS_MIN;
@@ -892,8 +889,7 @@ int TestReadStability(int runs)
         MeasureStability(mode, runs, r);
         verdict = StabVerdict(r, runs);
 
-        if (used_mode < 0 && r->read_ok > 0) {
-            used_mode = mode;
+        if (mode == used_mode) {
             used_verdict = verdict;
         }
         if (verdict != STAB_STABLE) bad_modes++;
@@ -948,16 +944,15 @@ int TestReadStability(int runs)
 
     }
 
-    if (used_mode < 0) {
-        printf("  No mode delivered a block.\n");
+    if (used_verdict == STAB_NODATA) {
+        printf("  Mode 0 delivered no block, so the driver's IDENTIFY gets no answer.\n");
         return 1;
     }
 
     /*
-     * Only the mode the driver actually uses decides whether the card is
-     * usable. The driver tries modes 0 to 3 in order and falls back to 4
-     * last, so a failure in a later mode is never reached once an
-     * earlier one works, and must not be reported as a bad card.
+     * Only the mode the driver uses decides whether the card is usable. A
+     * failure in another mode is never reached and must not be reported
+     * as a bad card.
      */
     printf("  Driver uses mode %d: %s\n", used_mode,
            used_verdict == STAB_STABLE ? "stable" : "NOT stable");
@@ -966,7 +961,7 @@ int TestReadStability(int runs)
         if (bad_modes) {
             printf("  %d other mode(s) are not usable here, which does not\n",
                    bad_modes);
-            printf("  affect the card: the driver never falls back to them.\n");
+            printf("  affect the card: the driver does not read IDENTIFY in them.\n");
         }
     } else if (used_verdict == STAB_STUCK) {
         printf("  The card is not readable in this setup; the driver\n");
@@ -1005,7 +1000,7 @@ int SweepReadStability(int runs)
         "NODATA", "ZEROS", "STUCK", "UNSTAB", "STABLE"
     };
     UBYTE saved = *GAYLE_CONFIG;
-    int used_mode = -1;
+    int used_mode = 0;
     int speed, mode;
 
     if (runs < STAB_RUNS_MIN) runs = STAB_RUNS_MIN;
@@ -1049,20 +1044,7 @@ int SweepReadStability(int runs)
         GayleRestore(saved);
         DelayMS(1);
 
-        /*
-         * The driver takes the first mode that delivers a block, so the
-         * lowest numbered mode that produced anything in any column is
-         * the row whose verdict decides the card.
-         */
-        for (mode = 0; mode < 5 && used_mode < 0; mode++) {
-            for (speed = 0; speed < GAYLE_SPEED_COUNT; speed++) {
-                if (results[speed][mode] != STAB_NODATA) {
-                    used_mode = mode;
-                    break;
-                }
-            }
-        }
-
+        /* The driver reads IDENTIFY in mode 0 only, so that row decides. */
         for (mode = 0; mode < 5; mode++) {
             printf("  mode %d", mode);
             for (speed = 0; speed < GAYLE_SPEED_COUNT; speed++) {
@@ -1086,15 +1068,17 @@ int SweepReadStability(int runs)
         {
             int good = 0;
             int bad = 0;
-
-            if (used_mode < 0) {
-                printf("  No mode delivered a block at any timing.\n");
-                return 1;
-            }
+            int answered = 0;
 
             for (speed = 0; speed < GAYLE_SPEED_COUNT; speed++) {
                 if (results[speed][used_mode] == STAB_STABLE) good++;
                 else                                          bad++;
+                if (results[speed][used_mode] != STAB_NODATA) answered = 1;
+            }
+
+            if (!answered) {
+                printf("  Mode 0 delivered no block at any timing.\n");
+                return 1;
             }
 
             if (bad == 0) {
