@@ -180,7 +180,7 @@ endif
 # tests/integration/run.py in the amiga-fsuae image of each OS in IT_OS, side
 # by side, each into IT_WORK/<os>.log, printed when all are done. Needs the driver set built (make). IT_WORK is the run
 # directory, IT passes options to run.py (IT="--scenario swap").
-IT_OS ?= aros apolloos
+IT_OS ?= 3.2.3-a1200 3.1-a1200 3.2.3-a600 3.1-a600 aros apolloos
 IT_IMAGE_3.2.3-a1200 = localhost/amiga-fsuae-amigaos:3.2.3
 IT_IMAGE_3.1-a1200 = localhost/amiga-fsuae-amigaos:3.1
 IT_IMAGE_3.2.3-a600 = localhost/amiga-fsuae-amigaos:3.2.3
