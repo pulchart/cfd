@@ -749,7 +749,7 @@ CFU_DataPort	= 976			;PCMCIA I/O base + 8 (longword)
 ;CFU_MountSig	= 984			-> cfd_pub.i (shared with compactflash.automount)
 CFU_MountDone	= 988			;worker-done signal mask (agent's bit)
 CFU_DelayPort	= 992			;reply port of CFU_DelayReq (34 bytes)
-CFU_DelayReq	= 1028			;timer request of Wait1/Wait40/BusyWait
+CFU_DelayReq	= 1028			;timer request of Wait40/BusyWait
 
 CFU_Sizeof	= 1068
 
@@ -2268,14 +2268,6 @@ Wait40:
 	move.l	d0,TR_Seconds(a1)
 	move.l	#40000,TR_Micros(a1)	;wait 40 ms
 	JMPEXEC DoIO
-Wait1:
-	lea	CFU_DelayReq(a3),a1
-	move.w	#TR_ADDREQUEST,IO_Command(a1)
-	moveq.l	#0,d0
-	move.l	d0,TR_Seconds(a1)
-	move.l	#100,TR_Micros(a1)	;wait 0.1 ms
-	JMPEXEC DoIO
-
 UnitCode:
 Test:
 
@@ -2332,7 +2324,7 @@ Test:
 	bne.w	_t_freesignals
 
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
-;-- Wait1/Wait40/BusyWait send a second request on the same timer unit: a
+;-- Wait40/BusyWait send a second request on the same timer unit: a
 ;   synchronous wait must not resend CFU_TimeReq while it times an I/O
 	move.l	CFU_TimeReq+IO_Device(a3),CFU_DelayReq+IO_Device(a3)
 	move.l	CFU_TimeReq+IO_Unit(a3),CFU_DelayReq+IO_Unit(a3)
@@ -2875,7 +2867,7 @@ _t_cfg_check_addr:
 _t_cfg_again:
 	subq.w	#1,d3
 	beq.s	_t_config_fallback	;retries exhausted -> fallback
-	bsr	Wait1
+	bsr	Wait40
 	bra.s	_t_cfg_retry
 _t_gotconfig:
 	ifd	DEBUG
