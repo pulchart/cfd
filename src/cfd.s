@@ -748,8 +748,10 @@ CFU_DataPort	= 976			;PCMCIA I/O base + 8 (longword)
 ;CFU_MountAgent	= 980			-> cfd_pub.i (shared with compactflash.automount)
 ;CFU_MountSig	= 984			-> cfd_pub.i (shared with compactflash.automount)
 CFU_MountDone	= 988			;worker-done signal mask (agent's bit)
+CFU_DelayPort	= 992			;reply port of CFU_DelayReq (34 bytes)
+CFU_DelayReq	= 1028			;timer request of Wait1/Wait40/BusyWait
 
-CFU_Sizeof	= 992
+CFU_Sizeof	= 1068
 
 
 ;CFU_Flags
@@ -2258,14 +2260,14 @@ _gs_tab:
 	dc.b	5, $21, 0, $c0, 0, 2	;invalid block #
 
 Wait40:
-	lea	CFU_TimeReq(a3),a1
+	lea	CFU_DelayReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
 	moveq.l	#0,d0
 	move.l	d0,TR_Seconds(a1)
 	move.l	#40000,TR_Micros(a1)	;wait 40 ms
 	JMPEXEC DoIO
 Wait1:
-	lea	CFU_TimeReq(a3),a1
+	lea	CFU_DelayReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
 	moveq.l	#0,d0
 	move.l	d0,TR_Seconds(a1)
@@ -2307,6 +2309,12 @@ Test:
 	lea	MP_MsgList(a3),a1
 	INITLIST a1
 	move.l	d2,CFU_Signals3(a3)
+	moveq.l	#-1,d0			;delay port: in no wait mask
+	CALLSAME AllocSignal
+	move.b	d0,CFU_DelayPort+MP_SigBit(a3)
+	move.l	a2,CFU_DelayPort+MP_SigTask(a3)
+	lea	CFU_DelayPort+MP_MsgList(a3),a1
+	INITLIST a1
 
 ;- - timer.device - - - - - - - - - - - - - - - - - - - - -
 
@@ -2322,6 +2330,13 @@ Test:
 	bne.w	_t_freesignals
 
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
+;-- Wait1/Wait40/BusyWait send a second request on the same timer unit: a
+;   synchronous wait must not resend CFU_TimeReq while it times an I/O
+	move.l	CFU_TimeReq+IO_Device(a3),CFU_DelayReq+IO_Device(a3)
+	move.l	CFU_TimeReq+IO_Unit(a3),CFU_DelayReq+IO_Unit(a3)
+	move.w	#TR_Sizeof,CFU_DelayReq+MN_Length(a3)
+	lea	CFU_DelayPort(a3),a1
+	move.l	a1,CFU_DelayReq+MN_ReplyPort(a3)
 
 ;- - prepare interface  - - - - - - - - - - - - - - - - - -
 
@@ -3088,6 +3103,12 @@ _t_disown:
 	lea	CFU_TimeReq(a3),a1
 	CALLEXEC CloseDevice
 _t_freesignals:
+	move.b	CFU_DelayPort+MP_SigBit(a3),d0
+	ext.w	d0
+	ext.l	d0
+	bmi.s	_t_fs0
+	CALLEXEC FreeSignal
+_t_fs0:
 	move.l	CFU_Signals3(a3),d2
 _t_fs1:
 	move.l	d2,d0
@@ -4940,7 +4961,7 @@ bw_loop:
 	move.b	7(a0),d0
 	bpl.s	bw_ok			;OK
 
-	lea	CFU_TimeReq(a3),a1
+	lea	CFU_DelayReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
 	clr.l	TR_Seconds(a1)
 	move.l	#300000,TR_Micros(a1)
