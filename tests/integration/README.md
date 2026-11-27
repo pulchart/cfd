@@ -25,6 +25,7 @@ tests/integration/run.py --list                      # scenarios with a one-line
 | `cpu` | FS-UAE CPU, default `68020` |
 | `prefs` | `cfd.prefs` keys on top of the base set, under a scenario's own |
 | `copy` | command that moves files between `OUT:` and the card, default `Copy` |
+| `fat95_min` | the oldest fat95 this OS runs; with an older `fat95` the scenarios that mount FAT are skipped, the RDB ones still run |
 | `fsuae` | extra FS-UAE lines, default none |
 
 Builds, by default from this repository's `dist/` and from releases fetched into `build/deps` with their SHA-256 checked:

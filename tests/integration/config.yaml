@@ -10,10 +10,14 @@ os:
     setpatch: false
     cpu: 68040-NOMMU
     copy: dd
+    fat95_min: "4.3"
+    prefs: {STACK_FAT: "65536"}
   apolloos:
     setpatch: false
     cpu: 68040-NOMMU
     copy: dd
+    fat95_min: "4.3"
+    prefs: {STACK_FAT: "65536"}
 # work: build/integration
 # fsuae: fs-uae
 # wait: 10
