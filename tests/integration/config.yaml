@@ -1,26 +1,20 @@
-# Inputs of run.py that are not part of this repository. A relative path
-# starts at the repository root; ../ names a checkout beside it. The driver
-# and CFInfo come from this repository's dist/. An OS profile whose files are
-# missing is skipped.
+# Settings of run.py. os names the OS profiles, the image brings the OS. A
+# relative path starts at the repository root. The driver, ptable.library,
+# lsptres and CFInfo come from this repository's dist/; fat95, lsfsres and
+# pfs3 from their releases unless set here, e.g. fat95: ../fat95/dist/l/68020/fat95.
 ---
 os:
-  "3.2.3":
-    kickstart: /opt/AmigaOS/Update3.2.3/ROMs/A1200.47.115.rom
-    commands_adf:
-      - /opt/AmigaOS/Update3.2.3/ADFs/DiskDoctor3.2.3.adf
-      - /opt/AmigaOS/Update3.2.3/ADFs/ModulesA1200_3.2.3.adf
-    workbench_adf: /opt/AmigaOS/AmigaOS3.2/adf/workbench3.2.adf
-  "3.1":
-    kickstart: /opt/AmigaOS/AmigaOS3.1/ROMs/kick40068.A1200
-    commands_adf: /opt/AmigaOS/AmigaOS3.1/ADFs/wbench31.adf
-    workbench_adf: /opt/AmigaOS/AmigaOS3.1/ADFs/wbench31.adf
-ptable: ../amigaos-ptable/dist/full/68020/ptable.library
-lsptres: ../amigaos-ptable/dist/c/lsptres
-fat95: ../fat95/dist/l/68020/fat95
-lsfsres: ../fat95/dist/c/lsfsres
-pfs3: /opt/AmigaOS/pfs/v20.0/pfs3aio-20261113-1-020-gcc13
+  "3.2.3": {}
+  "3.1": {}
+  aros:
+    setpatch: false
+    cpu: 68040-NOMMU
+    prefs: {STACK_FAT: "65536"}
+  apolloos:
+    setpatch: false
+    cpu: 68040-NOMMU
+    prefs: {STACK_FAT: "65536"}
 # work: build/integration
 # fsuae: fs-uae
-# vasm: vasmm68k_mot
 # wait: 10
 # limit: 180
