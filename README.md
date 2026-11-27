@@ -475,7 +475,7 @@ flowchart TD
 `_BindIOHandlers` is called from:
 
 - end of `RWTest` (initial mode selection settles)
-- `_gid_end` (covers `_gid_switch`'s mode-4 fallback)
+- `_gid_end`
 - `_wb_switch` (mid-write fallback to memory-mapped mode)
 - `_wb_bump` (try next send mode on error)
 
