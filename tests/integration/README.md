@@ -11,7 +11,7 @@ make test-integration IT_OS=3.2.3 IT="--scenario swap"
 tests/integration/run.py --list                      # scenarios with a one-line description
 ```
 
-`make test-integration` builds the guest tools in the toolchain image, then runs `run.py --os NAME` in the image of each OS in `IT_OS` (default `aros apolloos`; `3.2.3` and `3.1` need the local AmigaOS images), one after another, in `build/integration/<date>/<os>`. `IT` passes options to run.py, such as `--scenario`, `--config FILE` or `--work DIR`. Exit code 0 when every scenario passes.
+`make test-integration` builds the guest tools in the toolchain image, then runs `run.py --os NAME` in the image of each OS in `IT_OS` (default `aros apolloos`; `3.2.3` and `3.1` need the local AmigaOS images), side by side, each in `build/integration/<date>/<os>` with its output in `<os>.log`, printed when all are done. `IT` passes options to run.py, such as `--scenario`, `--config FILE` or `--work DIR`. Exit code 0 when every scenario passes.
 
 With `GH_TOKEN` set, run.py takes fat95, lsfsres and dd from the package of the newest successful fat95 CI run (`fat95_ci.py`), downloaded to `build/deps/fat95-ci/`; `make test-integration` passes `GH_TOKEN` into the image. GitHub hands out artifacts only with a token, even from a public repository. The cfd CI sets it from the secret `FAT95_ACTIONS_READ`, a token with read access to the Actions of pulchart/fat95. Without a token fat95 comes from its release, which is older than AROS and ApolloOS need, so their FAT scenarios fail.
 
