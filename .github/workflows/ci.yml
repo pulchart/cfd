@@ -163,7 +163,9 @@ jobs:
             echo
             echo "| scenario | result |"
             echo "|---|---|"
-            awk '/^== /{n=$3; sub(/:$/, "", n)} /^  (PASS|FAIL) in /{print "| `" n "` | " ($1 == "PASS" ? "passed" : "**failed**") " |"}' it.log
+            awk '/^== /{n=$3; sub(/:$/, "", n)}
+                 /^  (PASS|FAIL) in /{print "| `" n "` | " ($1 == "PASS" ? "passed" : "**failed**") " |"}
+                 /^  SKIP: /{sub(/^  SKIP: /, ""); print "| `" n "` | skipped: " $0 " |"}' it.log
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$rc"
       - name: Upload the guest output

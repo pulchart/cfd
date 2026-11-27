@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -319,7 +320,7 @@ def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     hdf, parts = card_image(d, sc.get("layout", "mbr"), payload, cfg)
     (out / "up.bin").write_bytes(up)
     # the driver reads SYS:Prefs/Env-Archive/cfd.prefs when ENV: has none
-    prefs = dict(BASE_PREFS, **osc.get("prefs", {}), **sc.get("prefs", {}))
+    prefs = {**BASE_PREFS, **osc.get("prefs", {}), **sc.get("prefs", {})}
     archive = sysdir / "Prefs/Env-Archive"
     archive.mkdir(parents=True, exist_ok=True)
     (archive / "cfd.prefs").write_text("".join("%s %s\n" % kv for kv in prefs.items()))
@@ -354,6 +355,17 @@ def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     passed = all(ok for _, ok in checks)
     print("  %s in %.0f s, %s" % ("PASS" if passed else "FAIL", took, d))
     return passed
+
+
+def fat95_version(path):
+    """(major, minor) from the $VER string of a fat95 binary, or (0, 0)."""
+    m = re.search(rb"\$VER: fat95 (\d+)\.(\d+)", path.read_bytes())
+    return (int(m[1]), int(m[2])) if m else (0, 0)
+
+
+def needs_fat95(sc):
+    """Every card layout but the RDB one mounts FAT partitions with fat95."""
+    return sc.get("layout", "mbr") != "rdb"
 
 
 def resolve(value):
@@ -429,15 +441,26 @@ def main():
         "  fat95 %s: exFAT partitions %s"
         % (shown(cfg["fat95"]), "mount" if cfg["fat95_exfat"] else "refused")
     )
+    # an OS whose fat95 needs is newer than the configured fat95 skips the FAT scenarios
+    have = fat95_version(cfg["fat95"])
+    need = tuple(int(x) for x in str(osc.get("fat95_min", "0.0")).split("."))
+    skipped = [n for n in names if needs_fat95(SCENARIOS[n]) and have < need]
+    for n in skipped:
+        print("== %s %s: %s" % (a.os, n, SCENARIOS[n]["doc"]))
+        print(
+            "  SKIP: fat95 %d.%d is older than %s, which %s needs" % (*have, osc["fat95_min"], a.os)
+        )
+    todo = [n for n in names if n not in skipped]
     sysdir, boot = prepare(cfg, osc, work)
-    failed = [n for n in names if not run(cfg, a.os, osc, sysdir, boot, work, n, SCENARIOS[n])]
+    failed = [n for n in todo if not run(cfg, a.os, osc, sysdir, boot, work, n, SCENARIOS[n])]
     print(
-        "%s: %d/%d scenarios passed%s"
+        "%s: %d/%d scenarios passed%s%s"
         % (
             a.os,
-            len(names) - len(failed),
-            len(names),
+            len(todo) - len(failed),
+            len(todo),
             "; failed: " + ", ".join(failed) if failed else "",
+            "; skipped: " + ", ".join(skipped) if skipped else "",
         )
     )
     sys.exit(1 if failed else 0)
