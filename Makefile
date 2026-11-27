@@ -191,7 +191,7 @@ test-integration:
 	@podman run --rm --pull=newer --security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
 		$(foreach d,$(MOUNTS),-v $(d):$(d)) -e CI_SUFFIX $(TOOLCHAIN_IMAGE) make $(MAKEOVERRIDES) devinfo holdfile cardout cardin noreq
 	@mkdir -p $(IT_WORK); rc=0; $(foreach os,$(IT_OS),podman run --rm --pull=newer \
-		--security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		--security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) -e GH_TOKEN \
 		$(IT_IMAGE_$(os)) python3 tests/integration/run.py --os $(os) \
 		--work $(abspath $(IT_WORK))/$(os) $(IT) || rc=1;) exit $$rc
 else
