@@ -104,6 +104,15 @@ fragments:
   hold_release: |
     Echo "go" >OUT:go
     Wait 3
+  hold_open_ffs: |  # holdfile keeps the file rdb_io wrote on CFF open until OUT:go
+    Run >NIL: OUT:holdfile >OUT:hold.txt CFF:up.bin OUT:held.bin OUT:go
+    Wait 2
+  snap_rdb1: |
+    Info >OUT:info5.txt
+    lsptres V >OUT:pt5.txt
+  snap_rdb2: |
+    Info >OUT:info4.txt
+    lsptres V >OUT:pt4.txt
 
 scenarios:
   automount:
@@ -186,6 +195,16 @@ scenarios:
     prefs: {UNMOUNT: FFS}
     steps: [start, snap, fsres, rdb_io, card_out, snap_out, card_in, rdb_after]
     checks: swap_partial
+  rdb_in_use:
+    doc: "a file open on the FFS partition of an RDB card: CFF kept on removal; the next removal without it unmounts CFF"
+    layout: rdb
+    steps: [start, snap, fsres, rdb_io, hold_open_ffs, card_out, snap_out, card_in, snap_rdb1, hold_release, card_out, snap_out2, card_in, snap_rdb2, rdb_after]
+    checks: rdb_in_use
+  rdb_release_out:
+    doc: "a file open on the FFS partition is closed while the card is out: the next removal unmounts CFF"
+    layout: rdb
+    steps: [start, snap, fsres, rdb_io, hold_open_ffs, card_out, snap_out, hold_release, card_in, snap_rdb1, card_out, snap_out2, card_in, snap_rdb2, rdb_after]
+    checks: rdb_release_out
   mbr_mix:
     doc: "MBR, a primary and logical partitions: FAT12, FAT16, FAT32, NTFS, exFAT"
     layout: mbr_mix
