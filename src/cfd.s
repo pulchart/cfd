@@ -5253,6 +5253,43 @@ _xc_loop:
 	movem.l	(sp)+,d1-d2/a0
 	rts
 
+;--- _IDWait: wait for an IDENTIFY to answer ----------------
+; After _IDECmd. Reads the alternate status itself: WaitReady
+; also returns on the timer signal without reading it.
+;
+; Input:
+;   a3 = CFU pointer, CFU_TimeReq running as the deadline
+;
+; Output:
+;   d0.l = status with DRQ, ERR or DF set, or -1 when the
+;          deadline passed or the card was removed
+;
+_IDWait:
+	moveq.l	#3,d0
+	and.b	CFU_EventFlags(a3),d0
+	bne.s	_idw_fail		;card removed
+
+	move.l	CFU_IDEAddr(a3),a0
+	moveq.l	#0,d0
+	move.b	14(a0),d0
+	bmi.s	_idw_more		;BSY
+	moveq.l	#$29,d1			;DF, DRQ, ERR
+	and.b	d0,d1
+	bne.s	_idw_end
+_idw_more:
+	lea	CFU_TimeReq(a3),a1
+	CALLEXEC CheckIO
+	tst.l	d0
+	bne.s	_idw_fail		;deadline passed
+
+	bsr	WaitReady		;the deadline still wakes it
+	bsr	Wait40
+	bra.s	_IDWait
+_idw_fail:
+	moveq.l	#-1,d0
+_idw_end:
+	rts
+
 ;--- _ReadIdentify: issue IDENTIFY and read 512 bytes -------
 ; Sends ATA IDENTIFY DEVICE (or IDENTIFY PACKET DEVICE)
 ; command and reads 512 bytes into CFU_ConfigBlock.
@@ -5270,9 +5307,8 @@ _ReadIdentify:
 	bsr	_IDECmd
 	tst.w	d0
 	beq.s	_ri_fail
-	bsr	WaitReady
-	moveq.l	#$29,d0			;DF, DRQ, ERR
-	and.b	CFU_IDEStatus(a3),d0
+	bsr	_IDWait
+	and.b	#$29,d0			;DF, DRQ, ERR; -1 fails too
 	subq.b	#8,d0			;DRQ
 	bne.s	_ri_fail
 	lea	CFU_ConfigBlock(a3),a2
@@ -5314,28 +5350,20 @@ _ri_fail:
 ;   d2 = return value (device type)
 ;   d4 = (scratch)
 ;   d5 = command word ($e0ec=IDENTIFY, $a0a1=IDENTIFY PACKET)
-;   d6 = retry counter for slow SD-to-CF adapters
 ;   a2 = buffer pointer
 ;
 ; Flow:
 ;   1. Send IDENTIFY DEVICE ($EC)
-;   2. Wait for DRQ, retry up to 32 times for slow adapters
-;   3. If DRQ never sets, fall back to IDENTIFY PACKET DEVICE
-;      ($A1) as a final attempt to elicit any response from the
-;      card. See _gid_check_retry for the rationale.
+;   2. Wait for DRQ or ERR in the status register (_IDWait), at
+;      most 2 s for the whole identification
+;   3. On ERR or DF send IDENTIFY PACKET DEVICE ($A1) once
 ;   4. Read 512-byte identify data, check it (pattern, XOR, a
 ;      second read); DRQ left set after the block does not matter
 ;   5. Parse device type and set unit parameters
 ;
 _GetIDEID:
-	movem.l	d2/d4-d6/a2,-(sp)
+	movem.l	d2/d4-d5/a2,-(sp)
 	DBGMSG	dbg_id_get		;"[CFD] Getting IDE ID"
-
-	;--- SD-to-CF adapter retry logic ---
-	; Some SD-to-CF adapters are slow to respond to IDENTIFY command.
-	; If DRQ is not set after _IDECmd, retry up to 32 times with delay.
-	; See _gid_check_retry for the retry branch.
-	moveq.l	#32,d6			;retry count for slow adapters
 
 	moveq.l	#1,d0
 	move.w	d0,CFU_MultiSize(a3)
@@ -5345,10 +5373,10 @@ _GetIDEID:
 	move.w	#9,CFU_BlockShift(a3)
 	lea	CFU_TimeReq(a3),a1
 	move.w	#TR_ADDREQUEST,IO_Command(a1)
-	clr.l	TR_Seconds(a1)
-	move.l	#500000,TR_Micros(a1)
-	CALLEXEC SendIO			; prepare Timeout
-_gid_retry:
+	moveq.l	#2,d0
+	move.l	d0,TR_Seconds(a1)
+	clr.l	TR_Micros(a1)
+	CALLEXEC SendIO			;deadline of the identification
 	bsr	_IDEStart
 	move.w	#$e0ec,d5		;LBA, drive #0, IDENTIFY DEVICE
 	clr.w	CFU_ReceiveMode(a3)	;WORD
@@ -5358,18 +5386,21 @@ _gid_command:
 	bsr	_IDECmd
 	tst.w	d0
 	beq.w	_gid_error
-	
-	bsr	WaitReady
-	moveq.l	#3,d0
-	and.b	CFU_EventFlags(a3),d0
-	bne.w	_gid_error		;card removed
 
-	moveq.l	#$29,d0			;DF, DRQ, ERR
-	and.b	CFU_IDEStatus(a3),d0
+	bsr	_IDWait
+	tst.l	d0
+	bmi.w	_gid_error		;no answer in time, or card removed
+
+	and.b	#$29,d0			;DF, DRQ, ERR
 	subq.b	#8,d0			;DRQ
 	beq.s	.drq_ok
-	moveq.l	#0,d2			;mark: ATA not yet identified
-	bra.w	_gid_check_retry	;retry for slow adapters
+
+	move.w	#$a0a1,d1		;ERR or DF: drive #0, IDENTIFY PACKET DEVICE
+	cmp.w	d1,d5
+	beq.w	_gid_error
+
+	move.w	d1,d5
+	bra.s	_gid_command
 .drq_ok:
 
 	lea	CFU_ConfigBlock(a3),a2
@@ -5418,13 +5449,6 @@ _gid_stuck:
 	endc
 	bra.s	_gid_bad
 
-_gid_break:
-	move.w	#$a0a1,d1		;drive #0, IDENTIFY PACKET DEVICE
-	cmp.w	d1,d5
-	beq.s	_gid_error
-
-	move.w	d1,d5
-	bra.w	_gid_command
 _gid_error:
 	moveq.l	#0,d5
 	addq.l	#1,CFU_ReadErrors(a3)
@@ -5470,17 +5494,6 @@ _gid_a1:
 	DBGMSG	dbg_id_done_post
 	bra.w	_gid_end
 
-;--- Retry for slow adapters ---
-; When DRQ does not set after IDENTIFY DEVICE, retry up to 32
-; times with a Wait40 delay between attempts. This catches
-; SD-to-CF adapters that need extra settle time after card
-; insertion.
-_gid_check_retry:
-	subq.l	#1,d6
-	beq.w	_gid_break		;retries exhausted, final $A1 attempt
-	bsr	Wait40			;delay before retry
-	bra.w	_gid_retry
-
 _gid_timeout:
 	DBGMSG	dbg_id_done_pre
 	DBGMSG	dbg_id_timeout
@@ -5489,7 +5502,7 @@ _gid_end:
 	bsr	_IDEStop
 	bsr	_BindIOHandlers		;probe settled, rebind handlers
 	move.l	d2,d0
-	movem.l	(sp)+,d2/d4-d6/a2
+	movem.l	(sp)+,d2/d4-d5/a2
 	rts
 
 _gid_untime:				;stop the IDENTIFY timeout
