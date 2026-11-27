@@ -116,17 +116,17 @@ def escape_amigaguide(text):
         "←": "<-",
         "↔": "<->",
         "•": "*",
-        "–": "-",
+        "\u2013": "-",
         "—": "--",
-        '"': '"',
-        '"': '"',
-        """: "'",
-        """: "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2018": "'",
+        "\u2019": "'",
         "…": "...",
         "©": "(c)",
         "®": "(R)",
         "™": "(TM)",
-        "×": "x",
+        "\u00d7": "x",
         "÷": "/",
         "≤": "<=",
         "≥": ">=",
@@ -336,23 +336,6 @@ def parse_table_cells(line):
     return [c.strip() for c in line.strip("|").split("|")]
 
 
-def format_simple_table(table_lines):
-    """Simple table format for very wide tables"""
-    result = ["", "--- Table ---", ""]
-
-    # Parse and format rows with minimal processing
-    for line in table_lines:
-        if "|" in line:
-            cells = parse_table_cells(line)
-            # Skip separator rows
-            if not is_separator_row(cells):
-                formatted_cells = [convert_inline(escape_amigaguide(cell)) for cell in cells]
-                result.append("  " + " | ".join(formatted_cells))
-
-    result.append("")
-    return result
-
-
 def format_table(table_lines):
     """Convert markdown table to formatted AmigaGuide table"""
     if not table_lines:
@@ -386,7 +369,6 @@ def format_table(table_lines):
 
     # Process data rows with wrapping support
     for row in data_rows:
-        row_formatted = []
         row_wrapped = []
         max_lines = 1
 
@@ -442,10 +424,8 @@ def format_table(table_lines):
             row_parts = ["  "]
             for col_idx in range(num_cols):
                 wrapped_lines = row_wrapped[col_idx]
-                if line_idx < len(wrapped_lines):
-                    cell_content = wrapped_lines[line_idx]
-                else:
-                    cell_content = ""  # Empty for lines beyond this cell's content
+                # Empty for lines beyond this cell's content
+                cell_content = wrapped_lines[line_idx] if line_idx < len(wrapped_lines) else ""
 
                 # Pad based on display width
                 display_width = calculate_display_width(cell_content)
@@ -673,7 +653,7 @@ def process_list_item(line, current_content):
     # Try bullet list first: * - +
     match = BULLET_LIST_PATTERN.match(line)
     if match:
-        indent, marker, item = match.groups()
+        indent, _marker, item = match.groups()
         indent_level = len(indent) // 2
         output_indent = "  " * (indent_level + 1)
         list_lines = format_list_item(item, output_indent, "*", 1)
@@ -711,10 +691,7 @@ def process_markdown_line(line, current_content):
         return True
 
     # List items (both bullet and numbered)
-    if process_list_item(line, current_content):
-        return True
-
-    return False
+    return bool(process_list_item(line, current_content))
 
 
 def format_list_item(item_text, output_indent, marker, marker_length):
@@ -801,7 +778,7 @@ def generate_index_node(nodes):
     ]
 
     # Sort nodes alphabetically and group by first letter
-    sorted_nodes = sorted([(h, n) for l, h, n in nodes if l <= 3], key=lambda x: x[0].lower())
+    sorted_nodes = sorted([(h, n) for lvl, h, n in nodes if lvl <= 3], key=lambda x: x[0].lower())
     current_letter = ""
 
     for heading, node_name in sorted_nodes:
@@ -887,7 +864,7 @@ def md2guide(md_content, title=None, version="1.0", date=None, ver_title=None):
 
     # Build node index for navigation
     node_list = ["Main"]  # Main is first
-    for level, heading, node_name in nodes:
+    for level, _heading, node_name in nodes:
         if level <= 3:  # Only H1-H3 create nodes
             node_list.append(node_name)
 
@@ -1032,14 +1009,14 @@ def md2guide(md_content, title=None, version="1.0", date=None, ver_title=None):
                 # Add subsection links if this H2 has H3 children
                 subsections = []
                 found_self = False
-                for l, h, n in nodes:
-                    if l == 2 and n == node_name:
+                for lvl, h, n in nodes:
+                    if lvl == 2 and n == node_name:
                         found_self = True
                         continue
                     if found_self:
-                        if l == 2:  # Next H2, stop
+                        if lvl == 2:  # Next H2, stop
                             break
-                        if l == 3:  # H3 subsection
+                        if lvl == 3:  # H3 subsection
                             subsections.append((h, n))
                 if subsections:
                     subsection_content = [

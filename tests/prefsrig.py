@@ -5,7 +5,8 @@ dos.library follows the NDK GetVar contract (-1 means undefined, 0 is a valid
 empty value, V37+ returns characters copied). The config frame is filled with
 $55 before the run, so a field the parser does not set reads as garbage."""
 
-import re, subprocess
+import re
+import subprocess
 from amitools.binfmt.BinFmt import BinFmt
 from amitools.binfmt.Relocate import Relocate
 from amitools.vamos.machine import Machine
@@ -159,7 +160,7 @@ class Loader:
     def b(self, off):
         return self.mem.r8(CFG + off)
 
-    def l(self, off):
+    def long(self, off):
         return self.mem.r32(CFG + off)
 
     def close(self):

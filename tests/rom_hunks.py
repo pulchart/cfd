@@ -9,7 +9,9 @@ Status: gated, run by make test.
 Run: python3 tests/rom_hunks.py
 """
 
-import subprocess, sys, tempfile
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from amitools.binfmt.BinFmt import BinFmt
 from toolchain import PTABLE_SRC, ROOT, VASM
