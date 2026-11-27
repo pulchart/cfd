@@ -5,8 +5,21 @@
 # With GH_TOKEN set, fat95 comes from the newest fat95 CI run.
 ---
 os:
-  "3.2.3": {}
-  "3.1":
+  # the local AmigaOS images as an A1200 and as an A600 with the 68000 builds
+  "3.2.3-a1200":
+    model: A1200
+  "3.1-a1200":
+    model: A1200
+    skip:
+      swap_partial: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
+  "3.2.3-a600":
+    model: A600
+    cpu: "68000"
+    tier: "68000"
+  "3.1-a600":
+    model: A600
+    cpu: "68000"
+    tier: "68000"
     skip:
       swap_partial: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
   aros:

@@ -35,5 +35,10 @@ Run by `make test-integration` from `integration/scenarios.yaml`; [integration/R
 | `swap_partial` | integration | UNMOUNT FFS on an RDB card: the FFS partition unmounted, PFS3 kept and marked absent, both read back after the swap |
 | `mbr_mix` | integration | MBR, a primary and logical partitions: FAT12, FAT16, FAT32, NTFS, exFAT |
 | `gpt_mix` | integration | GPT basic data partitions: FAT12, FAT16, FAT32, NTFS, exFAT |
+| `pull_io` | integration | the card leaves in the middle of a write: removal seen, remounted, data intact |
+| `swap_loop` | integration | repeated swaps leave the free memory as it was |
+| `swap_other` | integration | another card goes in while the slot is empty: CF0 shows the new card |
+| `sram` | integration | an SRAM card is refused at the CIS gate and nothing mounts |
+| `big` | integration | a 5 GB card with its FAT32 partition past 4 GB mounts, reads and writes |
 
 <!-- TESTS:END -->

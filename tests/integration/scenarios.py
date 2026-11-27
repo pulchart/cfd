@@ -152,6 +152,41 @@ def swap_open(r):
     ]
 
 
+def avail(r, n):
+    """Free memory from Avail TOTAL, or None."""
+    m = re.search(r"\d+", r.text("avail%d.txt" % n))
+    return int(m[0]) if m else None
+
+
+def swap_loop(r):
+    before, after = avail(r, 0), avail(r, 1)
+    lost = before - after if before and after else None
+    return [
+        ("free memory before and after read", lost is not None),
+        (
+            "free memory after the swaps within 1 KB (lost %s)" % lost,
+            lost is not None and lost <= 1024,
+        ),
+        ("CF0: mounted after the swaps", info_has(r, 1, "CF0")),
+        ("payload read back after the swaps", read_ok(r, 1)),
+    ]
+
+
+def swap_other(r):
+    return [
+        *swap(r)[:3],
+        ("the other card's payload read back", r.got(1) == r.other),
+        ("written file on the other card", r.image_file("up.bin") == r.up),
+    ]
+
+
+def sram(r):
+    return [
+        ("refused at the CIS gate", r.serial_order("[CFD] CIS gate", "..RESULT: reject")),
+        ("no CF0", not info_has(r, 0, "CF0")),
+    ]
+
+
 def flags(row):
     """The lsptres Flags column of a row: Present/Invalid, Boot, Nomount,
     Mounted, s/S for a hand mount."""
@@ -354,6 +389,9 @@ CHECKS = {
     "rdb_swap": rdb_swap,
     "mbr_mix": lambda r: mix(r, "MBR"),
     "gpt_mix": lambda r: mix(r, "GPT"),
+    "swap_loop": swap_loop,
+    "swap_other": swap_other,
+    "sram": sram,
 }
 
 
