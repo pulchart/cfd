@@ -813,6 +813,8 @@ dbg_id_ata:
 	dc.b	"ATA",0
 dbg_id_atapi:
 	dc.b	"ATAPI",0
+dbg_id_resend:
+	dc.b	"[CFD] ..IDENTIFY dropped, sending it again",13,10,0
 dbg_id_timeout:
 	dc.b	"timeout",0
 
@@ -5266,6 +5268,38 @@ _xc_loop:
 	movem.l	(sp)+,d1-d2/a0
 	rts
 
+;--- _IDSend: send an IDENTIFY and wait for its answer -------
+; Sends the command again when the card turns ready without
+; DRQ, ERR or DF: an SD-to-CF adapter drops it until it is
+; ready itself.
+;
+; Input:
+;   d5 = command word, a3 = CFU pointer, CFU_TimeReq running
+;        as the deadline
+;
+; Output:
+;   d0.l = status with DRQ, ERR or DF set, or -1 when the
+;          deadline passed, the card was removed or not ready
+;
+_IDSend:
+	clr.l	CFU_IDESet+2(a3)
+	move.w	d5,CFU_IDESet+6(a3)
+	bsr	_IDECmd
+	tst.w	d0
+	beq.s	_ids_fail
+	bsr	_IDWait
+	tst.l	d0
+	bmi.s	_ids_end
+	moveq.l	#$29,d1			;DF, DRQ, ERR
+	and.b	d0,d1
+	bne.s	_ids_end
+	DBGMSG	dbg_id_resend		;dropped: send it again
+	bra.s	_IDSend
+_ids_fail:
+	moveq.l	#-1,d0
+_ids_end:
+	rts
+
 ;--- _IDWait: wait for an IDENTIFY to answer ----------------
 ; After _IDECmd. Reads the alternate status itself: WaitReady
 ; also returns on the timer signal without reading it.
@@ -5274,10 +5308,14 @@ _xc_loop:
 ;   a3 = CFU pointer, CFU_TimeReq running as the deadline
 ;
 ; Output:
-;   d0.l = status with DRQ, ERR or DF set, or -1 when the
-;          deadline passed or the card was removed
+;   d0.l = status with DRQ, ERR or DF set, the status of a
+;          card seen ready without them twice in a row, or -1
+;          when the deadline passed or the card was removed
 ;
 _IDWait:
+	move.l	d2,-(sp)
+	moveq.l	#0,d2			;ready reads without an answer
+_idw_loop:
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
 	bne.s	_idw_fail		;card removed
@@ -5285,10 +5323,16 @@ _IDWait:
 	move.l	CFU_IDEAddr(a3),a0
 	moveq.l	#0,d0
 	move.b	14(a0),d0
-	bmi.s	_idw_more		;BSY
+	bmi.s	_idw_busy		;BSY
 	moveq.l	#$29,d1			;DF, DRQ, ERR
 	and.b	d0,d1
 	bne.s	_idw_end
+	addq.w	#1,d2
+	cmp.w	#2,d2
+	beq.s	_idw_end		;ready twice without an answer
+	bra.s	_idw_more
+_idw_busy:
+	moveq.l	#0,d2
 _idw_more:
 	lea	CFU_TimeReq(a3),a1
 	CALLEXEC CheckIO
@@ -5297,10 +5341,11 @@ _idw_more:
 
 	bsr	WaitReady		;the deadline still wakes it
 	bsr	Wait40
-	bra.s	_IDWait
+	bra.s	_idw_loop
 _idw_fail:
 	moveq.l	#-1,d0
 _idw_end:
+	move.l	(sp)+,d2
 	rts
 
 ;--- _ReadIdentify: issue IDENTIFY and read 512 bytes -------
@@ -5315,12 +5360,7 @@ _idw_end:
 ;   d0 = 1 (success) or 0 (failure)
 ;
 _ReadIdentify:
-	clr.l	CFU_IDESet+2(a3)
-	move.w	d5,CFU_IDESet+6(a3)
-	bsr	_IDECmd
-	tst.w	d0
-	beq.s	_ri_fail
-	bsr	_IDWait
+	bsr	_IDSend
 	and.b	#$29,d0			;DF, DRQ, ERR; -1 fails too
 	subq.b	#8,d0			;DRQ
 	bne.s	_ri_fail
@@ -5367,8 +5407,9 @@ _ri_fail:
 ;
 ; Flow:
 ;   1. Send IDENTIFY DEVICE ($EC)
-;   2. Wait for DRQ or ERR in the status register (_IDWait), at
-;      most 2 s for the whole identification
+;   2. Wait for DRQ or ERR in the status register (_IDSend), at
+;      most 2 s for the whole identification; a command the card
+;      dropped (ready without DRQ, ERR or DF) is sent again
 ;   3. On ERR or DF send IDENTIFY PACKET DEVICE ($A1) once
 ;   4. Read 512-byte identify data, check it (pattern, XOR, a
 ;      second read); DRQ left set after the block does not matter
@@ -5394,15 +5435,9 @@ _GetIDEID:
 	move.w	#$e0ec,d5		;LBA, drive #0, IDENTIFY DEVICE
 	clr.w	CFU_ReceiveMode(a3)	;WORD
 _gid_command:
-	clr.l	CFU_IDESet+2(a3)
-	move.w	d5,CFU_IDESet+6(a3)
-	bsr	_IDECmd
-	tst.w	d0
-	beq.w	_gid_error
-
-	bsr	_IDWait
+	bsr	_IDSend
 	tst.l	d0
-	bmi.w	_gid_error		;no answer in time, or card removed
+	bmi.w	_gid_error		;no answer in time, not ready, or card removed
 
 	and.b	#$29,d0			;DF, DRQ, ERR
 	subq.b	#8,d0			;DRQ
