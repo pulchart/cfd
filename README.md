@@ -56,10 +56,10 @@ By hand:
 
 | Flavour | CPU Tier | File | Size |
 |---------|------|------|------|
-| full | 68020+ | full/68020/devs/compactflash.device | ~14.3 KB |
-| small | 68020+ | small/68020/devs/compactflash.device | ~10.6 KB |
-| full | 68000+ | full/68000/devs/compactflash.device | ~14.5 KB |
-| small | 68000+ | small/68000/devs/compactflash.device | ~10.7 KB |
+| full | 68020+ | full/68020/devs/compactflash.device | ~15 KB |
+| small | 68020+ | small/68020/devs/compactflash.device | ~11 KB |
+| full | 68000+ | full/68000/devs/compactflash.device | ~15 KB |
+| small | 68000+ | small/68000/devs/compactflash.device | ~11 KB |
 
 full: serial debug output (`Flags = 8`). small: no debug code.
 
