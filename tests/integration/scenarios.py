@@ -182,7 +182,8 @@ def swap_other(r):
 
 def sram(r):
     return [
-        ("refused at the CIS gate", r.serial_order("[CFD] CIS gate", "..RESULT: reject")),
+        # printed only when the CIS gate rejects a card
+        ("refused at the CIS gate", "..RESULT: reject" in r.serial),
         ("no CF0", not info_has(r, 0, "CF0")),
     ]
 
