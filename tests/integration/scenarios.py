@@ -152,6 +152,100 @@ def swap_open(r):
     ]
 
 
+def flags(row):
+    """The lsptres Flags column of a row: Present/Invalid, Boot, Nomount,
+    Mounted, s/S for a hand mount."""
+    return next((f for f in row.split() if re.fullmatch(r"[PI-][B-][N-][M-][sS-]", f)), "")
+
+
+def kept_absent(row):
+    """Still mounted but no media: the handler kept while the card is out."""
+    f = flags(row)
+    return f[:1] == "-" and f[3:4] == "M"
+
+
+def present_mounted(row):
+    f = flags(row)
+    return f[:1] == "P" and f[3:4] == "M"
+
+
+def held_ok(r):
+    held = r.out / "held.bin"
+    return held.exists() and held.read_bytes() == r.payload
+
+
+def late_insert(r):
+    names = [n for n, _, _ in RDB]
+    return [
+        ("nothing published while the slot is empty", not any(pt_row(r, 2, n) for n in names)),
+        ("insertion in the serial log", "[CFD] Card inserted" in r.serial),
+        *rdb(r),
+    ]
+
+
+def swap_keep(r):
+    return [
+        ("CF0: kept and absent while the card is out", kept_absent(pt_row(r, 2, "CF0"))),
+        ("not unmounted in the serial log", "[PT] unmounted CF0" not in r.serial),
+        (
+            "the kept entry serves again, nothing new published",
+            r.serial_order("[CFD] Card inserted", "[PT] new partitions: 0"),
+        ),
+        ("CF0: mounted after the swap", info_has(r, 1, "CF0")),
+        ("lsptres: present and mounted", present_mounted(pt_row(r, 1, "CF0"))),
+        ("payload read back after the swap", read_ok(r, 1)),
+        ("held file reads back through its handle", held_ok(r)),
+        ("written file on the image", r.image_file("up.bin") == r.up),
+    ]
+
+
+def swap_in_use(r):
+    return [
+        ("CF0: kept and absent while in use", kept_absent(pt_row(r, 2, "CF0"))),
+        ("CF0: mounted after the first swap", info_has(r, 1, "CF0")),
+        ("held file reads back through its handle", held_ok(r)),
+        ("CF0: gone after the second removal", not pt_row(r, 3, "CF0")),
+        ("unmounted in the serial log", "[PT] unmounted CF0" in r.serial),
+        ("CF0: mounted after the second swap", info_has(r, 4, "CF0")),
+        ("payload read back after the second swap", r.got(4) == r.payload),
+    ]
+
+
+def hand_mount_row(r, n):
+    return next((line for line in r.text("pt%d.txt" % n).splitlines()
+                 if line.split()[:1] and line.split()[0].endswith(">CFX")), "")  # fmt: skip
+
+
+def swap_static_default(r):
+    row0 = hand_mount_row(r, 0)
+    return [
+        (
+            "the hand mount serves the card, s in lsptres",
+            present_mounted(row0) and flags(row0).endswith("s"),
+        ),
+        ("CFX: lists the payload", "payload.bin" in r.text("listx.txt").lower()),
+        ("the hand mount gone after the removal", not hand_mount_row(r, 2)),
+        ("CF0: automounted after the swap", info_has(r, 1, "CF0")),
+        ("lsptres: CF0 present and mounted", present_mounted(pt_row(r, 1, "CF0"))),
+        ("payload read back after the swap", read_ok(r, 1)),
+    ]
+
+
+def swap_static_keep(r):
+    row0 = hand_mount_row(r, 0)
+    return [
+        (
+            "the hand mount serves the card, S in lsptres",
+            present_mounted(row0) and flags(row0).endswith("S"),
+        ),
+        ("CFX: lists the payload", "payload.bin" in r.text("listx.txt").lower()),
+        ("kept and absent while the card is out", kept_absent(hand_mount_row(r, 2))),
+        ("static mount kept in the serial log", "[PT] static mount kept" in r.serial),
+        ("the hand mount serves again after the swap", present_mounted(hand_mount_row(r, 1))),
+        ("payload read back through CFX after the swap", read_ok(r, 1)),
+    ]
+
+
 def mix(r, source):
     """Each partition of a mixed card is published; FAT mounts, reads and
     writes; NTFS is refused; exFAT mounts with a fat95 that has it and is refused
@@ -223,6 +317,24 @@ def rdb_swap(r):
     return out
 
 
+def swap_partial(r):
+    out = rdb(r)
+    out += [
+        ("CFF: unmounted, gone while the card is out", not pt_row(r, 2, "CFF")),
+        ("CFP: kept and absent while the card is out", kept_absent(pt_row(r, 2, "CFP"))),
+        ("CFF unmounted in the serial log", "[PT] unmounted CFF" in r.serial),
+    ]
+    for i, (name, _, _) in enumerate(RDB):
+        after = r.out / ("after%d.bin" % i)
+        out.append(
+            (
+                "%s file reads back after the swap" % name,
+                after.exists() and after.read_bytes() == r.up,
+            )
+        )
+    return out
+
+
 CHECKS = {
     "automount": automount,
     "automount_off": automount_off,
@@ -232,6 +344,12 @@ CHECKS = {
     "handler_params": handler_params,
     "swap": swap,
     "swap_open": swap_open,
+    "late_insert": late_insert,
+    "swap_keep": swap_keep,
+    "swap_in_use": swap_in_use,
+    "swap_static_default": swap_static_default,
+    "swap_static_keep": swap_static_keep,
+    "swap_partial": swap_partial,
     "rdb": rdb,
     "rdb_swap": rdb_swap,
     "mbr_mix": lambda r: mix(r, "MBR"),

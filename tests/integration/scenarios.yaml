@@ -45,6 +45,32 @@ fragments:
     Wait 3
     OUT:cardin
     Wait {wait}
+  card_out: |  # the card leaves the slot and stays out until card_in
+    OUT:cardout
+    Wait 3
+  card_in: |
+    OUT:cardin
+    Wait {wait}
+  snap_out: |  # while the card is out
+    Info >OUT:info2.txt
+    lsptres V >OUT:pt2.txt
+  snap_out2: |
+    Info >OUT:info3.txt
+    lsptres V >OUT:pt3.txt
+  mount_cfx_only: |  # the handler starts on first use, here before the card arrives
+    Mount CFX: FROM OUT:CFX >OUT:mount.txt
+    List CFX: >NIL:
+    Wait 2
+  list_cfx: |
+    List CFX: >OUT:listx.txt
+  snap_after_cfx: |
+    Info >OUT:info1.txt
+    lsptres V >OUT:pt1.txt
+    {copy} CFX:payload.bin OUT:got1.bin
+  snap_after2: |
+    Info >OUT:info4.txt
+    lsptres V >OUT:pt4.txt
+    {copy} CF0:payload.bin OUT:got4.bin
   snap_after: |
     Info >OUT:info1.txt
     lsptres V >OUT:pt1.txt
@@ -99,6 +125,31 @@ scenarios:
     doc: "a file held open across the swap reads back through the same handle"
     steps: [start, snap, hold_open, swap, snap_after, hold_release, write]
     checks: swap_open
+  late_insert:
+    doc: "the driver starts with an empty slot and the RDB card arrives later: published, formatted, written and read"
+    layout: rdb
+    steps: [card_out, start, snap_out, card_in, snap, fsres, rdb_io]
+    checks: late_insert
+  swap_keep:
+    doc: "UNMOUNT NONE: CF0 kept and marked absent while the card is out, its handler serves again on insert, a file held open reads back"
+    prefs: {UNMOUNT: NONE}
+    steps: [start, snap, hold_open, card_out, snap_out, card_in, snap_after, hold_release, write]
+    checks: swap_keep
+  swap_in_use:
+    doc: "default UNMOUNT with a file open: CF0 kept on removal; the next removal without it unmounts CF0"
+    steps: [start, snap, hold_open, card_out, snap_out, card_in, snap_after, hold_release, card_out, snap_out2, card_in, snap_after2]
+    checks: swap_in_use
+  swap_static_default:
+    doc: "default UNMOUNT_STATIC: a hand mount serves the card, is torn down on removal and the card comes back as CF0"
+    mountlist: CFX
+    steps: [card_out, start, mount_cfx_only, card_in, snap, list_cfx, card_out, snap_out, card_in, snap_after]
+    checks: swap_static_default
+  swap_static_keep:
+    doc: "UNMOUNT_STATIC 0: a hand mount survives the removal, marked absent, and serves again on insert"
+    prefs: {UNMOUNT_STATIC: "0"}
+    mountlist: CFX
+    steps: [card_out, start, mount_cfx_only, card_in, snap, list_cfx, card_out, snap_out, card_in, snap_after_cfx]
+    checks: swap_static_keep
   rdb:
     doc: "RDB with FFS and PFS3: PFS3 from the RDB, both formatted, written and read"
     layout: rdb
@@ -109,6 +160,12 @@ scenarios:
     layout: rdb
     steps: [start, snap, fsres, rdb_io, swap, rdb_after]
     checks: rdb_swap
+  swap_partial:
+    doc: "UNMOUNT FFS on an RDB card: the FFS partition unmounted, PFS3 kept and marked absent, both read back after the swap"
+    layout: rdb
+    prefs: {UNMOUNT: FFS}
+    steps: [start, snap, fsres, rdb_io, card_out, snap_out, card_in, rdb_after]
+    checks: swap_partial
   mbr_mix:
     doc: "MBR, a primary and logical partitions: FAT12, FAT16, FAT32, NTFS, exFAT"
     layout: mbr_mix
@@ -119,20 +176,3 @@ scenarios:
     layout: gpt_mix
     steps: [start, snap, mix_io]
     checks: gpt_mix
-
-planned:
-  swap_keep:
-    doc: "UNMOUNT NONE: CF0 kept and marked absent while the card is out, its handler reused on insert, a file held open reads back"
-    needs: a card that stays out of the slot
-  swap_partial:
-    doc: "UNMOUNT FFS on an RDB card: the FFS partition unmounted, PFS3 kept and its handler reused"
-    needs: a card that stays out of the slot
-  swap_in_use:
-    doc: "default UNMOUNT with a file open: CF0 kept on removal; the next removal without it unmounts CF0"
-    needs: a card that stays out of the slot
-  swap_static_keep:
-    doc: "UNMOUNT_STATIC 0: a hand mount survives the removal (S in lsptres) and serves again on insert"
-    needs: a card that stays out of the slot
-  swap_static_default:
-    doc: "default UNMOUNT_STATIC: a hand mount is torn down on removal and the card automounted as CF0"
-    needs: a card that stays out of the slot

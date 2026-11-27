@@ -17,10 +17,10 @@ serial log (FLAGS 8) and the image. Exit 0 when every scenario passes.
 
 FS-UAE needs: controller scide with pcmcia on, Fast RAM at most 4 MB (8 MB
 Zorro II overlaps the PCMCIA window and card.resource stays off) and
-HANDLER_FAT in cfd.prefs. A swap is the Gayle disable bit set and cleared
-from the guest; card.resource re-enables the slot at once, so a card cannot
-stay out and the UNMOUNT policies are not covered. UAE generates its own card
-CIS, so CIS routing is not covered either.
+HANDLER_FAT in cfd.prefs. The guest tools cardout and cardin take the card
+out of the slot and put it back through uaelib function 120, which the
+FS-UAE of the amiga-fsuae images provides. UAE generates its own card CIS, so
+CIS routing is not covered.
 """
 
 import argparse
@@ -450,6 +450,12 @@ def main():
         print(
             "  SKIP: fat95 %d.%d is older than %s, which %s needs" % (*have, osc["fat95_min"], a.os)
         )
+    # scenarios an OS profile cannot run, with the reason
+    for n, why in (osc.get("skip") or {}).items():
+        if n in names and n not in skipped:
+            skipped.append(n)
+            print("== %s %s: %s" % (a.os, n, SCENARIOS[n]["doc"]))
+            print("  SKIP: %s" % why)
     todo = [n for n in names if n not in skipped]
     sysdir, boot = prepare(cfg, osc, work)
     failed = [n for n in todo if not run(cfg, a.os, osc, sysdir, boot, work, n, SCENARIOS[n])]
