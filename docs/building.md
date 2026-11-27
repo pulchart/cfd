@@ -36,7 +36,9 @@ make clean; make; make guide; make release
 | `make lint` | ruff and yamllint |
 | `make checksums`, `clean`, `distclean`, `help` | sizes and checksums, cleanup, target list |
 
-CI runs on every pull request, master push and manual run in the image's current digest. It lints, builds and tests in parallel and uploads the build as `cfd-dist`. The FS-UAE integration suite runs on the build in the amiga-fsuae images of AROS and ApolloOS. Then it packs that build into the release archive, checks that the archive holds the build's drivers, ptable.library copies and tools and uploads the archive with its readme as `cfd-release`. Each run's summary lists the image, the built files, the test suites and the archive with a download link.
+CI runs on every pull request, master push and manual run in the image's current digest. It lints, builds and tests in parallel and uploads the build as `cfd-dist.<version>`. The FS-UAE integration suite runs on the build in the amiga-fsuae images of AROS and ApolloOS. Then it packs that build into the release archive, checks that the archive holds the build's drivers, ptable.library copies and tools and uploads the archive with its readme as `cfd.<version>`. Each run's summary lists the image, the built files, the test suites and the archive with a download link.
+
+CI builds the head commit of a pull request, not the merge commit GitHub makes for it, and sets `CI_SUFFIX`, which replaces the version suffix of the archive and of every component: `-pr<n>.<hash>` in pull request n, `-master.<hash>` on a master push and `-ci.<hash>` in a manual run, with the short hash of the built commit. A CI build never carries the name of a release, the release archive comes from a local build. `<version>` above is the archive's version, such as `v20261122-pr12.6da062e`.
 
 Options: `V=1` verbose, `GTIMING=1` Gayle timing (experimental), `FUNCEXT_VOTING=0`, `ATAPI=1`.
 
