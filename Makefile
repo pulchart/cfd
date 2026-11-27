@@ -563,6 +563,7 @@ readme: $(README_NAME)
 STAGE   = build/stage
 INSTALL = install
 
+# LhA on the Amiga turns the file modes into protection bits, programs need e
 stage: version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) $(README_NAME) guides
 	$(Q)rm -rf $(STAGE)
 	$(Q)mkdir -p $(STAGE)/cfd/src/lib
@@ -576,6 +577,8 @@ stage: version-readme $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(AUTOMOUNT_TARGETS) 
 	$(Q)sed -e "s|@VERSION@|$(VERSION)|" -e "s|@DATE@|$(DATE)|" $(INSTALL)/cfd.head $(PTABLE)/install/common.inc $(PTABLE)/install/ptable.inc \
 	    $(INSTALL)/cfd.inc $(INSTALL)/cfd.tail > $(STAGE)/cfd/Install
 	$(Q)sed -e "s|@VERSION@|$(VERSION)|" -e "s|@DATE@|$(DATE)|" $(INSTALL)/setup.head $(INSTALL)/setup.inc $(INSTALL)/setup.tail > $(STAGE)/cfd/Setup
+	$(Q)chmod -R u=rwX,go=rX $(STAGE)
+	$(Q)chmod 755 $(STAGE)/cfd/c/* $(STAGE)/cfd/*/*/devs/* $(STAGE)/cfd/*/*/libs/*
 
 release: check-lha stage
 	@echo "Creating Aminet release: $(ARCHIVE_NAME)"

@@ -233,7 +233,6 @@ jobs:
           path: dist/
       - name: Keep a copy of the build
         run: |
-          chmod 755 dist/c/*
           cp -r dist "$RUNNER_TEMP/build"
       - name: Archive and readme
         run: make release
@@ -247,6 +246,7 @@ jobs:
           if grep -rl '^version https://git-lfs' unpacked; then echo "$archive holds LFS pointers" >&2; exit 1; fi
           for f in "$build"/full/*/*/* "$build"/small/*/*/* "$build"/c/*; do
             cmp "$f" "unpacked/cfd/${f#"$build"/}"
+            [ -x "unpacked/cfd/${f#"$build"/}" ]
           done
           for f in "$build"/*/*/devs/compactflash.device; do
             strings "$f" | grep -F "compactflash.device $cfd_version ($cfd_date)" >/dev/null
