@@ -1,11 +1,11 @@
-Short:        PCMCIA CompactFlash driver A600/1200
+Short:        PCMCIA CompactFlash driver
 Uploader:     jaroslav.pulchart@gmail.com (Jaroslav Pulchart)
 Author:       jaroslav.pulchart@gmail.com (Jaroslav Pulchart), based on work by Torsten Jager and Paul Carter
 Type:         driver/media
 Version:      @VERSION@
 Requires:     AmigaOS 2.0+, PCMCIA slot, CF-to-PCMCIA or SD-to-CF adapter
 Architecture: m68k-amigaos
-Replaces:     driver/media/cfd.v20261007.lha
+Replaces:     driver/media/cfd.v20261115.lha
 Kurz:         PCMCIA CompactFlash-Treiber A600/1200
 
 PCMCIA CompactFlash driver and supporting tools for Amiga 600/1200. Fork of driver/media/CFD133.lha.
@@ -17,12 +17,31 @@ COMPONENTS IN THIS RELEASE
 WHAT'S NEW (@DATE@)
 =======================
 
-* cfd.prefs can be up to 2047 bytes, was 511.
-* cfd.prefs: UNMOUNT reads filesystem names from its own line only.
-* cfd.prefs: new keys HANDLER_<fs>, DOSTYPE_<fs>, FORCE_<fs>, STACK_<fs> and
-  PRI_<fs> choose the handler per filesystem (needs ptable.library 2.3).
-* Setup asks for the handler, stack and priority of DOS/FFS, SFS and PFS
-  partitions, and can load fat95 from L: over a resident one.
+* Version 1.34 fixed newer cards that were not identified, but why the fix
+  worked stayed a mystery for more than a year. It turned out to work only
+  by a side effect, and a correct fix replaces it now.
+* The same fix also covers SD-to-CF adapters, so the workaround that 1.33
+  added for them is gone.
+* Improved AROS and ApolloOS support. compactflash.device no longer hangs
+  when it is first opened, compactflash.device and compactflash.automount
+  no longer crash with the full build, and inserting a card no longer
+  freezes the system.
+* When a card's CIS cannot be read right after a reset, compactflash.device
+  reads it again for up to a second instead of releasing the card at once.
+* Install sets the execute bit on the files it copies.
+* pcmciacheck 2.3: -identify judges the card by read mode 0, the only mode
+  compactflash.device reads IDENTIFY in.
+
+Build and tests:
+
+* Improved build. Every change is built and packaged automatically, the
+  same way on every machine, and the release archive comes from that build.
+
+* Much improved testing with new integration tests in FS-UAE and an
+  emulated PCMCIA card. They insert, swap and pull out cards, even in the
+  middle of a write, and run automatically on AROS and ApolloOS, and
+  locally also on AmigaOS 3.1 and 3.2.3.
+  See https://github.com/pulchart/cfd/tree/master/tests/integration
 
 FEATURES
 ========

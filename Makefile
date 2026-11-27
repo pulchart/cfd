@@ -6,20 +6,20 @@
 
 # Release version: YYYYMMDD package date + optional in-progress suffix
 # (-dev). Empty suffix for a final release.
-RELEASE_DATE = 20261115
+RELEASE_DATE = 20261127
 VERSION_SUFFIX =
 
 # compactflash.device version
-CFD_MAJOR = 2
-CFD_MINOR = 2
+CFD_MAJOR = 3
+CFD_MINOR = 0
 CFD_VERSION_SUFFIX =
-CFD_DATE = 15.11.2026
+CFD_DATE = 27.11.2026
 
 # compactflash.automount version (optional boot/automount module)
 AUTOMOUNT_MAJOR = 2
-AUTOMOUNT_MINOR = 0
+AUTOMOUNT_MINOR = 1
 AUTOMOUNT_VERSION_SUFFIX =
-AUTOMOUNT_DATE = 27.08.2026
+AUTOMOUNT_DATE = 27.11.2026
 
 # Tool-specific versions
 CFINFO_MAJOR = 1
@@ -33,9 +33,9 @@ PCMCIASPEED_VERSION_SUFFIX =
 PCMCIASPEED_DATE = 03.10.2026
 
 PCMCIACHECK_MAJOR = 2
-PCMCIACHECK_MINOR = 2
+PCMCIACHECK_MINOR = 3
 PCMCIACHECK_VERSION_SUFFIX =
-PCMCIACHECK_DATE = 03.10.2026
+PCMCIACHECK_DATE = 27.11.2026
 
 # CI sets CI_SUFFIX (-pr<n>.<hash>, ...); it replaces every suffix above,
 # so no CI build carries the name of a release

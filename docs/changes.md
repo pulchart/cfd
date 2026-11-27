@@ -1,6 +1,40 @@
-## 20261115
+## 20261127
 
 <!-- COMPONENTS:BEGIN -->
+_Components in this release_:
+
+- `compactflash.device 3.0 (27.11.2026)` _(new)_
+- `compactflash.automount 2.1 (27.11.2026)` _(new)_
+- `ptable.library 3.0 (27.11.2026)` _(new)_
+- `CFInfo 1.40 (03.10.2026)`
+- `pcmciaspeed 1.37 (03.10.2026)`
+- `pcmciacheck 2.3 (27.11.2026)` _(new)_
+- `lsptres 1.3 (15.11.2026)`
+<!-- COMPONENTS:END -->
+
+##### 'compactflash.device 3.0'
+- Version 1.34 fixed newer cards that were not identified, but **why the fix worked stayed a mystery for more than a year**. **It turned out to work only by a side effect**, and a correct fix replaces it now.
+- The same fix also covers SD-to-CF adapters, so the workaround that 1.33 added for them is gone.
+- Improved AROS and ApolloOS support. The device no longer hangs when it is first opened, crashes with the full build or freezes the system when a card is inserted.
+- When a card's CIS cannot be read right after a reset, it is read again for up to a second instead of the card being released at once.
+
+##### 'compactflash.automount 2.1'
+- Fixed a crash under AROS with the full build, found by the new integration tests.
+
+#### Install
+- Install sets the execute bit on the files it copies.
+
+#### Tools
+
+##### 'pcmciacheck 2.3'
+- `-identify` judges the card by read mode 0, the only mode compactflash.device reads IDENTIFY in.
+
+#### Build and tests
+- Improved build. Every change is built and packaged automatically, the same way on every machine, and the release archive comes from that build.
+- Much improved testing with new integration tests in FS-UAE and an emulated PCMCIA card. They insert, swap and pull out cards, even in the middle of a write, and run automatically on AROS and ApolloOS, and locally also on AmigaOS 3.1 and 3.2.3. See [integration tests](https://github.com/pulchart/cfd/tree/master/tests/integration).
+
+## 20261115
+
 _Components in this release_:
 
 - `compactflash.device 2.2 (15.11.2026)` _(new)_
@@ -10,7 +44,6 @@ _Components in this release_:
 - `pcmciaspeed 1.37 (03.10.2026)`
 - `pcmciacheck 2.2 (03.10.2026)`
 - `lsptres 1.3 (15.11.2026)` _(new)_
-<!-- COMPONENTS:END -->
 
 ##### 'compactflash.device'
 - `cfd.prefs` can be up to 2047 bytes, was 511.
