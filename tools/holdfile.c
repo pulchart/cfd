@@ -46,6 +46,7 @@ int main(int argc, char **argv)
         goto close;
     }
     PutStr("open\n");
+    Flush(Output());
     for (wait = 0; !(go = Lock((STRPTR)argv[3], ACCESS_READ)); wait++) {
         if (wait == 120 * 5) {
             PutStr("FAIL: no go\n");
