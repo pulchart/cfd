@@ -2324,6 +2324,11 @@ Test:
 	bne.w	_t_freesignals
 
 	move.b	#IOF_QUICK,CFU_TimeReq+IO_Flags(a3)
+;-- left as a finished request: AROS OpenDevice makes it NT_REPLYMSG and
+;   AROS WaitIO Remove()s an NT_REPLYMSG request even when it is quick
+	lea	CFU_TimeReq(a3),a0
+	move.l	a0,LN_Succ(a0)
+	move.l	a0,LN_Pred(a0)
 ;-- Wait40/BusyWait send a second request on the same timer unit: a
 ;   synchronous wait must not resend CFU_TimeReq while it times an I/O
 	move.l	CFU_TimeReq+IO_Device(a3),CFU_DelayReq+IO_Device(a3)
