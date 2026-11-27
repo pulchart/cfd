@@ -10,7 +10,7 @@ system directory, AMIGA_KICKSTART the ROM and AMIGA_KICKSTART_EXT its second
 half. --os names the OS profile of the config. Preparation copies the system
 directory and puts the driver set and the test tools on it: the driver,
 ptable.library, lsptres and CFInfo from dist/, the guest tools from make,
-fat95, lsfsres and PFS3 from their releases unless the config names builds.
+fat95, lsfsres, dd and PFS3 from their releases unless the config names builds.
 Each scenario then gets its own card image, cfd.prefs and steps; the guest
 writes its findings to the host directory OUT:, and the host checks them, the
 serial log (FLAGS 8) and the image. Exit 0 when every scenario passes.
@@ -62,6 +62,7 @@ FAT95_SHA256 = "0493cea074caccda415716ff0035fad06ee88a86e61a1e48419f89afed36e758
 RELEASES = {
     "fat95": (FAT95_LHA, FAT95_SHA256, "fat95/l/68020/fat95"),
     "lsfsres": (FAT95_LHA, FAT95_SHA256, "fat95/c/lsfsres"),
+    "dd": (FAT95_LHA, FAT95_SHA256, "fat95/c/dd"),
     "pfs3": (
         "https://github.com/pulchart/pfs3aio/releases/download/20261119-1/pfs3aio-20261119-1-020-gcc13",
         "7d42e1257752299572c0453394c04c6d5d37128abda6a0d454654db8e72a3761",
@@ -77,7 +78,6 @@ MakeDir RAM:T RAM:ENV
 Assign >NIL: ENV: RAM:ENV
 Assign >NIL: T: RAM:T
 Echo "start" >OUT:log.txt
-Copy OUT:cfd.prefs ENV:cfd.prefs
 noreq
 Execute OUT:steps
 OUT:CFInfo >OUT:cfinfo.txt
@@ -121,6 +121,7 @@ def prepare(cfg, osc, work):
         (ROOT / "build/tools/noreq", "C/noreq"),
         (cfg["lsptres"], "C/lsptres"),
         (cfg["lsfsres"], "C/lsfsres"),
+        (cfg["dd"], "C/dd"),
         (cfg["cfd"], "Devs/compactflash.device"),
         (cfg["ptable"], "Libs/ptable.library"),
         (cfg["fat95"], "L/fat95"),
@@ -129,7 +130,11 @@ def prepare(cfg, osc, work):
         shutil.copyfile(src, sysdir / dest)
     startup = STARTUP if osc.get("setpatch", True) else STARTUP.replace("SetPatch >NIL:\n", "")
     (sysdir / "S/Startup-Sequence").write_text(startup)
-    return ["hard_drive_2 = %s" % sysdir, "hard_drive_2_label = Boot", "hard_drive_2_priority = 10"]
+    return sysdir, [
+        "hard_drive_2 = %s" % sysdir,
+        "hard_drive_2_label = Boot",
+        "hard_drive_2_priority = 10",
+    ]
 
 
 def ntfs_volume(path, sectors):
@@ -305,7 +310,7 @@ def emulate(cfg, d, cfgfile, name):
     return False, took
 
 
-def run(cfg, osname, osc, boot, work, name, sc):
+def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     d = work / name
     for sub in ("out", "xdg", "base"):
         (d / sub).mkdir(parents=True)
@@ -313,15 +318,18 @@ def run(cfg, osname, osc, boot, work, name, sc):
     payload, up = os.urandom(300000), os.urandom(70000)
     hdf, parts = card_image(d, sc.get("layout", "mbr"), payload, cfg)
     (out / "up.bin").write_bytes(up)
+    # the driver reads SYS:Prefs/Env-Archive/cfd.prefs when ENV: has none
     prefs = dict(BASE_PREFS, **osc.get("prefs", {}), **sc.get("prefs", {}))
-    (out / "cfd.prefs").write_text("".join("%s %s\n" % kv for kv in prefs.items()))
+    archive = sysdir / "Prefs/Env-Archive"
+    archive.mkdir(parents=True, exist_ok=True)
+    (archive / "cfd.prefs").write_text("".join("%s %s\n" % kv for kv in prefs.items()))
     (out / "yes").write_text("y\ny\ny\n\n\n")
     for tool in GUEST_TOOLS:
         shutil.copyfile(tool, out / tool.name)
     shutil.copyfile(cfg["cfinfo"], out / "CFInfo")
     if "mountlist" in sc:
         (out / sc["mountlist"]).write_text(CF0_MOUNTLIST.format(name=sc["mountlist"]))
-    (out / "steps").write_text(sc["steps"].format(wait=cfg["wait"]))
+    (out / "steps").write_text(sc["steps"].format(wait=cfg["wait"], copy=osc.get("copy", "Copy")))
     serial = d / "serial.txt"
     serial.touch()
     rom, ext = os.environ["AMIGA_KICKSTART"], os.environ.get("AMIGA_KICKSTART_EXT")
@@ -421,8 +429,8 @@ def main():
         "  fat95 %s: exFAT partitions %s"
         % (shown(cfg["fat95"]), "mount" if cfg["fat95_exfat"] else "refused")
     )
-    boot = prepare(cfg, osc, work)
-    failed = [n for n in names if not run(cfg, a.os, osc, boot, work, n, SCENARIOS[n])]
+    sysdir, boot = prepare(cfg, osc, work)
+    failed = [n for n in names if not run(cfg, a.os, osc, sysdir, boot, work, n, SCENARIOS[n])]
     print(
         "%s: %d/%d scenarios passed%s"
         % (

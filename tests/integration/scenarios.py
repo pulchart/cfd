@@ -36,7 +36,7 @@ MIX = [("fat12", 16384, 0x01), ("fat16", 49152, 0x06), ("fat32", 81920, 0x0C),
 # logical MBR partitions are named from CF4
 MIX_IO = (
     "".join(
-        "Copy CF%d:payload.bin OUT:got%d.bin\nCopy OUT:up.bin CF%d:up.bin\nCopy CF%d:up.bin OUT:back%d.bin\n"
+        "{copy} CF%d:payload.bin OUT:got%d.bin\n{copy} OUT:up.bin CF%d:up.bin\n{copy} CF%d:up.bin OUT:back%d.bin\n"
         % (n, n, n, n, n)
         for n in range(10)
     )
@@ -56,7 +56,7 @@ RDB_IO = (
     )
     + "Wait 3\nInfo >OUT:info1.txt\n"
     + "".join(
-        "Copy OUT:up.bin %s:up.bin\nCopy %s:up.bin OUT:back%d.bin\n" % (n, n, i)
+        "{copy} OUT:up.bin %s:up.bin\n{copy} %s:up.bin OUT:back%d.bin\n" % (n, n, i)
         for i, (n, _, _) in enumerate(RDB)
     )
     + "Wait 5\n"

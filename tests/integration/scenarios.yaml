@@ -2,7 +2,8 @@
 #
 # fragments: AmigaDOS steps a scenario lists by name; they run from
 # S:Startup-Sequence after the driver set is in place. {wait} is the automount
-# wait from the config. scenarios.py adds mix_io (every CFn: of a mixed card:
+# wait from the config, {copy} the command that moves files to and from
+# OUT: (dd on AROS and ApolloOS). scenarios.py adds mix_io (every CFn: of a mixed card:
 # read the payload, write a file, read it back) and rdb_io (format, write and
 # read every RDB partition).
 #
@@ -28,9 +29,9 @@ fragments:
     lsptres V >OUT:pt0.txt
   read: |
     List CF0: >OUT:list0.txt
-    Copy CF0:payload.bin OUT:got0.bin
+    {copy} CF0:payload.bin OUT:got0.bin
   write: |  # fat95 flushes lazily
-    Copy OUT:up.bin CF0:up.bin
+    {copy} OUT:up.bin CF0:up.bin
     Wait 5
   mount_cf0: |  # the handler starts on first use
     Mount CF0: FROM OUT:CF0 >OUT:mount.txt
@@ -48,7 +49,7 @@ fragments:
     Info >OUT:info1.txt
     lsptres V >OUT:pt1.txt
     List CF0: >OUT:list1.txt
-    Copy CF0:payload.bin OUT:got1.bin
+    {copy} CF0:payload.bin OUT:got1.bin
   fsres: |
     lsfsres >OUT:fsres.txt
   hold_open: |  # tools/holdfile.c keeps the payload open until OUT:go
