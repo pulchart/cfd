@@ -416,7 +416,7 @@ $(GUIDE_AMREVIEW): docs/automount-review.md $(MD2GUIDE)
 	$(Q)echo "  GUIDE   $@"
 	$(Q)$(MD2GUIDE) docs/automount-review.md $@ --version $(CFD_VERSION) --date $(CFD_DATE) --title "compactflash.device" --ver-title "automount feature review guide"
 
-$(GUIDE_CHANGES): docs/changes.md $(MD2GUIDE)
+$(GUIDE_CHANGES): docs/changes.md $(MD2GUIDE) Makefile
 	$(Q)mkdir -p $(GUIDE_OUTPUT_DIR)
 	$(Q)echo "  GUIDE   $@"
 	$(Q)$(MD2GUIDE) docs/changes.md $@ --version $(VERSION) --date $(DATE) --title "compactflash.device release notes" --ver-title "compactflash.device release notes guide"
