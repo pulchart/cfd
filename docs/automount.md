@@ -110,7 +110,7 @@ Format:
 | 8 | serial debug output (full build) |
 | 16 | enforce ATA multi-sector mode |
 
-The filesystem names are exactly these five: `DOS`, `FFS`, `SFS`, `PFS`, `FAT`. Any other name (`NTFS`, `EXT2`, `PDS`, ...) is not recognised and is silently ignored. `PDS` in particular is not valid: PFS3's `PDS\x` DosType is already covered by `PFS`.
+The filesystem names are `DOS`, `FFS`, `SFS`, `PFS` and `FAT`. Any other name (`NTFS`, `EXT2`, `PDS`, ...) is not recognised and is silently ignored. `PDS` in particular is not valid: PFS3's `PDS\x` DosType is already covered by `PFS`.
 
 A per-filesystem key applies to partitions whose DosType high three bytes match: `DOS` = `DOS\x`, `FFS` = `DOS\x` fast-filesystem, `PFS` = `PFS\x` (and the `PDS\x` alias), `SFS` = `SFS\x`, `FAT` = `FAT\x`. Use the overrides when you want a setting on one filesystem only, for example serial debug on FAT mounts alone.
 

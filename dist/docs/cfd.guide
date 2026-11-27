@@ -248,10 +248,9 @@ handlers. The resident driver re-reads that file on every card insert
 and removal.
 
 The per-filesystem config keys ( @{fg shine}UNMOUNT@{fg text} and the @{fg shine}<fs>@{fg text} keys @{fg shine}FLAGS_@{fg text} ,
-@{fg shine}CONTROL_@{fg text} , @{fg shine}HANDLER_@{fg text} , @{fg shine}DOSTYPE_@{fg text} , @{fg shine}FORCE_@{fg text} , @{fg shine}STACK_@{fg text} , @{fg shine}PRI_@{fg text} ) recognise
-exactly five filesystem names and no others: @{fg shine}DOS@{fg text} , @{fg shine}FFS@{fg text} , @{fg shine}SFS@{fg text} , @{fg shine}PFS@{fg text} , @{fg shine}FAT@{fg text}
-. Any other name is silently ignored. See @{"  docs/automount.guide  " link "automount.guide/Main"} for the full config
-reference.
+@{fg shine}CONTROL_@{fg text} , @{fg shine}HANDLER_@{fg text} , @{fg shine}DOSTYPE_@{fg text} , @{fg shine}FORCE_@{fg text} , @{fg shine}STACK_@{fg text} , @{fg shine}PRI_@{fg text} ) accept only
+@{fg shine}DOS@{fg text} , @{fg shine}FFS@{fg text} , @{fg shine}SFS@{fg text} , @{fg shine}PFS@{fg text} and @{fg shine}FAT@{fg text} . Any other name is silently ignored. See @{"  docs/automount.guide  " link "automount.guide/Main"}
+for the full config reference.
 
 @{fg shine}compactflash.automount@{fg text} provides the boot/automount bringup: in a ROM it
 gives cold-boot autoboot and opens the device after DOS so the automount

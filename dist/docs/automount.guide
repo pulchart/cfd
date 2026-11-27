@@ -350,10 +350,10 @@ Format:
   8          serial debug output (full build)  
   16         enforce ATA multi-sector mode     
 
-The filesystem names are exactly these five: @{fg shine}DOS@{fg text} , @{fg shine}FFS@{fg text} , @{fg shine}SFS@{fg text} , @{fg shine}PFS@{fg text} , @{fg shine}FAT@{fg text}
-. Any other name ( @{fg shine}NTFS@{fg text} , @{fg shine}EXT2@{fg text} , @{fg shine}PDS@{fg text} , ...) is not recognised and is
-silently ignored. @{fg shine}PDS@{fg text} in particular is not valid: PFS3's @{fg shine}PDS\x@{fg text} DosType
-is already covered by @{fg shine}PFS@{fg text} .
+The filesystem names are @{fg shine}DOS@{fg text} , @{fg shine}FFS@{fg text} , @{fg shine}SFS@{fg text} , @{fg shine}PFS@{fg text} and @{fg shine}FAT@{fg text} . Any other name
+( @{fg shine}NTFS@{fg text} , @{fg shine}EXT2@{fg text} , @{fg shine}PDS@{fg text} , ...) is not recognised and is silently ignored.
+@{fg shine}PDS@{fg text} in particular is not valid: PFS3's @{fg shine}PDS\x@{fg text} DosType is already covered
+by @{fg shine}PFS@{fg text} .
 
 A per-filesystem key applies to partitions whose DosType high three
 bytes match: @{fg shine}DOS@{fg text} = @{fg shine}DOS\x@{fg text} , @{fg shine}FFS@{fg text} = @{fg shine}DOS\x@{fg text} fast-filesystem, @{fg shine}PFS@{fg text} = @{fg shine}PFS\x@{fg text} (and
