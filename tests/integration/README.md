@@ -13,6 +13,8 @@ tests/integration/run.py --list                      # scenarios with a one-line
 
 `make test-integration` builds the guest tools in the toolchain image, then runs `run.py --os NAME` in the image of each OS in `IT_OS` (default `aros apolloos`; `3.2.3` and `3.1` need the local AmigaOS images), one after another, in `build/integration/<date>/<os>`. `IT` passes options to run.py, such as `--scenario`, `--config FILE` or `--work DIR`. Exit code 0 when every scenario passes.
 
+With `GH_TOKEN` set, run.py takes fat95, lsfsres and dd from the package of the newest successful fat95 CI run (`fat95_ci.py`), downloaded to `build/deps/fat95-ci/`; `make test-integration` passes `GH_TOKEN` into the image. GitHub hands out artifacts only with a token, even from a public repository. The cfd CI sets it from the secret `FAT95_ACTIONS_READ`, a token with read access to the Actions of pulchart/fat95. Without a token fat95 comes from its release, which is older than AROS and ApolloOS need, so their FAT scenarios fail.
+
 ## Configuration
 
 `config.yaml` holds the settings. A relative path starts at the repository root, so `../fat95` is a checkout beside this one. The image brings the OS: `AMIGA_SYSTEM`, `AMIGA_KICKSTART` and `AMIGA_KICKSTART_EXT`.
@@ -25,7 +27,6 @@ tests/integration/run.py --list                      # scenarios with a one-line
 | `cpu` | FS-UAE CPU, default `68020` |
 | `prefs` | `cfd.prefs` keys on top of the base set, under a scenario's own |
 | `copy` | command that moves files between `OUT:` and the card, default `Copy` |
-| `fat95_min` | the oldest fat95 this OS runs; with an older `fat95` the scenarios that mount FAT are skipped, the RDB ones still run |
 | `fsuae` | extra FS-UAE lines, default none |
 | `skip` | scenarios this OS does not run, each with the reason the report prints |
 
@@ -34,7 +35,7 @@ Builds, by default from this repository's `dist/` and from releases fetched into
 | Key | Default |
 |---|---|
 | `cfd`, `cfinfo`, `ptable`, `lsptres` | `dist/` of this repository (`make`) |
-| `fat95`, `lsfsres`, `dd` | the fat95 v20261115 release; a fat95 with exFAT is recognised by its binary |
+| `fat95`, `lsfsres`, `dd` | the package of the newest fat95 CI run with `GH_TOKEN` set, else the fat95 v20261115 release; a fat95 with exFAT is recognised by its binary |
 | `pfs3` | the pfs3aio 20261119-1 release (020, gcc13), the handler for the RDB card |
 
 Optional parameters:

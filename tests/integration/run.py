@@ -11,6 +11,8 @@ half. --os names the OS profile of the config. Preparation copies the system
 directory and puts the driver set and the test tools on it: the driver,
 ptable.library, lsptres and CFInfo from dist/, the guest tools from make,
 fat95, lsfsres, dd and PFS3 from their releases unless the config names builds.
+With GH_TOKEN set, fat95, lsfsres and dd come from the package of the newest
+fat95 CI run instead (fat95_ci.py).
 Each scenario then gets its own card image, cfd.prefs and steps; the guest
 writes its findings to the host directory OUT:, and the host checks them, the
 serial log (FLAGS 8) and the image. Exit 0 when every scenario passes.
@@ -27,7 +29,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,7 @@ import urllib.request
 from pathlib import Path
 
 import yaml
+import fat95_ci
 from scenarios import BASE_PREFS, CF0_MOUNTLIST, MIX, RDB, SCENARIOS
 
 HERE = Path(__file__).resolve().parent
@@ -107,6 +109,16 @@ def fetch(key):
             sh("lha", "-xqw=%s" % DEPS, download)
             # lha keeps the archive's owner, a foreign uid outside the container
             sh("chown", "-R", "%d:%d" % (os.getuid(), os.getgid()), DEPS)
+    return dest
+
+
+def from_archive(lha, key):
+    """fat95, lsfsres or dd out of a fat95 package, unpacked next to it."""
+    member = RELEASES[key][2]
+    dest = lha.parent / member
+    if not dest.exists() or dest.stat().st_mtime < lha.stat().st_mtime:
+        sh("lha", "-xqfw=%s" % lha.parent, lha)
+        sh("chown", "-R", "%d:%d" % (os.getuid(), os.getgid()), lha.parent)
     return dest
 
 
@@ -357,17 +369,6 @@ def run(cfg, osname, osc, sysdir, boot, work, name, sc):
     return passed
 
 
-def fat95_version(path):
-    """(major, minor) from the $VER string of a fat95 binary, or (0, 0)."""
-    m = re.search(rb"\$VER: fat95 (\d+)\.(\d+)", path.read_bytes())
-    return (int(m[1]), int(m[2])) if m else (0, 0)
-
-
-def needs_fat95(sc):
-    """Every card layout but the RDB one mounts FAT partitions with fat95."""
-    return sc.get("layout", "mbr") != "rdb"
-
-
 def resolve(value):
     """A config path: absolute as given, relative from the repository root."""
     p = Path(value).expanduser()
@@ -422,9 +423,13 @@ def main():
     unset = [v for v in ("AMIGA_SYSTEM", "AMIGA_KICKSTART") if not os.environ.get(v)]
     if unset:
         sys.exit("%s not set: run in an amiga-fsuae OS image" % " and ".join(unset))
+    lha = None
+    if os.environ.get("GH_TOKEN"):
+        lha, source = fat95_ci.latest()
+        print("  fat95: " + source)
     for k in RELEASES:
         if k not in cfg:
-            cfg[k] = fetch(k)
+            cfg[k] = from_archive(lha, k) if lha and RELEASES[k][0] == FAT95_LHA else fetch(k)
     builds = [cfg[k] for k in (*BUILDS, *RELEASES) if not cfg[k].exists()]
     builds += [p for p in GUEST_TOOLS if not p.exists()]
     if builds:
@@ -441,15 +446,7 @@ def main():
         "  fat95 %s: exFAT partitions %s"
         % (shown(cfg["fat95"]), "mount" if cfg["fat95_exfat"] else "refused")
     )
-    # an OS whose fat95 needs is newer than the configured fat95 skips the FAT scenarios
-    have = fat95_version(cfg["fat95"])
-    need = tuple(int(x) for x in str(osc.get("fat95_min", "0.0")).split("."))
-    skipped = [n for n in names if needs_fat95(SCENARIOS[n]) and have < need]
-    for n in skipped:
-        print("== %s %s: %s" % (a.os, n, SCENARIOS[n]["doc"]))
-        print(
-            "  SKIP: fat95 %d.%d is older than %s, which %s needs" % (*have, osc["fat95_min"], a.os)
-        )
+    skipped = []
     # scenarios an OS profile cannot run, with the reason
     for n, why in (osc.get("skip") or {}).items():
         if n in names and n not in skipped:

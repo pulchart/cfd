@@ -182,9 +182,11 @@ jobs:
         with:
           name: cfd-it-tools
           path: build/tools/
+      # fat95 from the newest fat95 CI run, with a token that reads its Actions
       - name: Scenarios
         env:
           OS: ${{ matrix.os }}
+          GH_TOKEN: ${{ secrets.FAT95_ACTIONS_READ }}
         run: |
           set +e
           python3 tests/integration/run.py --os "$OS" --work "build/integration/$OS" 2>&1 | tee it.log
@@ -193,6 +195,8 @@ jobs:
           {
             echo
             echo "### Integration, $OS"
+            echo
+            sed -n 's/^  fat95: //p' it.log
             echo
             echo "| scenario | result |"
             echo "|---|---|"
