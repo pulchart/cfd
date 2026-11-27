@@ -51,9 +51,10 @@ for entry in "$@"; do
 	LSPTRES) ov=$(old_ptable lsptres.version 1); od=$(old_ptable lsptres.version 2) ;;
 	esac
 
+	# CI_SUFFIX marks the build, not a change of the component.
 	new=
 	[ -n "$prev" ] && [ -n "$oldmk" ] &&
-		[ "$ver ($date)" != "$ov ($od)" ] && new=1
+		[ "${ver%"$CI_SUFFIX"} ($date)" != "$ov ($od)" ] && new=1
 
 	if [ "$fmt" = md ]; then
 		line="- \`$name $ver ($date)\`${new:+ _(new)_}"

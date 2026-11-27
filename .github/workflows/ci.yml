@@ -24,8 +24,30 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       ref: ${{ steps.resolve.outputs.ref }}
+      suffix: ${{ steps.suffix.outputs.suffix }}
+      version: ${{ steps.suffix.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: CI suffix, carried by every version this run builds
+        id: suffix
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          case $GITHUB_EVENT_NAME in
+            pull_request) suffix=-pr$PR ;;
+            push) suffix=-master ;;
+            *) suffix=-ci ;;
+          esac
+          suffix=$suffix.${SHA:0:7}
+          date=$(sed -n 's/^RELEASE_DATE *= *//p' Makefile)
+          [[ $date =~ ^[0-9]{8}$ ]] || { echo "RELEASE_DATE '$date' is no YYYYMMDD" >&2; exit 1; }
+          version=v$date$suffix
+          echo "suffix=$suffix" >>"$GITHUB_OUTPUT"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          printf '\n### Version\n\n`%s`, CI_SUFFIX `%s`\n' "$version" "$suffix" >>"$GITHUB_STEP_SUMMARY"
       - name: Resolve the toolchain image
         id: resolve
         run: |
@@ -53,6 +75,8 @@ jobs:
     container: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Trust the checkout, which another user owns
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: ruff and yamllint
@@ -61,10 +85,14 @@ jobs:
   build:
     needs: image
     runs-on: ubuntu-24.04
+    env:
+      CI_SUFFIX: ${{ needs.image.outputs.suffix }}
     container: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           lfs: true
           submodules: true
       - name: Trust the checkout, which another user owns
@@ -86,7 +114,7 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
-          name: cfd-dist
+          name: cfd-dist.${{ needs.image.outputs.version }}
           path: dist/
       - uses: actions/upload-artifact@v7
         with:
@@ -96,10 +124,13 @@ jobs:
   test:
     needs: image
     runs-on: ubuntu-24.04
+    env:
+      CI_SUFFIX: ${{ needs.image.outputs.suffix }}
     container: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           submodules: true
       - name: Trust the checkout, which another user owns
         run: git config --global --add safe.directory '*'
@@ -127,7 +158,7 @@ jobs:
 
   # FS-UAE integration suite in the amiga-fsuae image of each OS (IT_IMAGE_* in the Makefile)
   integration:
-    needs: build
+    needs: [image, build]
     runs-on: ubuntu-24.04
     container: ${{ matrix.image }}
     timeout-minutes: 45
@@ -141,9 +172,11 @@ jobs:
             image: ghcr.io/pulchart/amiga-fsuae-apolloos:latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/download-artifact@v8
         with:
-          name: cfd-dist
+          name: cfd-dist.${{ needs.image.outputs.version }}
           path: dist/
       - uses: actions/download-artifact@v8
         with:
@@ -182,17 +215,21 @@ jobs:
   package:
     needs: [image, lint, build, test]
     runs-on: ubuntu-24.04
+    env:
+      CI_SUFFIX: ${{ needs.image.outputs.suffix }}
     container: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           lfs: true
           submodules: true
       - name: Trust the checkout, which another user owns
         run: git config --global --add safe.directory '*'
       - uses: actions/download-artifact@v8
         with:
-          name: cfd-dist
+          name: cfd-dist.${{ needs.image.outputs.version }}
           path: dist/
       - name: Keep a copy of the build
         run: |
@@ -203,7 +240,7 @@ jobs:
       - name: Check the archive against the build
         run: |
           archive=$(ls cfd.v*.lha)
-          read -r cfd_version cfd_date <.version-stamp
+          read -r cfd_version cfd_date _ <.version-stamp
           build=$RUNNER_TEMP/build
           mkdir unpacked
           lha -xqw=unpacked "$archive"
@@ -229,11 +266,12 @@ jobs:
       - uses: actions/upload-artifact@v7
         id: upload
         with:
-          name: cfd-release
+          name: cfd.${{ needs.image.outputs.version }}
           path: |
             cfd.v*.lha
             cfd.v*.readme
       - name: Link the archive in the summary
         env:
           URL: ${{ steps.upload.outputs.artifact-url }}
-        run: printf '\n[Download cfd-release](%s)\n' "$URL" >>"$GITHUB_STEP_SUMMARY"
+          VERSION: ${{ needs.image.outputs.version }}
+        run: printf '\n[Download cfd.%s](%s)\n' "$VERSION" "$URL" >>"$GITHUB_STEP_SUMMARY"
