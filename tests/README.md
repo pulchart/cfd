@@ -4,19 +4,16 @@ Assembled sources run in amitools/vamos with the card, Exec and dos.library mock
 
 ## Requires
 
-Linux, Python 3.14+, [vasm 2.0f](http://sun.hasenbraten.de/vasm/) and the ptable submodule. From the repository root:
+The ptable submodule. `make test` runs the suites in the amiga-toolchain image, which holds vasm 2.0f, Python 3.14+ and the pinned amifuse forks of `amitools` and `machine68k` listed in `requirements.txt`, see [docs/building.md](../docs/building.md):
 
 ```sh
 git submodule update --init
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r tests/requirements.txt
 make test
 ```
 
 `make lint` runs ruff and yamllint; `pre-commit install` runs them before each commit.
 
-`make check-test-deps` diagnoses dependencies. Set `VASM_HOME` or `make VASM=/path/to/vasmm68k_mot`. `make test PTABLE=/path/to/ptable` tests against another ptable checkout instead of `extern/ptable`. The pinned Python forks conflict with upstream `amitools`/`machine68k`; use a clean environment.
+`make check-test-deps` diagnoses dependencies. `make test PTABLE=/path/to/ptable` tests against another ptable checkout instead of `extern/ptable`.
 
 Sources assemble into temporary files; release binaries remain untouched.
 
