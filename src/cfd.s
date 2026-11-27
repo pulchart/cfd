@@ -915,6 +915,8 @@ dbg_cis_gate_accept:
 	dc.b	"[CFD] ..RESULT: accept",13,10,0
 dbg_cis_gate_reject:
 	dc.b	"[CFD] ..RESULT: reject -> ReleaseCard",13,10,0
+dbg_cis_retry:
+	dc.b	"[CFD] ..not valid yet, reading the CIS again",13,10,0
 dbg_cis_funcext_absent:
 	dc.b	"[CFD] ..FUNCEXT: absent",13,10,0
 dbg_cis_funcext_link:
@@ -2517,8 +2519,8 @@ _t_do:
 ;                    v
 ;            +------------------+
 ;            | DEVICE type ?    |---- other non-zero type
-;            | (10x retry on    |     ------------------> REJECT
-;            |  NULL/absent)    |
+;            |                  |     ------------------> REJECT
+;            |                  |
 ;            +------------------+
 ;             |              |
 ;     0x0D /  |              | NULL/absent
@@ -2535,6 +2537,9 @@ _t_do:
 ;                    | yes                       -> ReleaseCard,
 ;                    v                            no IDE register
 ;             ..RESULT: accept                    touch)
+;
+;     A REJECT reads the gate again after 40 ms, for up to
+;     1 s: the card may report READY before its CIS is valid.
 ;
 ;     ===== below this line: IDE / CCR registers modified =====
 ;
@@ -2629,9 +2634,6 @@ _t_i2:
 	bsr	ConfigureHBA
 	DBGMSG	dbg_done
 	and.b	#$df,CFU_EventFlags(a3)	;Interrupt ON
-	moveq.l	#600>>3,d1
-	lsl.l	#3,d1
-	move.l	d1,CFU_DTSpeed(a3)	;600ns = PIO 0
 
 	DBGMSG	dbg_voltage
 	moveq.l	#CARD_VOLTAGE_5V,d0
@@ -2642,12 +2644,19 @@ _t_i2:
 	; CIS gate report
 	DBGMSG	dbg_cis_scan
 
-	; Read CISTPL_DEVICE. On cold boot the card sometimes hasn't
-	; finished populating its attribute memory yet and returns an
-	; all-zero "NULL/hole" tuple (type=0x00). Retry up to 10 times
-	; (~400ms) before giving up and falling through to FUNCID.
-	moveq.l	#10,d2
-_t_dev_retry:
+	; After a reset the card may report READY before its CIS is
+	; valid: CopyTuple finds nothing, or tuples read partly. A
+	; rejected gate is read again, for up to 1 s.
+	lea	CFU_TimeReq(a3),a1
+	move.w	#TR_ADDREQUEST,IO_Command(a1)
+	moveq.l	#1,d0
+	move.l	d0,TR_Seconds(a1)
+	clr.l	TR_Micros(a1)
+	CALLEXEC SendIO			;deadline of the CIS gate
+_t_cis_again:
+	moveq.l	#600>>3,d1
+	lsl.l	#3,d1
+	move.l	d1,CFU_DTSpeed(a3)	;600ns = PIO 0
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_CardHandle(a3),a1
 	moveq.l	#CISTPL_DEVICE,d1
@@ -2658,12 +2667,6 @@ _t_dev_retry:
 	lea	CFU_ConfigBlock(a3),a0
 	lea	CFU_DTSize(a3),a1
 	CALLCARD DeviceTuple
-	tst.b	CFU_DTType(a3)
-	bne.s	_t_dev_have		;real type seen -> stop retrying
-	bsr	Wait40
-	subq.w	#1,d2
-	bne.s	_t_dev_retry
-_t_dev_have:
 	; DeviceTuple fills CFU_DTType/CFU_DTSpeed/CFU_DTSize.
 	; We use CFU_DTSpeed later for CardAccessSpeed (timing setup).
 	ifd	DEBUG
@@ -2809,10 +2812,23 @@ _t_cis_funcext_giveup:
 	endc
 
 _t_cis_reject:
+	moveq.l	#3,d0
+	and.b	CFU_EventFlags(a3),d0
+	bne.s	_t_cis_giveup		;card removed
+	lea	CFU_TimeReq(a3),a1
+	CALLEXEC CheckIO
+	tst.l	d0
+	bne.s	_t_cis_giveup		;deadline passed
+	DBGMSG	dbg_cis_retry
+	bsr	Wait40
+	bra.w	_t_cis_again
+_t_cis_giveup:
+	bsr	_StopDeadline
 	DBGMSG	dbg_cis_gate_reject
 	bra.w	_t_ibreak
 
 _t_cis_gate_end:
+	bsr	_StopDeadline
 	DBGMSG	dbg_cis_gate_accept
 
 	; Try to locate CISTPL_CONFIG tuple for config register address.
@@ -5433,7 +5449,7 @@ _gid_command:
 _gid_mismatch:
 	DBGMSG	dbg_id_mismatch
 _gid_bad:
-	bsr	_gid_untime
+	bsr	_StopDeadline
 	moveq.l	#0,d2
 	bra.w	_gid_end
 
@@ -5453,7 +5469,7 @@ _gid_error:
 	moveq.l	#0,d5
 	addq.l	#1,CFU_ReadErrors(a3)
 _gid_found:
-	bsr	_gid_untime
+	bsr	_StopDeadline
 	move.l	d5,d2
 	beq.w	_gid_timeout
 
@@ -5505,7 +5521,7 @@ _gid_end:
 	movem.l	(sp)+,d2/d4-d5/a2
 	rts
 
-_gid_untime:				;stop the IDENTIFY timeout
+_StopDeadline:				;abort CFU_TimeReq used as a deadline
 	lea	CFU_TimeReq(a3),a1
 	CALLEXEC _AbortIO
 	lea	CFU_TimeReq(a3),a1

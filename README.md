@@ -306,13 +306,17 @@ Decision flow:
 ```mermaid
 flowchart TD
     Start["Card reset<br/>voltage"] --> Ident["CISTPL_DEVICE type 0x0D/0x05?<br/>(else CISTPL_FUNCID 0x04)"]
-    Ident -->|no| Reject["REJECT<br/>ReleaseCard"]
+    Ident -->|no| Again["1 s passed?"]
     Ident --> FuncExt["CISTPL_FUNCEXT<br/>Disk Interface = IDE?<br/>10x retry"]
-    FuncExt -->|no| Reject
+    FuncExt -->|no| Again
+    Again -->|"no: wait 40 ms"| Ident
+    Again -->|yes| Reject["REJECT<br/>ReleaseCard"]
     FuncExt --> CfgAddr["CISTPL_CONFIG addr<br/>10x retry<br/>fallback 0x200"]
     CfgAddr -->|out of range| Reject
     CfgAddr --> Identify["IDENTIFY DEVICE"]
 ```
+
+A card can report READY after the reset before its CIS is valid, so no tuple is found or tuples read only partly. A rejected gate is therefore read again every 40 ms, and the card is released only when it is still rejected 1 s after the gate started.
 
 **Stage 2 - classification, after IDE / CCR registers are modified:**
 
@@ -375,7 +379,7 @@ Rejected cards are released back to the system (`ReleaseCard`) so another PCMCIA
 
 ### CIS gate serial debug
 
-Debug builds (`Flags = 8`) log every gate decision so it is clear which branch fired and on what values. Sample lines per probe:
+Debug builds (`Flags = 8`) log every gate decision so it is clear which branch fired and on what values. Each read of the gate prints its lines again; `[CFD] ..not valid yet, reading the CIS again` separates the reads. Sample lines per probe:
 
 ```
 [CFD] CIS gate
@@ -401,7 +405,7 @@ For cards rejected earlier in the gate (bad CISTPL_DEVICE type, non-disk FUNCID)
 
 `compactflash.device` does not support ATAPI devices (CD-ROM, DVD, Zip, etc.) in the default build. The gate that decides what cfd handles works in two stages:
 
-1. **CIS gate** (before any I/O): `CISTPL_DEVICE` / `CISTPL_FUNCID` / `CISTPL_FUNCEXT` are read and validated. Cards without a well-formed Disk Interface FUNCEXT declaring IDE are rejected here, before any Card Configuration Register access. Each CIS read is retried up to 10 times to tolerate hardware whose attribute-memory reads are unstable (e.g. A1200 + ACA1234). Only after the gate accepts does the driver parse `CISTPL_CONFIG` (10x retry, fallback `$200`) to locate the CCR. See [CIS gate decision](#cis-gate-decision) above.
+1. **CIS gate** (before any I/O): `CISTPL_DEVICE` / `CISTPL_FUNCID` / `CISTPL_FUNCEXT` are read and validated. Cards without a well-formed Disk Interface FUNCEXT declaring IDE are rejected here, before any Card Configuration Register access. The FUNCEXT read is retried up to 10 times to tolerate hardware whose attribute-memory reads are unstable (e.g. A1200 + ACA1234), and a rejected gate is read again for up to 1 s. Only after the gate accepts does the driver parse `CISTPL_CONFIG` (10x retry, fallback `$200`) to locate the CCR. See [CIS gate decision](#cis-gate-decision) above.
 2. **Post-IDENTIFY classification**: if a card passes the CIS gate and `IDENTIFY DEVICE` returns the ATAPI signature (`d0=2`, or word-0 bit 15 set), the card is released so a dedicated ATAPI driver such as `telmexatapi.device` (from Aminet `IDEfix97`) can claim it.
 
 Serial debug builds log an ATA accept as:
@@ -419,13 +423,17 @@ Serial debug builds log an ATA accept as:
 [CFD] Getting IDE ID ... done (ATA)
 ```
 
-A card without IDE FUNCEXT (e.g. Telmex ATAPI) rejects after the 10-retry exhausts. `..CONFIG:` does not appear because the parser only runs on accepted cards:
+A card without IDE FUNCEXT (e.g. Telmex ATAPI) rejects after 1 s of gate reads. `..CONFIG:` does not appear because the parser only runs on accepted cards:
 
 ```text
 [CFD] Voltage: 5V
 [CFD] CIS gate
 [CFD] ..DEVICE: type=0x0D ...
 [CFD] ..FUNCEXT: absent
+[CFD] ..not valid yet, reading the CIS again
+[CFD] ..DEVICE: type=0x0D ...
+[CFD] ..FUNCEXT: absent
+...
 [CFD] ..RESULT: reject -> ReleaseCard
 ```
 
