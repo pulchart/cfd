@@ -26,6 +26,7 @@ CIS routing is not covered.
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -423,13 +424,17 @@ def main():
     unset = [v for v in ("AMIGA_SYSTEM", "AMIGA_KICKSTART") if not os.environ.get(v)]
     if unset:
         sys.exit("%s not set: run in an amiga-fsuae OS image" % " and ".join(unset))
-    lha = None
-    if os.environ.get("GH_TOKEN"):
-        lha, source = fat95_ci.latest()
-        print("  fat95: " + source)
-    for k in RELEASES:
-        if k not in cfg:
-            cfg[k] = from_archive(lha, k) if lha and RELEASES[k][0] == FAT95_LHA else fetch(k)
+    # runs of other OS images share build/deps
+    DEPS.mkdir(parents=True, exist_ok=True)
+    with open(DEPS / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        lha = None
+        if os.environ.get("GH_TOKEN"):
+            lha, source = fat95_ci.latest()
+            print("  fat95: " + source)
+        for k in RELEASES:
+            if k not in cfg:
+                cfg[k] = from_archive(lha, k) if lha and RELEASES[k][0] == FAT95_LHA else fetch(k)
     builds = [cfg[k] for k in (*BUILDS, *RELEASES) if not cfg[k].exists()]
     builds += [p for p in GUEST_TOOLS if not p.exists()]
     if builds:

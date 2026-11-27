@@ -177,8 +177,8 @@ $(wordlist 2,$(words $(GOALS)),$(GOALS)):
 endif
 
 # FS-UAE integration suite: the guest tools built in TOOLCHAIN_IMAGE, then
-# tests/integration/run.py in the amiga-fsuae image of each OS in IT_OS, one
-# after another. Needs the driver set built (make). IT_WORK is the run
+# tests/integration/run.py in the amiga-fsuae image of each OS in IT_OS, side
+# by side, each into IT_WORK/<os>.log, printed when all are done. Needs the driver set built (make). IT_WORK is the run
 # directory, IT passes options to run.py (IT="--scenario swap").
 IT_OS ?= aros apolloos
 IT_IMAGE_3.2.3 = localhost/amiga-fsuae-amigaos:3.2.3
@@ -190,10 +190,12 @@ IT_WORK := build/integration/$(shell date +%Y%m%d-%H%M%S)
 test-integration:
 	@podman run --rm --pull=newer --security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
 		$(foreach d,$(MOUNTS),-v $(d):$(d)) -e CI_SUFFIX $(TOOLCHAIN_IMAGE) make $(MAKEOVERRIDES) devinfo holdfile cardout cardin noreq
-	@mkdir -p $(IT_WORK); rc=0; $(foreach os,$(IT_OS),podman run --rm --pull=newer \
+	@mkdir -p $(IT_WORK); $(foreach os,$(IT_OS),{ podman run --rm --pull=newer \
 		--security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) -e GH_TOKEN \
 		$(IT_IMAGE_$(os)) python3 tests/integration/run.py --os $(os) \
-		--work $(abspath $(IT_WORK))/$(os) $(IT) || rc=1;) exit $$rc
+		--work $(abspath $(IT_WORK))/$(os) $(IT) >$(IT_WORK)/$(os).log 2>&1; \
+		echo $$? >$(IT_WORK)/$(os).rc; } &) wait; rc=0; \
+		for os in $(IT_OS); do cat $(IT_WORK)/$$os.log; [ "$$(cat $(IT_WORK)/$$os.rc)" = 0 ] || rc=1; done; exit $$rc
 else
 
 # -I $(PTABLE_SRC) lets the driver resolve the submodule's ptable_pub.i.
