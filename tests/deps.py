@@ -3,29 +3,45 @@
 import importlib.metadata as md
 import subprocess
 import sys
+from pathlib import Path
 from toolchain import PTABLE_SRC, VASM
+
+# The amiga-toolchain image lists the Python packages it installs, at the
+# versions the suites run with; make runs the suites in that image.
+IMAGE_REQUIREMENTS = Path("/usr/share/amiga-toolchain/requirements.txt")
+
+
+def image_versions():
+    """The image's pinned versions by distribution name, {} outside the image."""
+    pins = {}
+    if IMAGE_REQUIREMENTS.is_file():
+        for line in IMAGE_REQUIREMENTS.read_text().splitlines():
+            name, _, pinned = line.split("#")[0].partition("==")
+            if pinned:
+                pins[name.split("[")[0].strip().lower()] = pinned.strip()
+    return pins
 
 
 def main():
     bad = sys.version_info < (3, 14)
     print("Python", sys.version.split()[0], "(3.14+ required)")
-    for name, tested in (
-        ("amitools-amifuse", "0.8.0.post8"),
-        ("machine68k-amifuse", "0.4.1.post1"),
-    ):
+    pins = image_versions()
+    for name in ("amitools", "machine68k"):
+        tested = pins.get(name)
         try:
             version = md.version(name)
-            print(name, version, "" if version == tested else "(untested version)")
+            print(name, version, "" if tested in (None, version) else f"(the image has {tested})")
         except md.PackageNotFoundError:
-            print(name, "missing; install tests/requirements.txt")
+            print(name, "missing; run make, which uses the amiga-toolchain image,")
+            print("or uv pip install -r its requirements.txt")
             bad = True
-    for name in ("amitools", "machine68k"):
+    for name in ("amitools-amifuse", "machine68k-amifuse"):
         try:
             md.version(name)
         except md.PackageNotFoundError:
             continue
-        print(name, "conflicts with required fork; use a fresh venv, or uninstall")
-        print("both providers and reinstall tests/requirements.txt")
+        print(name, "claims the import path of the upstream package; use a fresh venv,")
+        print("or uninstall both providers and reinstall the image's requirements.txt")
         bad = True
     try:
         result = subprocess.run([VASM, "-v"], capture_output=True, text=True, timeout=10)
