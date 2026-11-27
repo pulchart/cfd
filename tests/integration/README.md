@@ -24,6 +24,7 @@ tests/integration/run.py --list                      # scenarios with a one-line
 | `setpatch` | `false` when the OS has no SetPatch |
 | `cpu` | FS-UAE CPU, default `68020` |
 | `prefs` | `cfd.prefs` keys on top of the base set, under a scenario's own |
+| `copy` | command that moves files between `OUT:` and the card, default `Copy` |
 | `fsuae` | extra FS-UAE lines, default none |
 
 Builds, by default from this repository's `dist/` and from releases fetched into `build/deps` with their SHA-256 checked:
@@ -31,7 +32,7 @@ Builds, by default from this repository's `dist/` and from releases fetched into
 | Key | Default |
 |---|---|
 | `cfd`, `cfinfo`, `ptable`, `lsptres` | `dist/` of this repository (`make`) |
-| `fat95`, `lsfsres` | the fat95 v20261115 release; a fat95 with exFAT is recognised by its binary |
+| `fat95`, `lsfsres`, `dd` | the fat95 v20261115 release; a fat95 with exFAT is recognised by its binary |
 | `pfs3` | the pfs3aio 20261119-1 release (020, gcc13), the handler for the RDB card |
 
 Optional parameters:
@@ -63,8 +64,8 @@ Optional parameters:
 
 ## Phases
 
-1. Preparation: a copy of the image's system directory as the boot volume, with Format in `C:`, lsptres, lsfsres, compactflash.device, ptable.library, fat95 and `noreq`. The guest tools come from make: `devinfo` and `holdfile` (`tools/*.c`), `cardout`, `cardin` and `noreq` (`tools/*.asm`).
-3. Per scenario: a card image, `cfd.prefs`, the scenario steps and the files they need, in the host directory the guest sees as `OUT:`.
+1. Preparation: a copy of the image's system directory as the boot volume, with Format in `C:`, lsptres, lsfsres, dd, compactflash.device, ptable.library, fat95 and `noreq`. The guest tools come from make: `devinfo` and `holdfile` (`tools/*.c`), `cardout`, `cardin` and `noreq` (`tools/*.asm`).
+3. Per scenario: a card image, `cfd.prefs` in the boot volume's `Prefs/Env-Archive`, which the driver reads when `ENV:` has none, and the scenario steps with the files they need in the host directory the guest sees as `OUT:`.
 4. Boot: the Startup-Sequence runs the steps; the guest writes its findings to `OUT:`.
 5. Checks: on `OUT:`, the serial log (`FLAGS 8`) and the card image.
 
@@ -77,6 +78,7 @@ FS-UAE is started a second time when it exits or the guest has not begun its ste
 - `HANDLER_FAT` in `cfd.prefs`; without it FAT partitions are published but not mounted.
 - A swap is the Gayle disable bit set and cleared from the guest (`cardout`, `cardin`).
 - `noreq` turns requesters off for the shell, so a missing volume fails a step instead of blocking the run.
+- AROS `Copy` to and from the FS-UAE host directory (`OUT:`) fails; the AROS and ApolloOS profiles set `copy: dd`.
 
 ## Not covered
 

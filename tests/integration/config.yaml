@@ -9,11 +9,11 @@ os:
   aros:
     setpatch: false
     cpu: 68040-NOMMU
-    prefs: {STACK_FAT: "65536"}
+    copy: dd
   apolloos:
     setpatch: false
     cpu: 68040-NOMMU
-    prefs: {STACK_FAT: "65536"}
+    copy: dd
 # work: build/integration
 # fsuae: fs-uae
 # wait: 10
