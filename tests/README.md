@@ -20,9 +20,9 @@ make test
 
 Sources assemble into temporary files; release binaries remain untouched.
 
-## Not covered
+## Integration tests
 
-Real AmigaOS, PCMCIA timing and physical card insertion/removal.
+AmigaOS and card insertion/removal run in FS-UAE: [integration/README.md](integration/README.md). PCMCIA timing needs real hardware.
 
 ## Writing a test
 

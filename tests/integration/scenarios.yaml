@@ -1,0 +1,132 @@
+# Scenarios for run.py.
+#
+# fragments: AmigaDOS steps a scenario lists by name; they run from
+# S:Startup-Sequence after the driver set is in place. {wait} is the automount
+# wait from the config. scenarios.py adds mix_io (every CFn: of a mixed card:
+# read the payload, write a file, read it back) and rdb_io (format, write and
+# read every RDB partition).
+#
+# scenarios:
+#   doc        one line for --list and the report
+#   prefs      cfd.prefs keys on top of the base set in scenarios.py
+#   mountlist  a CF0 mountlist written to OUT: under this name
+#   layout     card layout: mbr (default, one FAT16 partition), rdb, mbr_mix, gpt_mix
+#   steps      fragment names, in order
+#   checks     the check set in scenarios.py
+#
+# planned: scenarios not implemented yet; tests/INVENTORY.md lists them.
+#   doc        what it is to check
+#   needs      what is missing for it
+
+---
+fragments:
+  start: |  # opening the unit starts the driver
+    OUT:CFInfo >NIL:
+    Wait {wait}
+  snap: |
+    Info >OUT:info0.txt
+    lsptres V >OUT:pt0.txt
+  read: |
+    List CF0: >OUT:list0.txt
+    Copy CF0:payload.bin OUT:got0.bin
+  write: |  # fat95 flushes lazily
+    Copy OUT:up.bin CF0:up.bin
+    Wait 5
+  mount_cf0: |  # the handler starts on first use
+    Mount CF0: FROM OUT:CF0 >OUT:mount.txt
+  mount_cfx: |
+    Mount CFX: FROM OUT:CFX >OUT:mount.txt
+    List CFX: >OUT:listx.txt
+  devinfo: |
+    OUT:devinfo CF0: >OUT:devinfo.txt
+  swap: |
+    OUT:cardout
+    Wait 3
+    OUT:cardin
+    Wait {wait}
+  snap_after: |
+    Info >OUT:info1.txt
+    lsptres V >OUT:pt1.txt
+    List CF0: >OUT:list1.txt
+    Copy CF0:payload.bin OUT:got1.bin
+  fsres: |
+    lsfsres >OUT:fsres.txt
+  hold_open: |  # tools/holdfile.c keeps the payload open until OUT:go
+    Run >NIL: OUT:holdfile >OUT:hold.txt CF0:payload.bin OUT:held.bin OUT:go
+    Wait 2
+  hold_release: |
+    Echo "go" >OUT:go
+    Wait 3
+
+scenarios:
+  automount:
+    doc: "default cfd.prefs: CF0 mounts on insert, reads and writes"
+    steps: [start, snap, read, write]
+    checks: automount
+  automount_off:
+    doc: "AUTOMOUNT 0: the card is identified, nothing mounts"
+    prefs: {AUTOMOUNT: "0"}
+    steps: [start, snap]
+    checks: automount_off
+  static:
+    doc: AUTOMOUNT 0 and a hand mount of CF0 from a mountlist
+    prefs: {AUTOMOUNT: "0"}
+    mountlist: CF0
+    steps: [start, mount_cf0, read, snap]
+    checks: static
+  static_in_use:
+    doc: "automounted CF0 plus a hand mount of the same partition: refused"
+    mountlist: CFX
+    steps: [start, mount_cfx, snap, read]
+    checks: static_in_use
+  static_mount_used:
+    doc: "MOUNT_USED 1: the hand mount of an automounted partition is let through"
+    prefs: {MOUNT_USED: "1"}
+    mountlist: CFX
+    steps: [start, mount_cfx, snap]
+    checks: static_mount_used
+  handler_params:
+    doc: STACK_FAT, PRI_FAT and DOSTYPE_FAT reach the mounted node
+    prefs: {STACK_FAT: "16384", PRI_FAT: "3", DOSTYPE_FAT: "0x46415401"}
+    steps: [start, snap, devinfo]
+    checks: handler_params
+  swap:
+    doc: "the card leaves and comes back: removal seen, remounted, data intact"
+    steps: [start, snap, swap, snap_after, write]
+    checks: swap
+  swap_open:
+    doc: "a file held open across the swap reads back through the same handle"
+    steps: [start, snap, hold_open, swap, snap_after, hold_release, write]
+    checks: swap_open
+  rdb:
+    doc: "RDB with FFS and PFS3: PFS3 from the RDB, both formatted, written and read"
+    layout: rdb
+    steps: [start, snap, fsres, rdb_io]
+    checks: rdb
+  mbr_mix:
+    doc: "MBR, a primary and logical partitions: FAT12, FAT16, FAT32, NTFS, exFAT"
+    layout: mbr_mix
+    steps: [start, snap, mix_io]
+    checks: mbr_mix
+  gpt_mix:
+    doc: "GPT basic data partitions: FAT12, FAT16, FAT32, NTFS, exFAT"
+    layout: gpt_mix
+    steps: [start, snap, mix_io]
+    checks: gpt_mix
+
+planned:
+  swap_keep:
+    doc: "UNMOUNT NONE: CF0 kept and marked absent while the card is out, its handler reused on insert, a file held open reads back"
+    needs: a card that stays out of the slot
+  swap_partial:
+    doc: "UNMOUNT FFS on an RDB card: the FFS partition unmounted, PFS3 kept and its handler reused"
+    needs: a card that stays out of the slot
+  swap_in_use:
+    doc: "default UNMOUNT with a file open: CF0 kept on removal; the next removal without it unmounts CF0"
+    needs: a card that stays out of the slot
+  swap_static_keep:
+    doc: "UNMOUNT_STATIC 0: a hand mount survives the removal (S in lsptres) and serves again on insert"
+    needs: a card that stays out of the slot
+  swap_static_default:
+    doc: "default UNMOUNT_STATIC: a hand mount is torn down on removal and the card automounted as CF0"
+    needs: a card that stays out of the slot
