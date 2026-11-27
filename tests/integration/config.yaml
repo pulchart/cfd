@@ -8,20 +8,30 @@ os:
   # the local AmigaOS images as an A1200 and as an A600 with the 68000 builds
   "3.2.3-a1200":
     model: A1200
+    skip:
+      rdb_in_use: FFS 47 accepts ACTION_DIE with a file open, so the open handle dies with it
+      rdb_release_out: FFS 47 accepts ACTION_DIE with a file open, so the open handle dies with it
   "3.1-a1200":
     model: A1200
     skip:
       swap_partial: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
+      rdb_in_use: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
+      rdb_release_out: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
   "3.2.3-a600":
     model: A600
     cpu: "68000"
     tier: "68000"
+    skip:
+      rdb_in_use: FFS 47 accepts ACTION_DIE with a file open, so the open handle dies with it
+      rdb_release_out: FFS 47 accepts ACTION_DIE with a file open, so the open handle dies with it
   "3.1-a600":
     model: A600
     cpu: "68000"
     tier: "68000"
     skip:
       swap_partial: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
+      rdb_in_use: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
+      rdb_release_out: FFS 40 refuses ACTION_DIE (209), so the FFS partition cannot be unmounted
   aros:
     setpatch: false
     cpu: 68040-NOMMU

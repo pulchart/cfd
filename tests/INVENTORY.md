@@ -33,6 +33,8 @@ Run by `make test-integration` from `integration/scenarios.yaml`; [integration/R
 | `rdb` | integration | RDB with FFS and PFS3: PFS3 from the RDB, both formatted, written and read |
 | `rdb_swap` | integration | the RDB card leaves and comes back: FFS and PFS3 remount, written files read back |
 | `swap_partial` | integration | UNMOUNT FFS on an RDB card: the FFS partition unmounted, PFS3 kept and marked absent, both read back after the swap |
+| `rdb_in_use` | integration | a file open on the FFS partition of an RDB card: CFF kept on removal; the next removal without it unmounts CFF |
+| `rdb_release_out` | integration | a file open on the FFS partition is closed while the card is out: the next removal unmounts CFF |
 | `mbr_mix` | integration | MBR, a primary and logical partitions: FAT12, FAT16, FAT32, NTFS, exFAT |
 | `gpt_mix` | integration | GPT basic data partitions: FAT12, FAT16, FAT32, NTFS, exFAT |
 | `pull_io` | integration | the card leaves in the middle of a write: removal seen, remounted, data intact |

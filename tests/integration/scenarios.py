@@ -370,6 +370,31 @@ def swap_partial(r):
     return out
 
 
+def rdb_unmount_after_use(r):
+    """CFF kept while a file on it is open, unmounted by the removal after."""
+    after = r.out / "after0.bin"
+    return [
+        *rdb(r),
+        ("CFF: kept and absent while in use", kept_absent(pt_row(r, 2, "CFF"))),
+        ("CFF: mounted after the first swap", info_has(r, 5, "CFF")),
+        ("CFF: gone after the second removal", not pt_row(r, 3, "CFF")),
+        ("CFF unmounted in the serial log", "[PT] unmounted CFF" in r.serial),
+        ("CFF: mounted after the second swap", info_has(r, 4, "CFF")),
+        (
+            "CFF file reads back after the second swap",
+            after.exists() and after.read_bytes() == r.up,
+        ),
+    ]
+
+
+def rdb_in_use(r):
+    held = r.out / "held.bin"
+    return [
+        *rdb_unmount_after_use(r),
+        ("held file reads back through its handle", held.exists() and held.read_bytes() == r.up),
+    ]
+
+
 CHECKS = {
     "automount": automount,
     "automount_off": automount_off,
@@ -387,6 +412,8 @@ CHECKS = {
     "swap_partial": swap_partial,
     "rdb": rdb,
     "rdb_swap": rdb_swap,
+    "rdb_in_use": rdb_in_use,
+    "rdb_release_out": rdb_unmount_after_use,
     "mbr_mix": lambda r: mix(r, "MBR"),
     "gpt_mix": lambda r: mix(r, "GPT"),
     "swap_loop": swap_loop,

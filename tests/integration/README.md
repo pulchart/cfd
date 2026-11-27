@@ -71,6 +71,8 @@ Optional parameters:
 | `swap_static_default` | a hand mount of `CFX`, started before the card arrives, serves it (`CF0>CFX`, `s`); the removal tears it down and the card comes back as CF0 |
 | `swap_static_keep` | `UNMOUNT_STATIC 0`: the hand mount (`S`) is kept and absent while the card is out and serves again on insert |
 | `swap_partial` | `UNMOUNT FFS` on the RDB card: the FFS partition unmounted, PFS3 kept and absent, both files read back after the swap |
+| `rdb_in_use` | `rdb` with the FFS file held open: CFF kept and absent on the first removal and served again on insert, the handle reads the file whole; the second removal, with the file closed, unmounts CFF, and the next insert mounts it again |
+| `rdb_release_out` | `rdb_in_use` with the file closed while the card is out: CFF mounted after the insert, the next removal unmounts it |
 | `mbr_mix` | MBR with a primary and logical partitions: FAT12, FAT16 and FAT32 mount and read and write; NTFS is published and refused; exFAT mounts with a fat95 that has it, is refused otherwise |
 | `gpt_mix` | the same file systems in GPT basic data partitions |
 | `pull_io` | the card leaves while a 32 MB file is written to CF0, then `swap`'s checks |
@@ -99,7 +101,8 @@ FS-UAE is started a second time when it exits or the guest has not begun its ste
 
 ## Not covered
 
-- An FFS partition torn down after a real removal on AmigaOS 3.1. FFS 40 refuses `ACTION_DIE` (209) and keeps the partition, so `swap_partial` is skipped there. On AROS and ApolloOS, `rdb_swap` and `swap_partial` need an FFS handler that clears `dn_Task` when it accepts `ACTION_DIE` (aros-development-team/AROS#2390, ApolloTeam-dev/ApolloOS#163), which the amiga-fsuae images bring.
+- An FFS partition torn down after a real removal on AmigaOS 3.1. FFS 40 refuses `ACTION_DIE` (209) and keeps the partition, so `swap_partial`, `rdb_in_use` and `rdb_release_out` are skipped there. On AROS and ApolloOS, `rdb_swap`, `swap_partial`, `rdb_in_use` and `rdb_release_out` need an FFS handler that clears `dn_Task` when it accepts `ACTION_DIE` (aros-development-team/AROS#2390, ApolloTeam-dev/ApolloOS#163), which the amiga-fsuae images bring.
+- An FFS file held open across a removal on AmigaOS 3.2.3. FFS 47 accepts `ACTION_DIE` with a file open and exits, so the partition is unmounted and the open handle dies with its handler; `rdb_in_use` and `rdb_release_out` are skipped there.
 - CIS routing: UAE generates its own card CIS.
 - SFS.
 - NTFS volumes are a boot sector only: the check is that nothing mounts them.
