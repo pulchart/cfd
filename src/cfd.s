@@ -5309,12 +5309,13 @@ _ids_end:
 ;
 ; Output:
 ;   d0.l = status with DRQ, ERR or DF set, the status of a
-;          card seen ready without them twice in a row, or -1
-;          when the deadline passed or the card was removed
+;          card seen ready (DRDY) without them twice in a row
+;          after the first read, or -1 when the deadline passed
+;          or the card was removed
 ;
 _IDWait:
 	move.l	d2,-(sp)
-	moveq.l	#0,d2			;ready reads without an answer
+	moveq.l	#-1,d2			;ready reads without an answer; the first may predate the command
 _idw_loop:
 	moveq.l	#3,d0
 	and.b	CFU_EventFlags(a3),d0
@@ -5327,6 +5328,8 @@ _idw_loop:
 	moveq.l	#$29,d1			;DF, DRQ, ERR
 	and.b	d0,d1
 	bne.s	_idw_end
+	btst	#6,d0			;DRDY
+	beq.s	_idw_more		;not ready: wait on
 	addq.w	#1,d2
 	cmp.w	#2,d2
 	beq.s	_idw_end		;ready twice without an answer
