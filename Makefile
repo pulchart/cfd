@@ -160,15 +160,36 @@ TOOLCHAIN_IMAGE ?= ghcr.io/pulchart/amiga-toolchain:latest
 # Outside the image make runs the goals in TOOLCHAIN_IMAGE, pulled when the registry
 # has a newer one; the checkout, PTABLE and their git dirs are mounted at their paths
 ifeq ($(wildcard /usr/share/amiga-toolchain/toolchain.json),)
-GOALS  := $(or $(MAKECMDGOALS),all)
+GOALS  := $(filter-out test-integration,$(or $(MAKECMDGOALS),all))
 gitdir  = $(shell d=$$(git -C $(1) rev-parse --git-common-dir 2>/dev/null) && cd $(1) && cd "$$d" && pwd)
 MOUNTS := $(sort $(filter-out $(CURDIR) $(CURDIR)/%,$(call gitdir,.) $(abspath $(PTABLE)) $(call gitdir,$(PTABLE))))
+ifneq ($(GOALS),)
 .PHONY: $(GOALS)
 $(firstword $(GOALS)):
 	@podman run --rm --pull=newer --security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
 		$(foreach d,$(MOUNTS),-v $(d):$(d)) $(TOOLCHAIN_IMAGE) make $(MAKEOVERRIDES) $(GOALS)
 $(wordlist 2,$(words $(GOALS)),$(GOALS)):
 	@:
+endif
+
+# FS-UAE integration suite: the guest tools built in TOOLCHAIN_IMAGE, then
+# tests/integration/run.py in the amiga-fsuae image of each OS in IT_OS, one
+# after another. Needs the driver set built (make). IT_WORK is the run
+# directory, IT passes options to run.py (IT="--scenario swap").
+IT_OS ?= aros apolloos
+IT_IMAGE_3.2.3 = localhost/amiga-fsuae-amigaos:3.2.3
+IT_IMAGE_3.1 = localhost/amiga-fsuae-amigaos:3.1
+IT_IMAGE_aros = docker.io/pulchart/amiga-fsuae-aros:latest
+IT_IMAGE_apolloos = ghcr.io/pulchart/amiga-fsuae-apolloos:latest
+IT_WORK := build/integration/$(shell date +%Y%m%d-%H%M%S)
+.PHONY: test-integration
+test-integration:
+	@podman run --rm --pull=newer --security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		$(foreach d,$(MOUNTS),-v $(d):$(d)) $(TOOLCHAIN_IMAGE) make $(MAKEOVERRIDES) devinfo holdfile cardout cardin noreq
+	@mkdir -p $(IT_WORK); rc=0; $(foreach os,$(IT_OS),podman run --rm --pull=newer \
+		--security-opt label=disable -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		$(IT_IMAGE_$(os)) python3 tests/integration/run.py --os $(os) \
+		--work $(abspath $(IT_WORK))/$(os) $(IT) || rc=1;) exit $$rc
 else
 
 # -I $(PTABLE_SRC) lets the driver resolve the submodule's ptable_pub.i.
@@ -254,7 +275,7 @@ TARGET_PCMCIACHECK = $(OUTDIR_C)/pcmciacheck
 # from its dist/, so every release ships the ptable-built bytes.
 TARGET_LSPTRES = $(OUTDIR_C)/lsptres
 # Guest tools of the integration suite, not shipped.
-IT_TOOLS = devinfo holdfile
+IT_TOOLS = devinfo holdfile cardout cardin noreq
 IT_TARGETS = $(addprefix build/tools/,$(IT_TOOLS))
 
 # compactflash.automount: optional boot/automount bringup module (cold-boot
@@ -481,6 +502,11 @@ build/tools/%: tools/%.c Makefile
 	$(Q)echo "  VBCC    $@"
 	$(Q)vc $(VBCCFLAGS) -o $@ $< -lamiga
 
+build/tools/%: tools/%.asm Makefile
+	$(Q)mkdir -p $(dir $@)
+	$(Q)echo "  VASM    $@"
+	$(Q)vasmm68k_mot -quiet -Fhunkexe -nosym -o $@ $<
+
 $(IT_TOOLS): %: build/tools/%
 
 $(TARGET_LSPTRES): $(PTABLE)/dist/c/lsptres
@@ -608,10 +634,9 @@ lint:
 	$(Q)ruff format --check $$(git ls-files '*.py')
 	$(Q)yamllint -s $$(git ls-files '*.yaml' '*.yml')
 
-# FS-UAE integration suite: the built driver set under the OS profiles of
-# tests/integration/config.yaml. IT passes options to run.py.
-test-integration: $(IT_TARGETS)
-	$(Q)python3 tests/integration/run.py $(IT)
+# FS-UAE integration suite: runs outside the toolchain image, see above.
+test-integration:
+	@echo "make test-integration runs the amiga-fsuae images, call it outside the toolchain image" >&2; exit 1
 
 # Clean build artifacts
 clean:
