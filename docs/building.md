@@ -38,7 +38,7 @@ make clean; make; make guide; make release
 
 Options: `V=1` verbose, `GTIMING=1` Gayle timing (experimental), `FUNCEXT_VOTING=0`, `ATAPI=1`.
 
-Output goes to `dist/<flavour>/<cpu>/{devs,libs}/` and `dist/c/`.
+Output goes to `dist/<flavour>/<cpu>/{devs,libs}/`, `dist/c/` and `dist/docs/`, which git ignores. `dist/ENVARC`, `dist/Storage` and `dist/images` are sources.
 
 ## Install script
 
