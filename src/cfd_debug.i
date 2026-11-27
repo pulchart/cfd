@@ -122,16 +122,17 @@ _dc_end:
 _DebugStr:
 	btst	#3,CFU_OpenFlags+1(a3)
 	beq.s	_ds_end
-	movem.l	d0-d1/a0-a1/a6,-(sp)
+	movem.l	d0-d1/a0-a2/a6,-(sp)
 	move.l	CFD_ExecBase(a4),a6
+	move.l	a0,a2			;RawPutChar may clobber d0-d1/a0-a1
 _ds_loop:
 	moveq.l	#0,d0
-	move.b	(a0)+,d0
+	move.b	(a2)+,d0
 	beq.s	_ds_done
 	jsr	RawPutChar(a6)
 	bra.s	_ds_loop
 _ds_done:
-	movem.l	(sp)+,d0-d1/a0-a1/a6
+	movem.l	(sp)+,d0-d1/a0-a2/a6
 _ds_end:
 	rts
 
@@ -170,7 +171,9 @@ _DebugHexDigit:
 	bcs.s	_dhd_out		;if <= '9', done
 	add.b	#'A'-'9'-1,d0		;adjust ':'-'?' to 'A'-'F'
 _dhd_out:
+	movem.l	d0-d1/a0-a1,-(sp)	;RawPutChar may clobber them
 	jsr	RawPutChar(a6)
+	movem.l	(sp)+,d0-d1/a0-a1
 	rts
 
 ;--- _DebugATAStr: output ATA string ---
