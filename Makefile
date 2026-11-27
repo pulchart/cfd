@@ -586,7 +586,7 @@ checksums: $(DRIVER_TARGETS) $(LIBRARY_TARGETS) $(TARGET_CFINFO) $(TARGET_PCMCIA
 
 PYTHON ?= python3
 TEST_SUITES = ata_contracts config_loader mountcfg rom_hunks
-.PHONY: test check-test-deps test-list-update
+.PHONY: test check-test-deps test-list-update lint
 check-test-deps:
 	$(Q)CFD_VASM="$(VASM)" CFD_PTABLE="$(PTABLE)" $(PYTHON) tests/deps.py
 test: check-test-deps
@@ -596,6 +596,12 @@ test: check-test-deps
 test-list-update:
 	$(Q)$(PYTHON) tests/list_tests.py
 	$(Q)echo "Updated: tests/INVENTORY.md"
+
+# ruff over the tracked Python files (rules in ruff.toml), yamllint over the YAML files.
+lint:
+	$(Q)ruff check $$(git ls-files '*.py')
+	$(Q)ruff format --check $$(git ls-files '*.py')
+	$(Q)yamllint -s $$(git ls-files '*.yaml' '*.yml')
 
 # Clean build artifacts
 clean:

@@ -9,7 +9,8 @@ not landed: their check must still fail, and the fixing commit removes the id.
 Status: gated, run by make test.
 Run: python3 tests/mountcfg.py"""
 
-import sys, tempfile
+import sys
+import tempfile
 from pathlib import Path
 from prefsrig import (
     CFG,
@@ -69,8 +70,10 @@ class Cfg:
 
         self.trunc = d.b(eq["CFG_Trunc"])
         self.buf = bytes(d.mem.r_block(CFG + eq["CFG_Buf"], eq["CFG_BUFSZ"]))
-        self.mc = {n[3:]: d.l(mc + eq[n]) for n in eq if n.startswith("mc_") and n != "mc_Sizeof"}
-        self.raw = [d.l(mc + i) for i in range(0, eq["mc_Sizeof"], 4)]
+        self.mc = {
+            n[3:]: d.long(mc + eq[n]) for n in eq if n.startswith("mc_") and n != "mc_Sizeof"
+        }
+        self.raw = [d.long(mc + i) for i in range(0, eq["mc_Sizeof"], 4)]
         self.control = cstr(self.mc["Control"])
         self.handler = cstr(self.mc["NodeHandler"])
         self.rows = []
@@ -111,7 +114,7 @@ class Cfg:
             self.bindsize_ok = (n == 0 and p == 0) or size == eq["bnd_Sizeof"]
         self.prefixes = []
         for i in range(16):
-            v = d.l(eq["CFG_Prefixes"] + 4 * i)
+            v = d.long(eq["CFG_Prefixes"] + 4 * i)
             if not v:
                 break
             self.prefixes.append(v)

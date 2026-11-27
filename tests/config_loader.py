@@ -12,7 +12,8 @@ Status: gated, run by make test.
 Run: python3 tests/config_loader.py
 """
 
-import sys, tempfile
+import sys
+import tempfile
 from pathlib import Path
 from prefsrig import ARCHIVE, ENVARC, Loader, build
 
@@ -29,7 +30,7 @@ NEED = (
 
 def result(d):
     eq = d.eq
-    read = d.l(eq["CFG_DbgRead"])
+    read = d.long(eq["CFG_DbgRead"])
     return dict(
         am=1 if d.b(eq["CFG_AutoMount"]) else 0,
         ambad=d.b(eq["CFG_AmBad"]),
